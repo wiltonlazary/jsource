@@ -1,5 +1,8 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g0x.ijs'
+prolog './g0x.ijs'
 NB. 0!: -----------------------------------------------------------------
+
+'domain error' -: ". etx 'undefname!:4'
+'domain error' -: ". etx '4!:undefname!:'
 
 sc00 =: 0!:0
 
@@ -41,7 +44,13 @@ b -: i.3 4
 'domain error' -: 0!:11 etx 0
 'domain error' -: 0!:11 etx 2
 
-4!:55 ;:'a b c l0 '
-4!:55 ;:'l1 l2 lf mtm mtv s sc00 t x '
+0!:0 <testpath,'tsheb.ijs'
+sheb = 9
 
+4!:55 ;:'a b c l0 '
+4!:55 ;:'l1 l2 lf mtm mtv s sc00 sheb t x '
+
+
+
+epilog''
 

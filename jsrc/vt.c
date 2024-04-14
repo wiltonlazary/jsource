@@ -1,10 +1,9 @@
-/* Copyright 1990-2007, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Verbs: Take and Drop                                                    */
 
 #include "j.h"
-
 
 F1(jtbehead ){F1PREFIP; R jtdrop(jtinplace,zeroionei(1),    w);}
 F1(jtcurtail){F1PREFIP; R jtdrop(jtinplace,num(-1),w);}
@@ -77,10 +76,11 @@ static F2(jttk){PROLOG(0093);A y,z;B b=0;C*yv,*zv;I c,d,dy,dz,e,i,k,m,n,p,q,r,*s
 F2(jttake){A s;I acr,af,ar,n,*v,wcr,wf,wr;
  F2PREFIP;
  ARGCHK2(a,w); I wt = AT(w);  // wt=type of w
- if(unlikely(ISSPARSE(AT(a))))RZ(a=denseit(a));
+ acr=jt->ranks>>RANKTX; wcr=(RANKT)jt->ranks; RESETRANK;  // save ranks before they are destroyed 
+ if(unlikely(ISSPARSE(AT(a))))RZ(a=denseit(a));  //if a is empty this destroys jt->ranks
  if(likely(!ISSPARSE(wt)))RZ(w=setfv(w,w)); 
- ar=AR(a); acr=jt->ranks>>RANKTX; acr=ar<acr?ar:acr; af=ar-acr;  // ?r=rank, ?cr=cell rank, ?f=length of frame
- wr=AR(w); wcr=(RANKT)jt->ranks; wcr=wr<wcr?wr:wcr; wf=wr-wcr; RESETRANK; 
+ ar=AR(a); acr=ar<acr?ar:acr; af=ar-acr;  // ?r=rank, ?cr=cell rank, ?f=length of frame
+ wr=AR(w); wcr=wr<wcr?wr:wcr; wf=wr-wcr;
  if(((af-1)&(acr-2))>=0){
   s=rank2ex(a,w,DUMMYSELF,MIN(acr,1),wcr,acr,wcr,jttake);  // if multiple x values, loop over them  af>0 or acr>1
   // We extracted from w, so mark it (or its backer if virtual) non-pristine.  There may be replication (if there was fill), so we don't pass pristinity through  We overwrite w because it is no longer in use
@@ -102,7 +102,7 @@ F2(jttake){A s;I acr,af,ar,n,*v,wcr,wf,wr;
   }
  }
  a=s;
- if(!(ar|wf|(((NOUN&~(DIRECT|RECURSIBLE))|SPARSE)&wt)|!wcr|(AFLAG(w)&(AFNJA)))){  // if there is only 1 take axis, w has no frame and is not atomic  NJAwhy
+ if(!(ar|wf|(((NOUN&~(DIRECT|RECURSIBLE))|SPARSE)&wt)|!wcr|(AFLAG(w)&(AFNJA)))){  // if there is only 1 take axis, w has no frame and is not atomic; and avoid virtualling NJA
   // if the length of take is within the bounds of the first axis
   I tklen = IAV(a)[0];  // get the one number in a, the take amount
   I tkasign = REPSGN(tklen);  // 0 if tklen nonneg, ~0 if neg
@@ -150,7 +150,7 @@ F2(jtdrop){A s;I acr,af,ar,d,m,n,*u,*v,wcr,wf,wr;
  }
  n=AN(a); u=AV(a);     // n=#axes to drop, u->1st axis
  // virtual case: scalar a
- if(!(ar|wf|(((NOUN&~(DIRECT|RECURSIBLE))|SPARSE)&wt)|!wcr|(AFLAG(w)&(AFNJA)))){  // if there is only 1 take axis, w has no frame and is not atomic  BJAwhy
+ if(!(ar|wf|(((NOUN&~(DIRECT|RECURSIBLE))|SPARSE)&wt)|!wcr|(AFLAG(w)&(AFNJA)))){  // if there is only 1 take axis, w has no frame and is not atomic; and avoid virtualling NJA
   I * RESTRICT ws=AS(w);  // ws->shape of w
   I droplen = IAV(a)[0];  // get the one number in a, the take amount
   I dropabs = droplen<0?-droplen:droplen;  // ABS(droplen), but may be as high as IMIN
@@ -164,9 +164,8 @@ F2(jtdrop){A s;I acr,af,ar,d,m,n,*u,*v,wcr,wf,wr;
   RZ(s = virtualip(w,offset,wr));    // allocate block
   // fill in shape.  s and w may be the same block, so ws is destroyed
   I* RESTRICT ss=AS(s); ss[0]=remlen; MCISH(ss+1,ws+1,MAX(wr-1,0));
-// obsolete  DO(wr-1, ss[i+1]=ws[i+1];);  // shape of virtual matches shape of w except for #items
   AN(s)=remlen*wcellsize;  // install # atoms
-  // virtual block does not affect pristinity
+  // Any pristinity adjustment would be in virtualip.  But there isn't any
   RETF(s);
  }
 
@@ -207,7 +206,7 @@ F1(jthead){I wcr,wf,wr;
   }else{
    // frame not 0, or non-virtualable type, or cell is an atom.  Use from.  Note that jt->ranks is still set, so this may produce multiple cells
    // left rank is garbage, but since zeroionei(0) is an atom it doesn't matter
-   RETF(jtfrom(jtinplace,zeroionei(0),w));  // could call jtfromi directly for non-sparse w
+   RETF(jtfrom(jtinplace,zeroionei(0),w,ds(CFROM)));  // could call jtfromi directly for non-sparse w
   }
  }else{RETF(ISSPARSE(AT(w))?irs2(num(0),take(num( 1),w),0L,0L,wcr,jtfrom):rsh0(w));  // sparse or cell of w is empty - create a cell of fills  jt->ranks is still set for use in take.  Left rank is garbage, but that's OK
  }
@@ -231,9 +230,8 @@ F1(jttail){I wcr,wf,wr;
   }else{
    // frame not 0, or non-virtualable type, or cell is an atom.  Use from.  Note that jt->ranks is still set, so this may produce multiple cells
    // left rank is garbage, but since num(-1) is an atom it doesn't matter
-   RETF(jtfrom(jtinplace,num(-1),w));  // could call jtfromi directly for non-sparse w
+   RETF(jtfrom(jtinplace,num(-1),w,ds(CFROM)));  // could call jtfromi directly for non-sparse w
   }
-// obsolete  R !wcr||AS(w)[wf]?jtfrom(jtinplace,num(-1),w) :  // if cells are atoms, or if there are cells, result is last cell(s)
  }else{RETF(ISSPARSE(AT(w))?irs2(num(0),take(num(-1),w),0L,0L,wcr,jtfrom):rsh0(w));  // sparse or cell of w is empty - create a cell of fills  jt->ranks is still set for use in take.  Left rank is garbage, but that's OK
  }
  // pristinity from other verbs

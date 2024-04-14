@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g222.ijs'
+prolog './g222.ijs'
 NB. ~:y -----------------------------------------------------------------
 
 randuni''
@@ -300,6 +300,19 @@ NB. boxed
 (($t)$1) -: (o._5e8+?($t)$1e9) ~: t=:<"1?2 3 4$10
 (($t)$1) -: (r._5e7+?($t)$1e8) ~: t=:<"1?2 3 4$10
 
+NB. extended
+
+(($t)$0) -: t ~: t=:x: _1e9+?2 3 4$2e9
+(~:/~i. 20 ) -: ~:/~ 2^i. 20x
+(~:/~i. 20 ) -: ~:/~ 2x ^ 2 ^ i. 20x
+
+NB. rational
+(($t)$0) -: t ~: t=:(x: _1e9+?2 3 4$2e9) % >: 2 3 4$2e9
+(~:/~i. 10 * 20) -: ~:/~ , (2^i. 20x) %/&, (3^i. 10x)
+(~:/~i. 10 * 20 ) -: ~:/~ , (2x ^ 2 ^ i. 20x) %/&, (3x ^ 2 ^ i. 10x)
+
+
+
 'length error' -: 1 2 ~: etx 'abc'
 'length error' -: 1 2 ~: etx u:'abc'
 'length error' -: 1 2 ~: etx 10&u:'abc'
@@ -309,4 +322,7 @@ NB. boxed
 
 4!:55 ;:'a adot1 adot2 sdot0 b g t test x y yy'
 randfini''
+
+
+epilog''
 

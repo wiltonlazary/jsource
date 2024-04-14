@@ -1,4 +1,4 @@
-/* Copyright 1990-2007, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Verbs: Match Associates                                                 */
@@ -13,7 +13,7 @@
 
 // To reduce parameter overhead, we call matchsub with trailing parameters omitted if x==0.  This is fine for clang.  In MSVC, the parameter area
 // is used as a workarea by the routine, and thus omitting the parms makes for a segfault.
-#if defined(__clang__)
+#if defined(__clang__)&&SY_64
 #define MATCHSUBDEFAULTS
 #else
 #define MATCHSUBDEFAULTS ,0,0,1,1,1
@@ -98,30 +98,30 @@ static B eqv(I af,I wf,I m,I n,I k,C* RESTRICT av,C* RESTRICT wv,B* RESTRICT z,B
   // fetch the load mask for the last block: the words to load, including any trailing fragment
    // step up to qword boundary
    I *x=(I*)((C*)av+((k-1)&(SZI-1))+1), *y=(I*)((C*)wv+((k-1)&(SZI-1))+1);  // access the arguments as Is
-   __m256i allmatches =_mm256_cmpeq_epi8(endmask,endmask); // accumuland for compares init to all 1
+   __m256i allmatches =_mm256_cmpeq_epi8(endmask,endmask); __m256d ones=_mm256_castsi256_pd(allmatches); // accumuland for compares init to all 1
    b=b1;  // init store value to compare failure
    if(n2>0){
     UI i = n2;  // inner loop size
     x+=(backoff+1)*NPAR; y+=(backoff+1)*NPAR;
     switch(backoff){
     do{
-    case -1: u=_mm256_loadu_si256 ((__m256i*)x); v=_mm256_loadu_si256 ((__m256i*)y); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi8(u,v));
-    case -2: u=_mm256_loadu_si256 ((__m256i*)(x+1*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+1*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi8(u,v));
-    case -3: u=_mm256_loadu_si256 ((__m256i*)(x+2*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+2*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi8(u,v));
-    case -4: u=_mm256_loadu_si256 ((__m256i*)(x+3*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+3*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi8(u,v));
-    case -5: u=_mm256_loadu_si256 ((__m256i*)(x+4*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+4*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi8(u,v));
-    case -6: u=_mm256_loadu_si256 ((__m256i*)(x+5*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+5*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi8(u,v));
-    case -7: u=_mm256_loadu_si256 ((__m256i*)(x+6*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+6*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi8(u,v));
-    case -8: u=_mm256_loadu_si256 ((__m256i*)(x+7*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+7*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi8(u,v));
+    case -1: u=_mm256_loadu_si256 ((__m256i*)x); v=_mm256_loadu_si256 ((__m256i*)y); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi64(u,v));
+    case -2: u=_mm256_loadu_si256 ((__m256i*)(x+1*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+1*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi64(u,v));
+    case -3: u=_mm256_loadu_si256 ((__m256i*)(x+2*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+2*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi64(u,v));
+    case -4: u=_mm256_loadu_si256 ((__m256i*)(x+3*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+3*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi64(u,v));
+    case -5: u=_mm256_loadu_si256 ((__m256i*)(x+4*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+4*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi64(u,v));
+    case -6: u=_mm256_loadu_si256 ((__m256i*)(x+5*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+5*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi64(u,v));
+    case -7: u=_mm256_loadu_si256 ((__m256i*)(x+6*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+6*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi64(u,v));
+    case -8: u=_mm256_loadu_si256 ((__m256i*)(x+7*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+7*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi64(u,v));
     x+=8*NPAR; y+=8*NPAR;
     if(n2==1)goto oneloop;  // if we don't have to loop here, avoid the data-dependent branch and fold the comparisons into the last batch 
-    if(~_mm256_movemask_epi8(allmatches))goto fail;  // if searches are long, kick out when there is a miscompare
+     if(!_mm256_testc_pd(_mm256_castsi256_pd(allmatches),ones))goto fail;  // if searches are long, kick out when there is a miscompare.  test is '!(all sign bits of allmatches =1)'
     }while(--i>0);
     }
 oneloop:;
    }
    u=_mm256_maskload_epi64(x,endmask); v=_mm256_maskload_epi64(y,endmask); 
-   b ^= 0==~_mm256_movemask_epi8(_mm256_and_si256(allmatches,_mm256_cmpeq_epi8(u,v)));  // no miscompares, switch failure value to success
+   b ^= _mm256_testc_pd(_mm256_castsi256_pd(_mm256_and_si256(allmatches,_mm256_cmpeq_epi64(u,v))),ones);  // no miscompares, switch failure value to success.  test 1=good
 fail:
    *z++=b;  // store one result
    wv += k; av+= ka;  // advance w always, and a if original m was 1
@@ -144,30 +144,31 @@ I memcmpne(void *s, void *t, I l){
  I n=(l-1)>>LGSZI;  // number of Ds to process - cannot be 0
  __m256i u,v;
  __m256i endmask = _mm256_loadu_si256((__m256i*)(validitymask+((-n)&(NPAR-1))));  // mask for 0 1 2 3 4 5 is xxxx 0001 0011 0111 1111 0001
+ __m256d ones=_mm256_castsi256_pd(_mm256_cmpeq_epi8(endmask,endmask));
 
  UI n2=DUFFLPCT(n-1,3);  /* # turns through duff loop */
  if(n2>0){
-  __m256i allmatches =_mm256_cmpeq_epi8(endmask,endmask); // accumuland for compares init to all 1
+  __m256i allmatches =_mm256_castpd_si256(ones); // accumuland for compares init to all 1
   UI backoff=DUFFBACKOFF(n-1,3);
   x+=(backoff+1)*NPAR; y+=(backoff+1)*NPAR;
   switch(backoff){
   do{
-  case -1: u=_mm256_loadu_si256 ((__m256i*)x); v=_mm256_loadu_si256 ((__m256i*)y); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi8(u,v));
-  case -2: u=_mm256_loadu_si256 ((__m256i*)(x+1*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+1*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi8(u,v));
-  case -3: u=_mm256_loadu_si256 ((__m256i*)(x+2*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+2*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi8(u,v));
-  case -4: u=_mm256_loadu_si256 ((__m256i*)(x+3*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+3*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi8(u,v));
-  case -5: u=_mm256_loadu_si256 ((__m256i*)(x+4*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+4*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi8(u,v));
-  case -6: u=_mm256_loadu_si256 ((__m256i*)(x+5*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+5*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi8(u,v));
-  case -7: u=_mm256_loadu_si256 ((__m256i*)(x+6*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+6*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi8(u,v));
-  case -8: u=_mm256_loadu_si256 ((__m256i*)(x+7*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+7*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi8(u,v));
+  case -1: u=_mm256_loadu_si256 ((__m256i*)x); v=_mm256_loadu_si256 ((__m256i*)y); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi64(u,v));
+  case -2: u=_mm256_loadu_si256 ((__m256i*)(x+1*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+1*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi64(u,v));
+  case -3: u=_mm256_loadu_si256 ((__m256i*)(x+2*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+2*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi64(u,v));
+  case -4: u=_mm256_loadu_si256 ((__m256i*)(x+3*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+3*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi64(u,v));
+  case -5: u=_mm256_loadu_si256 ((__m256i*)(x+4*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+4*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi64(u,v));
+  case -6: u=_mm256_loadu_si256 ((__m256i*)(x+5*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+5*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi64(u,v));
+  case -7: u=_mm256_loadu_si256 ((__m256i*)(x+6*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+6*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi64(u,v));
+  case -8: u=_mm256_loadu_si256 ((__m256i*)(x+7*NPAR)); v=_mm256_loadu_si256 ((__m256i*)(y+7*NPAR)); allmatches=_mm256_and_si256(allmatches,_mm256_cmpeq_epi64(u,v));
   x+=8*NPAR; y+=8*NPAR;
-  if(~_mm256_movemask_epi8(allmatches))R 1;
+   if(!_mm256_testc_pd(_mm256_castsi256_pd(allmatches),ones))R 1;  // test is '!(all sign bits of allmatches=1)'
   }while(--n2>0);
   }
  }
 
  u=_mm256_maskload_epi64(x,endmask); v=_mm256_maskload_epi64(y,endmask); 
- R 0!=~_mm256_movemask_epi8(_mm256_cmpeq_epi8(u,v));  // no miscompares, compare equal
+ R !_mm256_testc_pd(_mm256_castsi256_pd(_mm256_cmpeq_epi64(u,v)),ones);  // return 1 if any mismatch
 }
 
 // memcmpnefl: test for inequality, not caring about order, for float inputs, possibly with tolerance
@@ -180,6 +181,7 @@ I memcmpnefl(void *s, void *t, I l, J jt){
  D *x=s, *y=t;  // access the arguments as doubles
  __m256d u,v;
  __m256i endmask = _mm256_loadu_si256((__m256i*)(validitymask+((-l)&(NPAR-1))));  // mask for 0 1 2 3 4 5 is xxxx 0001 0011 0111 1111 0001
+ __m256d ones=_mm256_castsi256_pd(_mm256_cmpeq_epi8(endmask,endmask));
  if(jt->cct==1.0){
   // intolerant comparison
   UI n2=DUFFLPCT(l-1,3);  /* # turns through duff loop */
@@ -198,12 +200,12 @@ I memcmpnefl(void *s, void *t, I l, J jt){
    case -7: u=_mm256_loadu_pd(x+6*NPAR); v=_mm256_loadu_pd(y+6*NPAR); allmatches=_mm256_and_pd(allmatches,_mm256_cmp_pd(u,v,_CMP_EQ_OQ));
    case -8: u=_mm256_loadu_pd(x+7*NPAR); v=_mm256_loadu_pd(y+7*NPAR); allmatches=_mm256_and_pd(allmatches,_mm256_cmp_pd(u,v,_CMP_EQ_OQ));
    x+=8*NPAR; y+=8*NPAR;
-   if(0xf!=_mm256_movemask_pd(allmatches))R 1;
+    if(!_mm256_testc_pd(allmatches,ones))R 1;  // test is '!(all bits of allmatches=1)'
    }while(--n2>0);
    }
   }
   u=_mm256_maskload_pd(x,endmask); v=_mm256_maskload_pd(y,endmask); 
-  R 0xf!=_mm256_movemask_pd(_mm256_cmp_pd(u,v,_CMP_EQ_OQ));  // no miscompares, compare equal
+  R !_mm256_testc_pd(_mm256_cmp_pd(u,v,_CMP_EQ_OQ),ones);   // return 1 if any mismatch
  }
  UI i=(l-1)>>LGNPAR;  /* # loops for 0 1 2 3 4 5 is x 0 0 0 0 1 */
  // tolerant comparison
@@ -211,11 +213,11 @@ I memcmpnefl(void *s, void *t, I l, J jt){
  if(i){
   do{
    u=_mm256_loadu_pd(x); v=_mm256_loadu_pd(y); x+=NPAR; y+=NPAR;
-   if(0xf!=_mm256_movemask_pd(_mm256_xor_pd(_mm256_cmp_pd(u,_mm256_mul_pd(v,cct),_CMP_GT_OQ),_mm256_cmp_pd(v,_mm256_mul_pd(u,cct),_CMP_LE_OQ))))R 1;
+   if(!_mm256_testc_pd(_mm256_xor_pd(_mm256_cmp_pd(u,_mm256_mul_pd(v,cct),_CMP_GT_OQ),_mm256_cmp_pd(v,_mm256_mul_pd(u,cct),_CMP_LE_OQ)),ones))R 1;
   }while(--i>0);
  }
  u=_mm256_maskload_pd(x,endmask); v=_mm256_maskload_pd(y,endmask); 
- R 0xf!=_mm256_movemask_pd(_mm256_xor_pd(_mm256_cmp_pd(u,_mm256_mul_pd(v,cct),_CMP_GT_OQ),_mm256_cmp_pd(v,_mm256_mul_pd(u,cct),_CMP_LE_OQ)));
+ R !_mm256_testc_pd(_mm256_xor_pd(_mm256_cmp_pd(u,_mm256_mul_pd(v,cct),_CMP_GT_OQ),_mm256_cmp_pd(v,_mm256_mul_pd(u,cct),_CMP_LE_OQ)),ones);
 }
 
 static B eqvfl(I af,I wf,I m,I n,I k,D* RESTRICT av,D* RESTRICT wv,B* RESTRICT z,B b1,J jt){
@@ -228,6 +230,7 @@ static B eqvfl(I af,I wf,I m,I n,I k,D* RESTRICT av,D* RESTRICT wv,B* RESTRICT z
  __m256d u,v;
  // prep for each compare loop
  __m256i endmask = _mm256_loadu_si256((__m256i*)(validitymask+((-k)&(NPAR-1))));  // mask for 0 1 2 3 4 5 is xxxx 0001 0011 0111 1111 0001
+ __m256d ones=_mm256_castsi256_pd(_mm256_cmpeq_epi8(endmask,endmask));
  UI n2=DUFFLPCT(k-1,3);  /* # turns through duff loop */
  UI backoff=DUFFBACKOFF(k-1,3);
  UI i0=(k-1)>>LGNPAR;  /* # loops for 0 1 2 3 4 5 is x 0 0 0 0 1 used for tolerant */
@@ -260,13 +263,13 @@ static B eqvfl(I af,I wf,I m,I n,I k,D* RESTRICT av,D* RESTRICT wv,B* RESTRICT z
      case -8: u=_mm256_loadu_pd(x+7*NPAR); v=_mm256_loadu_pd(y+7*NPAR); allmatches=_mm256_and_pd(allmatches,_mm256_cmp_pd(u,v,_CMP_EQ_OQ));
      x+=8*NPAR; y+=8*NPAR;
      if(n2==1)goto oneloop;  // if we don't have to loop here, avoid the data-dependent branch and fold the comparisons into the last batch 
-     if(0xf!=_mm256_movemask_pd(allmatches))goto fail;
+      if(!_mm256_testc_pd(allmatches,ones))goto fail;  // test is '!(all sign bits of allmatches=1)'
      }while(--i>0);
      }
     }
 oneloop:
     u=_mm256_maskload_pd(x,endmask); v=_mm256_maskload_pd(y,endmask); 
-    b ^= 0xf==_mm256_movemask_pd(_mm256_and_pd(allmatches,_mm256_cmp_pd(u,v,_CMP_EQ_OQ)));  // no miscompares, compare equal
+    b ^= _mm256_testc_pd(_mm256_and_pd(allmatches,_mm256_cmp_pd(u,v,_CMP_EQ_OQ)),ones);  // no miscompares, switch failure value to success.  test 1=good
    }else{
     // tolerant comparison
     __m256d cct=_mm256_broadcast_sd(&jt->cct);
@@ -274,11 +277,11 @@ oneloop:
      UI i = i0;  // inner loop size
      do{  // unfortunately it's probably not worth checking for lengths 5-8 & we will have a misbranch whenever length > 4
       u=_mm256_loadu_pd(x); v=_mm256_loadu_pd(y); x+=NPAR; y+=NPAR;
-      if(0xf!=_mm256_movemask_pd(_mm256_xor_pd(_mm256_cmp_pd(u,_mm256_mul_pd(v,cct),_CMP_GT_OQ),_mm256_cmp_pd(v,_mm256_mul_pd(u,cct),_CMP_LE_OQ))))goto fail;
+      if(!_mm256_testc_pd(_mm256_xor_pd(_mm256_cmp_pd(u,_mm256_mul_pd(v,cct),_CMP_GT_OQ),_mm256_cmp_pd(v,_mm256_mul_pd(u,cct),_CMP_LE_OQ)),ones))goto fail;
      }while(--i>0);
     }
     u=_mm256_maskload_pd(x,endmask); v=_mm256_maskload_pd(y,endmask); 
-    b ^= 0xf==_mm256_movemask_pd(_mm256_xor_pd(_mm256_cmp_pd(u,_mm256_mul_pd(v,cct),_CMP_GT_OQ),_mm256_cmp_pd(v,_mm256_mul_pd(u,cct),_CMP_LE_OQ)));
+    b ^= _mm256_testc_pd(_mm256_xor_pd(_mm256_cmp_pd(u,_mm256_mul_pd(v,cct),_CMP_GT_OQ),_mm256_cmp_pd(v,_mm256_mul_pd(u,cct),_CMP_LE_OQ)),ones);
    }
 
 fail:
@@ -295,6 +298,17 @@ fail:
 
 // Return 1 if a and w match, 0 if not
 B jtequ(J jt,A a,A w){A x;
+ F2PREFIP;ARGCHK2(a,w);  // allow inplace request - it has no effect
+ if(a==w)R 1;
+ if(unlikely(ISSPARSE(AT(a)|AT(w))))if(AR(a)&&AR(w)){RZ(x=matchs(a,w)); R BAV(x)[0];}
+ R ((B (*)())jtmatchsub)(jt,a,w,0   MATCHSUBDEFAULTS);  // don't check level - it takes too long for big arrays
+}
+
+// Return 1 if a and w match, 0 if not
+B jtequx(J jt,X a,X w){R 0==icmpXX(a,w);}
+
+// Return 1 if a and w match, 0 if not
+B jteqx(J jt,A a,A w){A x;
  F2PREFIP;ARGCHK2(a,w);  // allow inplace request - it has no effect
  if(a==w)R 1;
  if(unlikely(ISSPARSE(AT(a)|AT(w))))if(AR(a)&&AR(w)){RZ(x=matchs(a,w)); R BAV(x)[0];}
@@ -318,13 +332,13 @@ static B jteqf(J jt,A a,A w){A p,q;V*u=FAV(a),*v=FAV(w);
 // compare function for boxes.  Do a test on the single contents of the box.  Reset comparison direction to normal.
 #ifndef BOXEDSPARSE
 #define EQA(a,w) \
- ((-(a!=w)&((AN(a)^AN(w))-1))>=0?(a==w):((B (*)())jtmatchsub)(jt,a,w,0   MATCHSUBDEFAULTS))
+ ((-(C(a)!=C(w))&((AN(C(a))^AN(C(w)))-1))>=0?(C(a)==C(w)):((B (*)())jtmatchsub)(jt,C(a),C(w),0   MATCHSUBDEFAULTS))
 #else
 #define EQA(a,w) \
- (((!ISSPARSE(AT(a)|AT(w)))&&((-(a!=w)&((AN(a)^AN(w))-1))>=0))?(a==w):((B (*)())jtmatchsub)(jt,a,w,0   MATCHSUBDEFAULTS))
+ (((!ISSPARSE(AT(C(a))|AT(C(w))))&&((-(C(a)!=C(w))&((AN(C(a))^AN(C(w)))-1))>=0))?(C(a)==C(w)):((B (*)())jtmatchsub)(jt,C(a),C(w),0   MATCHSUBDEFAULTS))
 #endif
 // compare rationals
-#define EQQ(a,w)  (equ(a.n,w.n)&&equ(a.d,w.d))
+#define EQQ(a,w)  (equx(a.n,w.n)&&equx(a.d,w.d))
 
 // compare arrays for equality of all values.  f is the compare function
 // m=#cells of shorter frame, n=#times a cell of shorter frame must be repeated
@@ -394,7 +408,7 @@ static B jtmatchsub(J jt,A a,A w,B* RESTRICT x,I af,I wf,I m,I n,I b1){C*av,*wv;
  // do the comparison, leaving the last result in b
  switch(CTTZ(t)){
   // Take the case of no frame quickly, because it happens on each recursion and also in much user code
- default:
+ default:   // all direct exact types
   c <<= bplg(t);
   if(!x){
 #if C_AVX2 || EMU_AVX2
@@ -424,10 +438,10 @@ static B jtmatchsub(J jt,A a,A w,B* RESTRICT x,I af,I wf,I m,I n,I b1){C*av,*wv;
    if(1.0!=jt->cct)INNERT(D,TEQ)else INNERT(D,DEQCT0)
 #endif
   break;
- case XNUMX: INNERT(X,equ); break;
+ case QPX: INNERT(E,EQE); break;
+ case XNUMX: INNERT(X,equx); break;
  case RATX:  INNERT(Q,EQQ); break;
- case BOXX:
-   INNERT(A,EQA); break;
+ case BOXX:  INNERT(A,EQA); break;
  }
  R 0;  // Return value matters only for single compare (x=0); we have returned already in that case
 }

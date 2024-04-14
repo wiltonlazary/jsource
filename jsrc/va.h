@@ -1,4 +1,4 @@
-/* Copyright 1990-2008, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Verbs: Macros and Defined Constants for Atomic (Scalar) Verbs           */
@@ -8,27 +8,31 @@
 // bits 2-3 should be forced to 1 jtflags;
 #define VCVTIP          0xc  // bits 2-3 should always be set, indicating that a converted argument can be inplaced
 #define VARGX           4           // bit position for arg flags
-#define VBB             (B01<<VARGX)         /* convert arguments to B              */
-#define VII             (INT<<VARGX)         /* convert arguments to I              */
-#define VDD             (FL<<VARGX)          /* convert arguments to D              */
-#define VZZ             (CMPX<<VARGX)        /* convert arguments to Z              */
-#define VIPWCRLONGX     9  // internal use in va2, overlaps BOX
+#define VBB             (B01<<VARGX)         // convert arguments to B 4   could put VARGMSK into 3 bits
+#define VII             (INT<<VARGX)         /* convert arguments to I 6             */
+#define VDD             (FL<<VARGX)          /* convert arguments to D 7             */
+#define VZZ             (CMPX<<VARGX)        /* convert arguments to Z 8             */
+#define VIPWCRLONGX     9  // internal use in va2, overlaps BOX 9
 #define VIPWCRLONG      ((I)1<<VIPWCRLONGX)
-#define Vxx             (XNUM<<VARGX)        /* convert arguments to XNUM           */
-#define VQQ             (RAT<<VARGX)         /* convert arguments to RAT            */
-#define VARGMSK         (VBB|VII|VDD|VZZ|Vxx|VQQ)  // mask for argument requested type
+#define Vxx             (XNUM<<VARGX)        /* convert arguments to XNUM 10           */
+#define VQQ             (RAT<<VARGX)         /* convert arguments to RAT  11          */
+#define VARGMSK         (VBB|VII|VDD|VZZ|Vxx|VQQ|VCOPYW|VCOPYA)  // mask for argument requested type
 #define VRESX           12           // bit position for result flags
-#define VB              (B01<<VRESX)/* result type B  bit 12                     */
+#define VB              (B01<<VRESX)  // result type B  bit 12   could put VRESMSK into 3 bits
 #define VI              (INT<<VRESX)/* result type I  bit 14                     */
 #define VD              (FL<<VRESX) /* result type D  bit 15                     */
 #define VZ              (CMPX<<VRESX)/* result type Z bit 16                      */
 #define VX              (XNUM<<VRESX)/* result type XNUM  bit 18                  */
 #define VQ              (RAT<<VRESX) /* result type RAT  bit 19                   */
 #define VSB             (SBT<<VRESX) /* result type SBT bit 28                    */
-#define VRESMSK         (VB|VI|VD|VZ|VX|VQ|VSB)  // mask for result-type
-#define VRD             (0x800<<VRESX)// convert result to D if possible - unused code point
-#define VRI             (0x8000<<VRESX)// convert result to I if possible - unused code point
-// bits VRESX+ 1 10 12 16 are free
+#define VUNCH           (0<<VRESX)  // leave result unchanged
+#define VRESMSK         (VB|VI|VD|VZ|VX|VQ|VSB)  // mask for result-type - if all 0, take result type from the args
+#define VRD             (0x800<<VRESX)// convert result to D if possible 23
+#define VRI             (0x8000<<VRESX)// convert result to I if possible  27
+#define VCOPYWX         13  // set (by var) to indicate that a should be converted to type of w
+#define VCOPYW          ((I)1<<VCOPYWX)
+#define VCOPYAX         29  // set (by var) to indicate that w should be converted to type of a
+#define VCOPYA          ((I)1<<VCOPYAX)
 #define VIPWFLONGX     17  //  internal use in va2.  Spaced RANKTX from VIPWCRLONGX
 #define VIPWFLONG      ((I)1<<VIPWFLONGX)
 #define VIPOKWX         20      // This routine can put its result over W
@@ -37,34 +41,27 @@
 #define VIPOKA          ((I)1<<VIPOKAX)
 #define VCANHALTX       25    // This routine can generate an error after it has started
 #define VCANHALT        ((I)1<<VCANHALTX)
-#define VXCHASVTYPEX    26  // set if there is forced conversion to XNUM
+#define VXCHASVTYPEX    26  // set if there is forced conversion to XNUM =CONW
 #define VXCHASVTYPE     ((I)1<<VXCHASVTYPEX)
-#define VXCVTYPEX       29          // bit position for VX conversion type
-#define VXCVTYPEMSK     ((I)3<<VXCVTYPEX)  // mask for bit-positions hold XNUM conversion type - leave here where they don't overlap noun types
-#define VXX             (Vxx|VXCHASVTYPE|((I)XMEXACT<<VXCVTYPEX))  // exact conversion
-#define VXEQ            (Vxx|VXCHASVTYPE|((I)XMEXMT<<VXCVTYPEX))   /* convert to XNUM for = ~:            */
-#define VXCF            (Vxx|VXCHASVTYPE|((I)XMCEIL<<VXCVTYPEX))   /* convert to XNUM ceiling/floor       */
-#define VXFC            (Vxx|VXCHASVTYPE|((I)XMFLR<<VXCVTYPEX))  /* convert to XNUM floor/ceiling       */
+// the conversion info is in bits 22 and 24:
+#define VXX             (Vxx|XMODETOCVT((I)XMEXACT))  // exact conversion
+#define VXEQ            (Vxx|XMODETOCVT((I)XMEXMT))   /* convert to XNUM for = ~:            */
+#define VXCF            (Vxx|XMODETOCVT((I)XMCEIL))   /* convert to XNUM ceiling/floor       */
+#define VXFC            (Vxx|XMODETOCVT((I)XMFLR))  /* convert to XNUM floor/ceiling       */
 // bit 31 must not be used - it may be a sign bit, which has a meaning
-#define VARGCVTMSKF     (VXCHASVTYPE|VXCVTYPEMSK)  // mask for type to pass into XCVT, includes XNUM override
-#define VFRCEXMT        (VXCHASVTYPE|((I)XMEXMT<<VXCVTYPEX))   // set in arg to cvt() to do rounding for = ~:, if the conversion happens to be to XNUM
-// upper bits for 64-bit va2
+#define VFRCEXMT        XMODETOCVT((I)XMEXMT)   // set in arg to cvt() to do rounding for = ~:, if the conversion happens to be to XNUM
 #define VIPOKRNKWX         28      // filled by va2 if the ranks allow inplacing w
 #define VIPOKRNKW          ((I)1<<VIPOKRNKWX)
 #define VIPOKRNKAX         30      // filled by va2 if the ranks allow inplacing a
 #define VIPOKRNKA          ((I)1<<VIPOKRNKAX)
 
 // Extract the argument-conversion type from cv coming from the table
-#define atype(x) (((x)&VARGMSK)>>VARGX)
+#define atype(x) (((x)>>VARGX)&(VARGMSK>>VARGX))
 
 // Extract the result type from cv coming from the table
-#define rtype(x) (((x)&VRESMSK)>>VRESX)
+#define rtype(x) (((x)>>VRESX)&(VRESMSK>>VRESX))
 
-#if SY_64
-#define NOT(v)          ((v)^0x0101010101010101)
-#else
-#define NOT(v)          ((v)^0x01010101)
-#endif
+#define NOT(v) ((v)^VALIDBOOLEAN)
 
 #define SNOT(v)         ((v)^0x0101)
 #define INOT(v)         ((v)^0x01010101)
@@ -126,6 +123,18 @@
 #define TYMESO(u,v)     ((u)&&(v)?dmul2(u,(D)v):0)
 #define DIV(u,v)        ((u)||(v)?ddiv2(u,v):0)
 
+// Routines for QP operations
+#define PLUSE(u,v) ({D h,l,t; TWOSUM1(u.hi,v.hi,h,l); l=u.lo+v.lo+l; TWOSUMBS1(h,l,t,h); CANONE1(t,h); })
+#define MINUSE(u,v) ({D h,l,t; TWOSUM1(u.hi,-v.hi,h,l); l=u.lo-v.lo+l; TWOSUMBS1(h,l,t,h); CANONE1(t,h); })
+#define TYMESE(u,v) ({D h,l,t,x; if(u.hi!=0. && v.hi!=0.){TWOPROD1(u.hi,v.hi,h,l); TWOPROD1(u.hi,v.lo,t,x); l+=t; TWOPROD1(u.lo,v.hi,t,x); l+=t; TWOSUMBS1(h,l,t,h);}else t=h=0.; CANONE1(t,h); })
+// reciprocal of v: 1.0/h gives H, which is a truncated version of 1/h.  To find out what H is the true reciprocal of, we take hH=1+d where d is small.  Then we see
+// that H is the reciprocal of h/(1+d) which we approximate as h(1-d)=h-hd (error is h*d^2 which is below the ULP).  The full reciprocal we want is that of (h+l)=(h-hd)+(l+hd), which is
+// 1/((h-hd)+(l+hd)) = H - (l+hd)/((h-hd)(h+l)) which we approximate as H - (l+hd)*H*H
+#define RECIPE(v) ({D zh,one,d,H=1.0/(v).hi; TWOPROD1(H,(v).hi,one,d); one-=1.0; d+=one; d*=(v).hi; d+=(v).lo; d*=H; d*=-H; TWOSUMBS1(H,d,zh,H); (E){.hi=zh,.lo=H}; })  // noncanonical result, in {zh,H}
+#define DIVE(u,v) ({E vr=RECIPE(v); TYMESE(u,vr); })
+#define MAXE(u,v) ({E vr; if(u.hi>v.hi)vr=u; else if(u.hi<v.hi)vr=v; else{vr.hi=u.hi; vr.lo=MAX(u.lo,v.lo);} vr;})
+#define MINE(u,v) ({E vr; if(u.hi<v.hi)vr=u; else if(u.hi>v.hi)vr=v; else{vr.hi=u.hi; vr.lo=MIN(u.lo,v.lo);} vr;})
+
 #define SBORDER(v)      (SBUV(v)->order)
 
 #define SBNE(u,v)       (SBORDER(u)!=SBORDER(v))
@@ -139,25 +148,25 @@
 
 #define BOV(exp)        if(exp){er=EWOV; break;}
 
-#define BW0000(x,y)     (0)
+#define BW0000(x,y)     (0&(x)&(y))
 #define BW0001(x,y)     (   (x)& (y) )
 #define BW0010(x,y)     (   (x)&~(y) )
-#define BW0011(x,y)     (x)
+#define BW0011(x,y)     (x|(0&(y)))
 
 #define BW0100(x,y)     (  ~(x)& (y) )
-#define BW0101(x,y)     (y)
+#define BW0101(x,y)     (y|(0&(x)))
 #define BW0110(x,y)     (   (x)^ (y) )
 #define BW0111(x,y)     (   (x)| (y) )
 
 #define BW1000(x,y)     (~( (x)| (y)))
 #define BW1001(x,y)     (~( (x)^ (y)))
-#define BW1010(x,y)     (       ~(y) )
+#define BW1010(x,y)     ( ~(y)|(0&x) )
 #define BW1011(x,y)     (   (x)|~(y) )
 
-#define BW1100(x,y)     (  ~(x)      )
+#define BW1100(x,y)     (  ~(x)|(0&y)      )
 #define BW1101(x,y)     (  ~(x)| (y) )
 #define BW1110(x,y)     (~( (x)& (y)))
-#define BW1111(x,y)     (-1)
+#define BW1111(x,y)     (-1|(x)|(y))
 
 typedef I AHDR1FN(J RESTRICT jt,I n,void* z,void* x);  // negative return is offset to failure point in >. or <.
 typedef I AHDR2FN(I n,I m,void* RESTRICTI x,void* RESTRICTI y,void* RESTRICTI z,J jt);  // negative return is failure point for integer multiply
@@ -220,6 +229,13 @@ typedef I AHDRSFN(I d,I n,I m,void* RESTRICTI x,void* RESTRICTI z,J jt);
 #define VA2CSTILE 34
 #define VA2CBANG 35
 #define VA2CCIRCLE 36
+// the following are used only for execution, not definition, and only for singletons
+#define VA2CEQABS 37  // all the entires in va[] share this block
+#define VA2CNEABS 38
+#define VA2CLTABS 39
+#define VA2CLEABS 40
+#define VA2CGEABS 41
+#define VA2CGTABS 42
 // end of the dyads
 #define VA1ORIGIN 29 // the start of the monadic section
 #define VA1CMIN 29
@@ -230,9 +246,12 @@ typedef I AHDRSFN(I d,I n,I m,void* RESTRICTI x,void* RESTRICTI z,J jt);
 #define VA1CSTILE 34
 #define VA1CBANG 35
 #define VA1CCIRCLE 36
-// last part: verbs atomic only on the monad
+// verbs atomic only on the monad
 #define VA1CROOT 37
 #define VA1CLOG 38
+// extension: verbs that are implemented by calls to the dyad for some precisions, but not all
+#define VA1CNEG 39  // -, which is 0-y except for E
+#define VA1CRECIP 40  // %, which is 1/y except for E
 
 
 /*
@@ -244,24 +263,29 @@ typedef I AHDRSFN(I d,I n,I m,void* RESTRICTI x,void* RESTRICTI z,J jt);
  y    pointer to w      atoms
 */
 
-
-#define AIFX(f,Tz,Tx,Ty,symb)  \
- AHDR2(f,Tz,Tx,Ty){Tx u;Ty v;                            \
-  if(n-1==0)  DQ(m,               *z++=*x++ symb *y++; )   \
-  else if(n-1<0)DQ(m, u=*x++; DQC(n, *z++=u    symb *y++;))   \
-  else      DQ(m, v=*y++; DQ(n, *z++=*x++ symb v;   ));  \
+// exp takes u and v, sets zz
+#define AEXP(f,Tz,Tx,Ty,exp)  \
+ AHDR2(f,Tz,Tx,Ty){Tx u;Ty v;Tz zz;                            \
+  if(n-1==0)  DQ(m, u=*x++; v=*y++; exp  *z++=zz; )   \
+  else if(n-1<0)DQ(m, u=*x++; DQC(n, v=*y++; exp  *z++=zz;))   \
+  else      DQ(m, v=*y++; DQ(n, u=*x++; exp  *z++=zz;   ));  \
   R EVOK; \
  }
 
+
+#define AIFX(f,Tz,Tx,Ty,symb) AEXP(f,Tz,Tx,Ty,zz=u symb v;) 
+
 // suff must return the correct result
-#define APFX(f,Tz,Tx,Ty,pfx,pref,suff)   \
+#define APFXL(f,Tz,Tx,Ty,ldfn,pfx,pref,suff)   \
  AHDR2(f,Tz,Tx,Ty){Tx u;Ty v;                                  \
   pref \
-  if(n-1==0)  DQ(m,               *z++=pfx(*x,*y); x++; y++; )   \
-  else if(n-1<0)DQ(m, u=*x++; DQC(n, *z++=pfx( u,*y);      y++;))   \
-  else      DQ(m, v=*y++; DQ(n, *z++=pfx(*x, v); x++;     ));  \
+  if(n-1==0)  DQ(m, u=ldfn(*x++); v=ldfn(*y++); *z++=pfx(u,v); )   \
+  else if(n-1<0)DQ(m, u=ldfn(*x++); DQC(n, v=ldfn(*y++); *z++=pfx(u,v);))   \
+  else      DQ(m,  v=ldfn(*y++); DQ(n, u=ldfn(*x++); *z++=pfx(u, v);    ));  \
   suff \
  }
+
+#define APFX(f,Tz,Tx,Ty,pfx,pref,suff)  APFXL(f,Tz,Tx,Ty,,pfx,pref,suff)
 
 // TUNE as of 20210330 Skylake 2.5GHz
 // measurements with  2.5e9*(#i)%~(*/$a0)%~6!:2'3 : ''for. i do. a2>.a3 end. 0'' 0'  on length 1e3, aligned or not
@@ -326,23 +350,21 @@ typedef I AHDRSFN(I d,I n,I m,void* RESTRICTI x,void* RESTRICTI z,J jt);
   if((fz)&4)xx=_mm256_blendv_pd(_mm256_broadcast_sd(&zone.real),xx,_mm256_castsi256_pd(endmask)); \
   zzop; _mm256_maskstore_pd(z, endmask, zz);
 
-
 #define primop256(name,fz,pref,zzop,suff) \
-I name(I n,I m,void* RESTRICTI x,void* RESTRICTI y,void* RESTRICTI z,J jt){ \
+AHDR2(name,void,void,void){ \
  __m256d xx,yy,zz; \
  __m256i endmask; /* length mask for the last word */ \
- _mm256_zeroupperx(VOIDARG) \
    /* will be removed except for divide */ \
  CVTEPI64DECLS pref \
  if(n-1==0){ \
-  /* vector-to-vector, no repetitions */ \
+  /* vector-to-vector of length m, no repetitions */ \
   /* align dest to NPAR boundary, if needed and len makes it worthwhile */ \
   PRMALIGN(zzop,3,fz,m)  /* this changes m */ \
   PRMDUFF(zzop,3,fz,m,32+16+8) \
   PRMMASK(zzop,3,fz) /* runout, using mask */ \
  }else{ \
   if(!((fz)&1)&&n-1<0){n=~n; \
-   /* atom+vector */ \
+   /* m applications of atom+vector of length ~n (never used if commutative) */ \
    DQNOUNROLL(m, \
     if(unlikely((fz)&0x140 && (((fz)&0x400 && z==y && *(C*)x!=0) || ((fz)&0x800 && z==y && *(C*)x==0)))){ \
      INCRBID(x,1,fz,0x8,0x40,0x100) INCRBID(y,n,fz,0x10,0x80,0x200) INCRBID(z,n,fz,0,0,0) \
@@ -356,7 +378,7 @@ I name(I n,I m,void* RESTRICTI x,void* RESTRICTI y,void* RESTRICTI z,J jt){ \
     } \
    ) \
   }else{ \
-   /* vector+atom */ \
+   /* m applications of vector of length n+atom */ \
    if((fz)&1){I taddr=(I)x^(I)y; x=n<0?y:x; y=(D*)((I)x^taddr); n^=REPSGN(n);} \
    DQNOUNROLL(m, \
     if(unlikely((fz)&0x280 && (((fz)&0x400 && z==x && *(C*)y!=0) || ((fz)&0x800 && z==x && *(C*)y==0)))){ \
@@ -375,15 +397,124 @@ I name(I n,I m,void* RESTRICTI x,void* RESTRICTI y,void* RESTRICTI z,J jt){ \
  suff \
 }
 
+// convert from 4 16-byte atoms to 2 AVX registers in order 0 2 1 3
+#define SHUFIN(fz,v0,v1,out0,out1) if(fz&2){out0=v0;out1=v1;}else{out0=_mm256_unpacklo_pd(v0,v1); out1=_mm256_unpackhi_pd(v0,v1);}
+#define SHUFOUT(fz,out0,out1) if(!(fz&2)){__m256d t0=out0; out0=_mm256_shuffle_pd(out0,out1,0b0000); out1=_mm256_shuffle_pd(t0,out1,0b1111);}
+#define PREFNULL(lo,hi)  // modify lo and hi as needed
+// loop for types that use 2 D values: CMPX and QP.  The inner loop is lengthy, so to save
+// instruction cache we do it only once, building all the other loops around the core.
+// prefL and prefR are macros, used for noncommutative operations
+// fz: 1 set if NONcommutative operator  2 set if shuffle suppressed
+// n=1 vec+vec n<0 atom+vec  n>1 vec+atom
+
+#define primop256CE(name,fz,CET,cepref,ceprefL,ceprefR,zzop,cesuff) \
+AHDR2(name,CET,CET,CET){ \
+ __m256d z0, z1, x0, x1, y0, y1, in0, in1; \
+ cepref \
+ /* convert vector args, which are the same size as z, to offsets from z; flag atom args */ \
+ if(likely(n-1==0)){x=(CET*)((C*)x-(C*)z); y=(CET*)((C*)y-(C*)z);  /* vector op vector, both args offset */ \
+ }else{  /* one arg is atom - flag addr and fetch repeated value.  m is #atom-vec loops, n is length of each and switch flag */ \
+  {I taddr=(I)x^(I)y; x=n-1>0?y:x; y=(CET*)((I)x^taddr);}  /* if repeated vector op atom, exchange to be atom op vector for ease of fetch */ \
+  y=(CET*)((C*)y-(C*)z);  /* convert the full-sized y arg to offset form */ \
+  x=(CET*)((I)x+1); if(fz&1){x=(CET*)((I)x+(~REPSGN(n)&2));}  /* flag x: atom in bit 0, swapped in bit 1 */ \
+  I t=m; m=n^REPSGN(n); n=t; /* convert vec len to positive, move to m; move outer loop count to n */ \
+atomveclp: ;  /* come back here to do next atom op vector loop, with z running */ \
+  /* read the repeated value and convert to internal form */ \
+  if(!(fz&1)){  /* commutative value */ \
+   if(!(fz&2)){x0=_mm256_broadcast_sd((D*)((I)x&-4)), x1=_mm256_broadcast_sd((D*)((I)x&-4)+1); /* read and shuffle=broadcast */ \
+   }else{x0=_mm256_broadcast_pd((__m128d*)((I)x&-4)), x1=x0;}  /* broadcast pairs, no shuffle */ \
+  }else{ \
+   if((I)x&2){ \
+    if(!(fz&2)){y0=_mm256_broadcast_sd((D*)((I)x&-4)), y1=_mm256_broadcast_sd((D*)((I)x&-4)+1); \
+    }else{y0=_mm256_broadcast_pd((__m128d*)((I)x&-4)), y1=y0;}  /* broadcast pairs, no shuffle */ \
+    ceprefR(y0,y1) \
+   }else{ \
+    if(!(fz&2)){x0=_mm256_broadcast_sd((D*)((I)x&-4)), x1=_mm256_broadcast_sd((D*)((I)x&-4)+1); \
+    }else{x0=_mm256_broadcast_pd((__m128d*)((I)x&-4)), x1=x0;}  /* broadcast pairs, no shuffle */ \
+    ceprefL(x0,x1) \
+   } \
+  }  /* do LR processing for noncommut */ \
+ } \
+ /* loop n times - usually once, but may be repeated for each atom.  The loop is by branch back to atomveclp */ \
+ \
+ /* The loop is split into 3 parts: prefix/body/suffix.  The prefix gets z onto a cacheline boundary; the */ \
+ /* body processes full cachelines; the suffix finishes.  Prefix/suffix use masked stores. */ \
+ /* Here we calculate length of prefix and body+suffix.  We then encode them into one value. */ \
+ /* We keep a mask for the current part */ \
+ I len0=-(I)z>>(LGSZI+1);  /* ...aa amt to proc to get to 2cacheline bdy */  \
+ len0=m<8?m:len0;  /* if short, switch len0 to full length to reduce passes through op */ \
+ len0&=NPAR-1;  /* prefix len: if long, to get to bdy; if short, to leave last block exactly NPAR or 0 */ \
+ /* get mask for first read/write: same 2-bit values in lanes 01, and the other 2 bits in 23 */ \
+ __m256i wrmask=_mm256_castps_si256(_mm256_permutevar_ps(_mm256_castpd_ps(_mm256_broadcast_sd((D*)&maskec4123[len0])),_mm256_loadu_si256((__m256i*)&validitymask[2]))); \
+ I len1=m+((4|-len0)<<(BW-3));    /* make len1 negative so we set new masks for the body.  We can recover len0 from len1.  We do this even if len0=0 to avoid misbranches */ \
+ \
+ /* loop m times, for each operation */ \
+rdmasklp: ;  /* here when we must read the new args under mask */ \
+ \
+ /* read any nonrepeated argument, shuffle */ \
+ I totallen=len1&((1LL<<(BW-3))-1);  /* total remaining length */ \
+ I zinc=(totallen>2)<<(LGNPAR+LGSZI);  /* offset to second half of input, if it is valid */ \
+ if(likely(!((I)x&1))){  /* if x is not repeated... */ \
+  in0=_mm256_maskload_pd((D*)((C*)z+(I)x),wrmask), in1=_mm256_maskload_pd((D*)((C*)z+(I)x+zinc),_mm256_slli_epi64(wrmask,1)); \
+  SHUFIN(fz,in0,in1,x0,x1);  /* convert to llll hhhh form */ \
+  if(fz&1){ceprefL(x0,x1)}  /* do LR processing for noncommut */ \
+ } \
+ /* always read the y arg */ \
+ in0=_mm256_maskload_pd((D*)((C*)z+(I)y),wrmask), in1=_mm256_maskload_pd((D*)((C*)z+(I)y+zinc),_mm256_slli_epi64(wrmask,1)); \
+ \
+mainlp:  /* here when args have already been read.  x has been converted & prefixed; y not */ \
+ if(!(fz&1)){SHUFIN(fz,in0,in1,y0,y1)}  /* convert y, which is always read, to llll hhhh form */ \
+ else{if((I)x&2){SHUFIN(fz,in0,in1,x0,x1) ceprefL(x0,x1)}else{SHUFIN(fz,in0,in1,y0,y1) ceprefR(y0,y1)}} \
+ zzop;  /* do the main processing */ \
+ \
+ SHUFOUT(fz,z0,z1);  /* put result into interleaved form for writing */ \
+ /* write out the result and loop */ \
+ if(len1>=2*NPAR){ \
+  /* the NEXT batch can be written out in full (and so can this one).  Write the result, read new args and shuffle, and loop quickly */ \
+  _mm256_storeu_pd((D*)z,z0); _mm256_storeu_pd((D*)z+NPAR,z1);   /* write out */ \
+  z=(CET*)((I)z+2*NPAR*SZI); len1-=NPAR;  /* advance to next batch */ \
+rdlp: ;  /* come here to fetch next batch & store it without masking */ \
+  if(likely(!((I)x&1))){  /* if x is not repeated... */ \
+   in0=_mm256_loadu_pd((D*)((C*)z+(I)x)), in1=_mm256_loadu_pd((D*)((C*)z+(I)x)+NPAR); \
+   SHUFIN(fz,in0,in1,x0,x1);  /* convert to llll hhhh form */ \
+   if(fz&1){ceprefL(x0,x1)}  /* do L processing for noncommut - value was not swapped */ \
+  } \
+  /* always read the y arg */ \
+  in0=_mm256_loadu_pd((D*)((C*)z+(I)y)), in1=_mm256_loadu_pd((D*)((C*)z+(I)y)+NPAR); \
+  goto mainlp; \
+ }else if(len1>=NPAR){  /* next-to-last, or possibly last, batch */ \
+  /* the next batch must be masked.  This one is OK; write the result, set the new mask, go back to read under mask */ \
+  _mm256_storeu_pd((D*)z,z0); _mm256_storeu_pd((D*)z+NPAR,z1);   /* write out */ \
+  z=(CET*)((I)z+2*NPAR*SZI); len1-=NPAR;  /* advance to next batch */ \
+  if(len1!=0)goto rdmasklp;  /* process nonempty last batch, under mask, which has already been set */ \
+  /* if len is 0, fall through to loop exit */ \
+ }else{ \
+  /* The current batch must write under mask.  Do so, and continue as called for, to body, suffix, or exit */ \
+  /* The length of this batch comes from len0 or len1 */ \
+  len0=-(len1>>(BW-3));   /* extract len0 from combined len0/len1, range 1 to 4, or 0 if not first batch */ \
+  len0=len1<0?len0:len1;  /* len0=length of batch: len0 (first batch) or len1 (others) */ \
+  len1&=((1LL<<(BW-3))-1); /* discard len0 from le ngth remaining */ \
+  I zinc=(len0>2)<<(LGNPAR+LGSZI);  /* offset to second half of result, if it can be written */ \
+  _mm256_maskstore_pd((D*)((C*)z+zinc),_mm256_slli_epi64(wrmask,1),z1); \
+  _mm256_maskstore_pd((D*)(z),wrmask,z0); \
+  z=(CET*)((I)z+(len0<<(LGSZI+1))); len1-=len0;  /* advance to next batch */ \
+  if(len1!=0){  /* z is advanced.  Continue if there is more to do */ \
+   /* set the mask for the last batch.  Unless m is 5-8, this will not hold anything up */ \
+   wrmask=_mm256_castps_si256(_mm256_permutevar_ps(_mm256_castpd_ps(_mm256_broadcast_sd((D*)&maskec4123[len1&(NPAR-1)])),_mm256_loadu_si256((__m256i*)&validitymask[2]))); \
+   if(likely(len1>=NPAR))goto rdlp; else goto rdmasklp;  /* process nonempty next batch, under mask if it is the last one */ \
+  } \
+  /* fall through to loop exit if len hit 0 */  \
+ } \
+ /* this is the exit from the loop, possibly reached by fallthrough */ \
+ \
+ /* end of one vector operation.  If there are multiple atom*vector, loop */ \
+ if(unlikely(--n!=0)){++x; goto atomveclp;}  /* if multiple atom*vec, move to next atom.  z/y stay in step */ \
+ cesuff \
+ R EVOK; \
+}
+
+
 /* Embedded visual tools v3.0 fails perform the z++ on all wince platforms. -KBI */
-#if SY_WINCE
-#define ACMP(f,Tz,Tx,Ty,pfx)   \
- AHDR2(f,B,Tx,Ty){D u,v;                                          \
-  if(n-1==0)  DQ(m, u=(D)*x++;       v=(D)*y++; *z++=pfx(u,v); )    \
-  else if(n-1<0)DQ(m, u=(D)*x++; DQC(n, v=(D)*y++; *z++=pfx(u,v);))    \
-  else      DQ(m, v=(D)*y++; DQ(n, u=(D)*x++; *z++=pfx(u,v);));   \
- }
-#else
 #define ACMP(f,Tz,Tx,Ty,pfx)   \
  AHDR2(f,B,Tx,Ty){D u,v;                                             \
   if(n-1==0)  DQ(m, u=(D)*x++;       v=(D)*y++; *z=pfx(u,v); z++; )    \
@@ -391,7 +522,20 @@ I name(I n,I m,void* RESTRICTI x,void* RESTRICTI y,void* RESTRICTI z,J jt){ \
   else      DQ(m, v=(D)*y++; DQ(n, u=(D)*x++; *z=pfx(u,v); z++;));   \
   R EVOK; \
  }
-#endif
+
+#define ACMP0T(f,Tz,Tx,Ty,Txy,pfx,pfx0)   \
+ AHDR2(f,B,Tx,Ty){Txy u; Txy v;                                             \
+  if(jt->cct!=1.0){ \
+   if(n-1==0)  DQ(m, u=*x++;       v=*y++; *z=pfx(u,v); z++; )    \
+   else if(n-1<0)DQ(m, u=*x++; DQC(n, v=*y++; *z=pfx(u,v); z++;))    \
+   else      DQ(m, v=*y++; DQ(n, u=*x++; *z=pfx(u,v); z++;));   \
+  }else{ \
+   if(n-1==0)  DQ(m, u=*x++;       v=*y++; *z=pfx0(u,v); z++; )    \
+   else if(n-1<0)DQ(m, u=*x++; DQC(n, v=*y++; *z=pfx0(u,v); z++;))    \
+   else      DQ(m, v=*y++; DQ(n, u=*x++; *z=pfx0(u,v); z++;));   \
+  } \
+  R EVOK; \
+ }
 // support intolerant comparisons explicitly
 #define ACMP0(f,Tz,Tx,Ty,pfx,pfx0)   \
  AHDR2(f,B,Tx,Ty){D u,v;                                             \
@@ -406,6 +550,21 @@ I name(I n,I m,void* RESTRICTI x,void* RESTRICTI y,void* RESTRICTI z,J jt){ \
   } \
   R EVOK; \
  }
+// support intolerant comparisons explicitly, with absolute value of y
+#define ACMP0ABS(f,Tz,Tx,Ty,pfx,pfx0)   \
+ AHDR2(f,B,Tx,Ty){D u,v;                                             \
+  if(jt->cct!=1.0){ \
+   if(n-1==0)  DQ(m, u=(D)*x++;       v=(D)*y++; v=ABS(v); *z=pfx(u,v); z++; )    \
+   else if(n-1<0)DQ(m, u=(D)*x++; DQC(n, v=(D)*y++; v=ABS(v); *z=pfx(u,v); z++;))    \
+   else      DQ(m, v=(D)*y++; v=ABS(v); DQ(n, u=(D)*x++; *z=pfx(u,v); z++;));   \
+  }else{ \
+   if(n-1==0)  DQ(m, u=(D)*x++;       v=(D)*y++; v=ABS(v); *z=u pfx0 v; z++; )    \
+   else if(n-1<0)DQ(m, u=(D)*x++; DQC(n, v=(D)*y++; v=ABS(v); *z=u pfx0 v; z++;))    \
+   else      DQ(m, v=(D)*y++; v=ABS(v); DQ(n, u=(D)*x++; *z=u pfx0 v; z++;));   \
+  } \
+  R EVOK; \
+ }
+
 
 
 // n and m are never 0.
@@ -431,7 +590,7 @@ AHDR2(f,void,void,void){ I u,v;       \
  R EVOK; \
 }
 
-#if (C_AVX&&SY_64) || EMU_AVX
+#if C_AVX2 || EMU_AVX2
 #define BPFX(f,pfx,bpfx,pfyx,bpfyx,fuv,decls,decls256)  \
 AHDR2(f,void,void,void){ I u,v;       \
  decls  \

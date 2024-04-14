@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './gb.ijs'
+prolog './gb.ijs'
 NB. n b. ----------------------------------------------------------------
 
 0 0 0 1 -: 0 0 1 1 (1 b.) 0 1 0 1
@@ -210,17 +210,20 @@ NB. Use b. to check for conversion to integer
 (-: 20 b.) i. 15
 (-: 20 b.) 0. + i. 15
 'domain error' -: (-: 20 b.) etx 0.5 + i. 15
-(-: 20 b.) <: 2 ^ IF64 { 31 63
-(-: 20 b.) - 2 ^ IF64 { 31 63
-(-: 20 b.) - <: 2 ^ IF64 { 31 63
+'domain error' -: (-: 20 b.) etx 1. + imax NB. always overflows to float
+(-: 20 b.) _1024. + imax
 'domain error' -: (-: 20 b.) etx +/\ 2 ^  (, 0 >. -&40) IF64 { 31 63
+'domain error' -: (-: 20 b.) etx 2 # 1. + imax NB. always overflows to float
+(-: 20 b.) 2 # _1024. + imax
 
 NB. v b. ----------------------------------------------------------------
 
 0 0 0 -: +  b. 0
 2 _ 2 -: %. b. 0
 
-((":/:p),'&({ )') -: p&{ b. _1 [ p=:?~13
+NB. removed for Structural Under ((":/:p),'&({ )') -: p&{ b. _1 [ p=:?~13
+('(/:@(',(":p),'&C.)@(i.@#) {  ]) :.(',(":p),'&C.)') -: p&C. b. _1 [ p=:?~13
+
 '^.' -: ^ b. _1
 
 '0 $~ }.@$' -: +     b. 1
@@ -260,4 +263,7 @@ x -: ]&.(28 b.&12345) x
 
 4!:55 ;:'B d f g g0 g1 g2 l N p test u x xx y yy'
 
+
+
+epilog''
 

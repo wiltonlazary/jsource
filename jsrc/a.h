@@ -1,4 +1,4 @@
-/* Copyright 1990-2004, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Adverbs: Macros and Defined-Constants (for Adverbs and Conjunctions)    */
@@ -30,14 +30,14 @@
                         AF h1=hs?FAV(hs)->valencefns[0]:0,h2=hs?FAV(hs)->valencefns[1]:0
 
 // If there are multiple cells, loop over them & call back; otherwise fall through to handle to single cell
+// Use PREF[12] when you don't know the rank; otherwise F[12]RANK(IP) directly
 #define PREF1(f)        {I m=mr(self);            F1RANK(  m,f,self);}
 #define PREF2(f)        {I l=lr(self),r=rr(self); F2RANK(l,r,f,self);}
 #define PREF1IP(f)      {I m=mr(self);            F1RANKIP(  m,f,self);}
 #define PREF2IP(f)      {I l=lr(self),r=rr(self); F2RANKIP(l,r,f,self);}
 
 
-#define ADERIV(id,f1,f2,flag,m,l,r)  fdef(0,id,VERB,(AF)(f1),(AF)(f2),w,0L,0L,(flag),(I)(m),(I)(l),(I)(r))
-#define CDERIVF(id,f1,f2,flag,flag2,m,l,r)  fdef(flag2,id,VERB,(AF)(f1),(AF)(f2),a,w ,0L,(flag),(I)(m),(I)(l),(I)(r))
+#define CDERIVF(id,f1,f2,flag,flag2,m,l,r)  fdef(flag2,id,VERB,(f1)?(AF)(f1):(AF)jtvalenceerr,(f2)?(AF)(f2):(AF)jtvalenceerr,a,w ,0L,(flag),(I)(m),(I)(l),(I)(r))
 #define CDERIV(id,f1,f2,flag,m,l,r)  CDERIVF(id,f1,f2,flag,0,m,l,r)
 
 #define ASSERTVV(a,w)   ARGCHK2(a,w); ASSERT(VERB&AT(a)&AT(w),EVDOMAIN)

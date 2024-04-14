@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g600.ijs'
+prolog './g600.ijs'
 NB. " -------------------------------------------------------------------
 
 randuni''
@@ -79,7 +79,7 @@ _ 1 _ -: $ rk
 1 2 3 -: +"1 2 3 rk
 3 3 3 -: +"3     rk
 3 2 3 -: +"2 3   rk
-_ _ _ -: +"1e20 1e30 1e40 rk
+_ _ _ -: +"1e2 1e3 1e4 rk
 
 1 -: 1:"0 '1'
 1 -: + "0 [1
@@ -96,6 +96,7 @@ f=: f
 'domain error' -: 2 3 4 (4 : 'x o. y')"0 etx 'abc'
 
 'domain error' -: ex '+"''abc'' '
+'domain error' -: ex '+"1e20 1e30 1e40 '
 'domain error' -: ex '+"(<4)    '
 'domain error' -: ex '+"3j4     '
 'domain error' -: ex '+"1.2     '
@@ -184,7 +185,7 @@ f=: 4 : 0
 (t -: , x <@;"1 0 y) , (5 5$"1 x) -: x f"1 0 y [ t=: '' [ mm=: ?*/$x
 (t -: , x <@;"1   y) , x          -: x f"1   y [ t=: '' [ mm=: ?  #x
 
-testlen =: 10000  NB. following is slow during memaudit
+testlen =: QKTEST{10000 100 NB. following is slow during memaudit
 NB. Verify all kinds of changes of shape and precision.  This is testing assembly, which is common to monad & dyad
 ops =: (0$0);(0$'a');(0$4);(0$1.5);(0$1j1);(0$a:);(0$5x);(0$4r6);(0$u:'a');(0$10 u:'a')
 ops =: ops , (0 1$0);(1 0$'a');(0 2$4);(2 0$1.5);(0 1 3$a:);(3 2 0$5x);(1 0 4$4r6);(4 0 5$u:'a');(0 5 0$10 u:'a')
@@ -448,10 +449,10 @@ f =: ]"]
 NB. u"0 has IRS1
 a=:1e5 ?@$ 0
 (-."+ a) -: -."+"+ a
-'-."+ a' (> 0.5&*)&(100&(6!:2)) '-."+"+ a'
+THRESHOLD +. '-."+ a' (> 0.5&*)&(100&(6!:2)) '-."+"+ a'
 0 = {. -."+"+ b. 0
 (-."+ a) -: -."+"1 a
-'-."+ a' (> 0.5&*)&(100&(6!:2)) '-."+"1 a'
+THRESHOLD +. '-."+ a' (> 0.5&*)&(100&(6!:2)) '-."+"1 a'
 1 = {. -."+"1 b. 0
 
 NB. ="r on non-numerics -------------------------------------------------
@@ -960,7 +961,8 @@ minus =: -
 (0 100 -"1 1"2 2 i. 3 2 2) -: 0 100 minus"1 1"2 2 i. 3 2 2
 (0 100 -"1 _1"2 2 i. 3 2 2) -: 0 100 minus"1 _1"2 2 i. 3 2 2
 
-(2 2 2$2 3 4 0 5 1 0 0) -: (1&+@>)"1 ] 2 2 $ 1 2;3;4;0   NB. Verify fill done in correct order
+(2 2 2$2 3 4 0 5 1 0 0) -: (1&+@>)"1. ] 2 2 $ 1 2;3;4;0   NB. Verify fill done in correct order with fp rank
+(2 2 2$2 3 4 0 5 0 1 0) -: (1&+@>)"1 ] 2 2 $ 1 2;3;4;0   NB. Integer rank combines the loops
 
 0 1 2 3 -: (i. 2 2) ;@:(<@(["1)) i. 2 2  NB. Verify virtual block not incorporated
 0 1 2 3 -: (i. 2 2) ;@:(<@(]"1)) i. 2 2  NB. Verify virtual block not incorporated
@@ -1013,8 +1015,17 @@ f =: ^
 0 (ger"0 -: appcyc"0) i. 0 [ cycinit ger=:$`*`f
 0 (ger"0 -: appcyc"0) i. 0 [ cycinit ger=:(5 5 5"_)`*`f
 
+5 = # 5 ? 2980293480239480239480239480239480239482039x
+63 < >./ 2 ^. 5 ? 2980293480239480239480239480239480239482039x
+
+a=:_1 4 6 8 3 5 8 _1 7 4
+'value error' -: undefname`0:`*: "0 etx a
+
 
 4!:55 ;:'a adot1 adot2 sdot0 agree appcyc asm b boxr c c1 c2 cells crank cs cshape cycinit dr er f fr frame '
 4!:55 ;:'ger glob lag minus mm mrk msh prevmod ops pfx rag rank rk savger s1 svy t testlen x xx y '
 randfini''
+
+
+epilog''
 

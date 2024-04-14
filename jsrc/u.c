@@ -1,4 +1,4 @@
-/* Copyright 1990-2008, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Interpreter Utilities                                                   */
@@ -65,10 +65,10 @@ I jtprod(J jt,I n,I*v){D z=1; DO(n, z*=(D)v[i];); ASSERT(z<=IMAX,EVLIMIT); R(I)z
 #endif
 
 // w is a boolean array, result is 1 iff all values are 0
-B all0(A w){if(!w)R 0; R !memchr(AV(w),C1,AN(w));}
+B all0(A w){if(!w)R 0; I *c8=IAV(w); I n=AN(w); while((n-=SZI)>=0)if(*c8++!=0)R 0; R ((*c8<<BB)<<((~n)<<LGBB))==0;}
 
 // w is a boolean array, result is 1 iff all values are 1
-B all1(A w){if(!w)R 0; R !memchr(AV(w),C0,AN(w));}
+B all1(A w){if(!w)R 0; I *c8=IAV(w); I n=AN(w); while((n-=SZI)>=0)if(*c8++!=VALIDBOOLEAN)R 0; R (((*c8^VALIDBOOLEAN)<<BB)<<((~n)<<LGBB))==0;}
 
 // Number of atoms in an item.
 I jtaii(J jt,A w){I m; PROD(m,AR(w)-1,1+AS(w)); R m;}
@@ -91,7 +91,8 @@ A jtapvwr(J jt,I n,I b,I m){A z;
 
 
 // w must be 0 or an atom equal to 0 or 1.  Result is its value
-B jtb0(J jt,A w){if(!(w))R 0; ASSERT(!AR(w),EVRANK); if(!(B01&AT(w)))RZ(w=cvt(B01,w)); R BAV(w)[0];}
+B jtb0(J jt,A w){if(!(w))R 0; ASSERT(!AR(w),EVRANK); if(likely(ISDENSETYPE(AT(w),INT+B01))){I z; ASSERT(!((z=BIV0(w))&~1),EVDOMAIN); R z;} RZ(w=cvt(B01,w)); R BAV(w)[0];}
+   // INT/B01 quickly
 
 // NOTE: the caller modifies this result inplace, so it must not be shared or readonly
 B*jtbfi(J jt,I n,A w,B p){A t;B* RESTRICT b;I* RESTRICT v;
@@ -132,7 +133,7 @@ I CTTZI(I w){R CTTZ(w);}
 #endif
 #endif
 
-I CTLZI_(UI w, UI4*out){
+UI4 CTLZI_(UI w){
  UI4 t = 0;
 #if BW==64
  if (w & 0xffffffff00000000LL){ w >>= 32; t += 32; }
@@ -141,13 +142,12 @@ I CTLZI_(UI w, UI4*out){
  if (w & 0xff00LL){ w >>= 8; t += 8; }
  if (w & 0xf0LL){ w >>= 4; t += 4; }
  if (w & 0xcLL){ w >>= 2; t += 2; }
- *out = t + (UI4)(w >>= 1);
- R 0;
+ R t + (UI4)(w >>= 1);
 }
 
 I bsum(I n,B*b){I q=(n-1)>>LGSZI,z=0;UI t,*v;
  if(n==0)R z;
-#if (C_AVX2&&SY_64) || EMU_AVX2
+#if C_AVX2 || EMU_AVX2
  // do 64 bits at a time, ending with <32 to finish
  UI b64; __m256i b0,b1,zero=_mm256_setzero_si256(),baltb=_mm256_set1_epi16(0x00ff),balt16=_mm256_set1_epi32(0x0000ffff),balt1664=_mm256_set1_epi64x(0x000000000000ffff),btotal=zero; I zbase;
  B *bx=b;
@@ -209,28 +209,47 @@ I bsum(I n,B*b){I q=(n-1)>>LGSZI,z=0;UI t,*v;
  R z;
 }    /* sum of boolean vector b */
 
-C cf(A w){if(!w)R 0; R CAV(w)[0];}  // first character in a character array
-
-C cl(A w){if(!w)R 0; R CAV(w)[AN(w)-1];}  // last character in a character array
-
 // A block for null-terminated C string, with a trailing NUL (which is not included in the AN of the string)
 A jtcstr(J jt,C*s){A z; RZ(z=mkwris(str((I)strlen(s),s))); CAV(z)[AN(z)]=0; R z;}  // ensure writable string returned, since we modify it here.  The string has only the non-NUL, but add a trailing NUL.  There's always room.
 
 // Return 1 iff w is the evocation of a name.  w must be a FUNC
 B evoke(A w){V*v=FAV(w); R CTILDE==v->id&&v->fgh[0]&&NAME&AT(v->fgh[0]);}
 
-// Extract the integer value from w, return it.  Set error if non-integral or non-atomic
+// return 1 if (,w) -: i. # ,w
+// if there is an error, we just return 0
+I jtisravelix(J jt,A w){
+ I wt=AT(w); if(unlikely(!(wt&B01+INT))){RZ(w=cvt(INT,w)) wt=AT(w);}  // get type, force to numeric
+ if(wt&INT){I *wv=IAV(w); DO(AN(w), if(wv[i]!=i)R 0;)}
+ else{C *wv=BAV(w); DO(AN(w), if(wv[i]!=i)R 0;)}
+ R 1;  // return 1 if all match
+}
+
+// Extract the integer value from w, return it.  Set error if non-integral or non-atomic.  Values whose abs > IMAX are converted to IMAX/-IMAX
 I jti0(J jt,A w){ARGCHK1(w);
  if(likely(ISDENSETYPE(AT(w),INT+B01))){ASSERT(!AR(w),EVRANK); R BIV0(w);}  // INT/B01 quickly
- if(likely(ISDENSETYPE(AT(w),FL))){D d=DAV(w)[0]; D e=jround(d); I cval=(I)e;  // FL without call to cvt
-  // if an atom is tolerantly equal to integer,  there's a good chance it is exactly equal.
-  // infinities will always round to themselves
-  ASSERT(d==e || FFIEQ(d,e),EVDOMAIN);
-  cval=d<(D)-IMAX?-IMAX:cval; cval=d>=FLIMAX?IMAX:cval;
-  ASSERT(!AR(w),EVRANK);
+ if(likely(ISDENSETYPE(AT(w),FL))){I cval;  // FL also "quickly"
+  D d=DAV(w)[0];  // fetch value
+  if(ABS(d)<-(D)IMIN){
+   D e=jround(d); cval=(I)e;  // FL without call to cvt
+   // if an atom is tolerantly equal to integer,  there's a good chance it is exactly equal.
+   // infinities will always round to themselves
+   ASSERT(d==e || FFIEQ(d,e),EVDOMAIN);
+  }else{
+   cval=d>0?IMAX:-IMAX;  // if beyond integral, treat as infinity
+  }
   R cval;  // too-large values don't convert, handle separately
  }
+ if (AT(w)&XNUM) {
+  X x= XAV(w)[0];
+  if (ifits_slong_pX(x)) {
+   I r= IgetX(x);
+   if (unlikely(IMIN==r)) R -IMAX;
+   R r;
+  }
+  if (XSGN(x)>0) R IMAX; else R -IMAX;
+ }
  if(!(w=vi(w)))R 0; ASSERT(!AR(w),EVRANK);
+ if (ISGMP(w)||AT(w)&RAT) SEGFAULT; // this should never happen
  R IAV(w)[0];
 }  // can't move the ASSERT earlier without breaking a lot of tests
 
@@ -238,7 +257,7 @@ A jtifb(J jt,I n,B* RESTRICT b){A z;I p,* RESTRICT zv;
  p=bsum(n,b); 
  if(p==n)R IX(n);
  GATV0(z,INT,p,1); zv=AV(z);
-#if (C_AVX2&&SY_64) || EMU_AVX2
+#if C_AVX2 || EMU_AVX2
  if(unlikely(p==0))R z;
  // do 64 bits at a time
  UI b64; __m256i b0,b1,bor,zero=_mm256_setzero_si256(); I zbase;
@@ -262,7 +281,7 @@ A jtifb(J jt,I n,B* RESTRICT b){A z;I p,* RESTRICT zv;
  n=(n-1)&(2*SZI*NPAR-1);  // get n-1 of remnant
  I n1=(n>>LGSZI)+1; n1=n1>=NPAR?NPAR:n1; bor=_mm256_loadu_si256((__m256i*)(validitymask+((-n1)&(NPAR-1))));
  b64=(UI)(UI4)_mm256_movemask_epi8(_mm256_cmpgt_epi8(_mm256_maskload_epi64((I*)bx,bor),zero));
- // read the second batch.  If n<32, this must be NOPd by repeateing the address
+ // read the second batch.  If n<32, this must be NOPd by repeating the address
  zbase=bx-b; bx+=n&(SZI*NPAR);  // advance bx only if there is something to read
 
  n1=(n>>LGSZI)-3; n1=n1<0?0:n1; bor=_mm256_loadu_si256((__m256i*)(validitymask+(4-n1)));
@@ -308,7 +327,7 @@ I jtmaxtype(J jt,I s,I t){
 // This overfetches from z and w, but does not overstore z
 void mvc(I m,void*z,I n,void*w){
  if(unlikely(m==0))R;  // fast return if nothing to copy
-#if (C_AVX2&&SY_64) || EMU_AVX2
+#if C_AVX2 || EMU_AVX2
  PREFETCH(w);  /* start bringing in the start of data */ 
  // The main use of mvc is memset and fill.
  // The short version has some deficiencies: it calls memcpy repeatedly, which adds overhead, including alignment
@@ -354,19 +373,33 @@ void mvc(I m,void*z,I n,void*w){
    }
    if(unlikely((m&=-SZI)==0))R; --m;  // account for bytes moved; return if we have moved all; keep m as count-1
   }
-  /* store 128-byte sections, first one being 0, 4, 8, or 12 Is. There could be 0 to do */
+  // store 128-byte sections, first one being 0, 4, 8, or 12 Is. There could be 0 to do
   UI n2=DUFFLPCT(m>>LGSZI,2);  /* # turns through duff loop */
   if(n2>0){
    UI backoff=DUFFBACKOFF(m>>LGSZI,2);
    z=(C*)z+(backoff+1)*NPAR*SZI;
-   switch(backoff){
-   do{ ;
-   case -1: _mm256_storeu_si256((__m256i*)z,wd);
-   case -2: _mm256_storeu_si256((__m256i*)((C*)z+1*NPAR*SZI),wd);
-   case -3: _mm256_storeu_si256((__m256i*)((C*)z+2*NPAR*SZI),wd);
-   case -4: _mm256_storeu_si256((__m256i*)((C*)z+3*NPAR*SZI),wd);
-   z=(C*)z+4*NPAR*SZI;
-   }while(--n2>0);
+   if(likely(m<L3CACHESIZE)){
+    // Normal case: not a huge copy
+    switch(backoff){
+    do{ ;
+    case -1: _mm256_storeu_si256((__m256i*)z,wd);
+    case -2: _mm256_storeu_si256((__m256i*)((C*)z+1*NPAR*SZI),wd);
+    case -3: _mm256_storeu_si256((__m256i*)((C*)z+2*NPAR*SZI),wd);
+    case -4: _mm256_storeu_si256((__m256i*)((C*)z+3*NPAR*SZI),wd);
+    z=(C*)z+4*NPAR*SZI;
+    }while(--n2>0);
+    }
+   }else{
+   // The copy length is bigger than L3 cache: use non-temporal stores to avoid excessive cache traffic
+    switch(backoff){
+    do{ ;
+    case -1: _mm256_stream_si256((__m256i*)z,wd);
+    case -2: _mm256_stream_si256((__m256i*)((C*)z+1*NPAR*SZI),wd);
+    case -3: _mm256_stream_si256((__m256i*)((C*)z+2*NPAR*SZI),wd);
+    case -4: _mm256_stream_si256((__m256i*)((C*)z+3*NPAR*SZI),wd);
+    z=(C*)z+4*NPAR*SZI;
+    }while(--n2>0);
+    }
    }
   }
   // copy last section, 1-4 Is. ll bits 00->4 bytes, 01->3 bytes, etc
@@ -386,7 +419,7 @@ void mvc(I m,void*z,I n,void*w){
 #if SY_64
   wdi|=wdi<<shiftct; fullrepbits=n==3?6*BB:fullrepbits; // length 2/4 can set length to 2/4 bytes indiscriminately, as long as the data is filled in for the whole word
 #endif
-#if !((C_AVX2&&SY_64) || EMU_AVX2)
+#if !(C_AVX2 || EMU_AVX2)
   if(n==1){fullrepbits=BW; wdi|=wdi<<(BW/2);}  // if n=1 possible, check for it
 #endif
 
@@ -449,8 +482,8 @@ A jtodom(J jt,I r,I n,I* RESTRICT s){A z;I m,mn,*u,*zv;
 
 F1(jtrankle){R!w||AR(w)?w:ravel(w);}
 
-A jtsc(J jt,I k)     {A z; if((k^REPSGN(k))<=NUMMAX){z=num(k); z=k&~1?z:zeroionei(k); R z;} GAT0(z,INT, 1,0); IAV(z)[0]=k;     RETF(z);}  // always return I
-A jtscib(J jt,I k)   {A z; if((k^REPSGN(k))<=NUMMAX)R num(k); GAT0(z,INT, 1,0); IAV(z)[0]=k;     RETF(z);}  // return b if 0 or 1, else I
+A jtsc(J jt,I k)     {A z; if(BETWEENC(k,NUMMIN,NUMMAX)){z=num(k); z=k&~1?z:zeroionei(k); R z;} GAT0(z,INT, 1,0); IAV(z)[0]=k;     RETF(z);}  // always return I
+A jtscib(J jt,I k)   {A z; if(BETWEENC(k,NUMMIN,NUMMAX))R num(k); GAT0(z,INT, 1,0); IAV(z)[0]=k;     RETF(z);}  // return b if 0 or 1, else I
 A jtsc4(J jt,I t,I v){A z; GA00(z,t,1,0); IAV(z)[0]=v;     RETF(z);}  // return scalar with a given I-length type (numeric or box)
 A jtscb(J jt,B b)    {R num(b);}   // A block for boolean
 A jtscc(J jt,C c)    {A z; GAT0(z,LIT, 1,0); CAV(z)[0]=c;     RETF(z);}  // create scalar character
@@ -482,7 +515,7 @@ A jtvec(J jt,I t,I n,void*v){A z; GA10(z,t,n); MC(AV(z),v,n<<bplg(t)); RETF(z);}
 #pragma push_options
 #pragma optimize ("unroll-loops")
 #endif
-#if (C_AVX2&&SY_64) || EMU_AVX2
+#if C_AVX2 || EMU_AVX2
 A jtvecb01(J jt,I t,I n,void*v){A z;
  GA10(z,t,n);   // allocate buffer
  if(t&B01){C*p=(C*)AV(z),*q=v;
@@ -550,8 +583,8 @@ F1(jtvi){ARGCHK1(w);
  R cvt(INT,w);
 }
 
-// Audit w to ensure valid integer value(s).  Error if non-integral.  Result is A block for integer array.  Infinities converted to IMAX/-IMAX
-F1(jtvib){A z;D d,e,*wv;I i,n,*zv;
+// Audit w to ensure valid integer value(s).  Error if non-integral.  Result is A block for integer array.  Infinities converted to IMAX/-IMAX.  Non-infinities greater than integer precision give error
+F1(jtvib){A z;I i,n,*zv;
  ARGCHK1(w);
  if(ISDENSETYPE(AT(w),INT))R RETARG(w);  // handle common non-failing cases quickly: INT and boolean
  if(ISDENSETYPE(AT(w),B01)){if(!AR(w))R zeroionei(BAV(w)[0]); R cvt(INT,w);}
@@ -562,14 +595,20 @@ F1(jtvib){A z;D d,e,*wv;I i,n,*zv;
  switch(AT(w)){
  default:
   if(!ISDENSETYPE(AT(w),FL))RZ(w=cvt(FL,w));
-  n=AN(w); wv=DAV(w);
+  n=AN(w);
   GATV(z,INT,n,AR(w),AS(w)); zv=AV(z);
-  for(i=0;i<n;++i){
-   d=wv[i]; e=jround(d); I cval=(I)e;
-   // if an atom is tolerantly equal to integer,  there's a good chance it is exactly equal.
-   // infinities will always round to themselves
-   ASSERT(d==e || FFIEQ(d,e),EVDOMAIN);
-   cval=d<(D)-IMAX?-IMAX:cval; cval=d>=FLIMAX?IMAX:cval; zv[i]=cval;  // too-large values don't convert, handle separately
+  for(i=0;i<n;++i){I cval;
+   D d=DAV(w)[i];  // fetch value
+   if(ABS(d)<-(D)IMIN){
+    D e=jround(d); cval=(I)e;  // FL without call to cvt
+    // if an atom is tolerantly equal to integer,  there's a good chance it is exactly equal.
+    // infinities will always round to themselves
+    ASSERT(d==e || FFIEQ(d,e),EVDOMAIN);
+   }else{
+    ASSERT(ABS(d)==inf,EVDOMAIN);  // if beyond int, must be infinite
+    cval=d>0?IMAX:-IMAX;  // if beyond integral, treat as infinity
+   }
+   zv[i]=cval;
    }
    break;
   case XNUM:
@@ -603,7 +642,7 @@ A jtfindnameinscript(J jt,C *script, C *name, I pos){
  for(step=0;step<2;++step){
   switch(step){  // try the startup, from the bottom up
   case 1: ; C buf[100]; eval(strcat(strcat(strcpy(buf,"load'"),script),"'"));  // load script and fall through
-  case 0: ; A w=nfs(strlen(name),name); L *sym; if((sym=syrd(w,jt->locsyms))&&(target=namerefacv(w,sym))&&LOWESTBIT(AT(target))&pos)R target;  // there is always a ref, but it may be to [:
+  case 0: ; A w=nfs(strlen(name),name); A val; if((val=syrd(w,jt->locsyms))!=0){target=QCWORD(namerefacv(w,val)); if(target&&LOWESTBIT(AT(target))&pos)R target;}  // there is always a ref, but it may be to [:.  Undo ra() in syrd
   }
   RESETERR;  // if we loop back, clear errors
  }

@@ -1,4 +1,4 @@
-/* Copyright 1990-2008, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Conjunctions: Power Operator ^: and Associates                          */
@@ -14,6 +14,21 @@
 #define STATENEEDNEWPOW (((I)1)<<STATENEEDNEWPOWX)
 #define ZZFLAGWORD state
 
+// x is a block that contains cell results.  We open it; if that creates domain error we track down the error and change it to assembly error
+A jtopenforassembly(J jt, A x){
+ ARGCHK1(x);  // if error on x, abort this
+ A z=ope(x);
+ if(z==0&&jt->jerr==EVDOMAIN){  // domain error on open can only be assembly
+  jt->etxinfo->asseminfo.assemframelen=1;  // len of frame of error
+  jt->etxinfo->asseminfo.assemorigt=jt->etxinfo->asseminfo.assemwreckt=0;  // init dissimilar types not found
+  DO(AN(x), if(AN(AAV(x)[i])){if(jt->etxinfo->asseminfo.assemorigt==0)jt->etxinfo->asseminfo.assemorigt=AT(AAV(x)[i]);  // look at nonempties: save the first and any incompatible
+            else if(!HOMO(jt->etxinfo->asseminfo.assemorigt,AT(AAV(x)[i]))){jt->etxinfo->asseminfo.assemwreckt=AT(AAV(x)[i]); jt->etxinfo->asseminfo.assemwreckofst=i; break;}}
+  )
+  jt->etxinfo->asseminfo.assemshape[0]=AS(x)[0];  // results were in a list
+  jt->jerr=EVASSEMBLY;  // switch t o assembly error type
+ }
+ R z;
+}
 
 static DF1(jtpowseqlim){PROLOG(0039);A x,y,z,*zv;I i,n;
  ARGCHK1(w);
@@ -25,7 +40,7 @@ static DF1(jtpowseqlim){PROLOG(0039);A x,y,z,*zv;I i,n;
   if(equ(x,y)){AN(z)=AS(z)[0]=i; break;}
   ++i;
  }
- z=ope(z);
+ z=jtopenforassembly(jt,z);
  EPILOG(z);
 }    /* f^:(<_) w */
 
@@ -74,7 +89,7 @@ static DF1(jtpowseq){A fs,gs,x;I n=IMAX;V*sv;
  sv=FAV(self); fs=sv->fgh[0]; gs=sv->fgh[1];
  ASSERT(!AR(gs),EVRANK);
  ASSERT(BOX&AT(gs),EVDOMAIN);
- x=AAV(gs)[0]; if(!AR(x))RE(n=i0(vib(x)));
+ x=C(AAV(gs)[0]); if(!AR(x))RE(n=i0(vib(x)));
  if(0>n){RZ(fs=inv(fs)); n=-n;}
  if(n==IMAX||1==AR(x)&&!AN(x))R powseqlim(w,fs);
  R df1(gs,w,powop(fs,IX(n),0));
@@ -93,7 +108,7 @@ static DF1(jtfpown){A fs,z;AF f1;I n;V*sv;A *old;
 // }
 }
 
-// general u^:n w where n is any array or finite atom.  If atom, it will be negative
+// general u^:n w where n is any integer array or finite atom.  If atom, it will be negative
 static DF1(jtply1){PROLOG(0040);DECLFG;A zz=0;
 #define ZZWILLBEOPENEDNEVER 1  // can't honor willbeopened because the results are recycled as inputs
 #define ZZPOPNEVER 1  // can't pop the inputs - 
@@ -102,7 +117,7 @@ static DF1(jtply1){PROLOG(0040);DECLFG;A zz=0;
  I state=ZZFLAGINITSTATE;  // flags for result.h
  // p =. ~. sn=.(gn=./:,n) { ,n   which gives the list of distinct powers
  A n=sv->fgh[2]; A rn; RZ(rn=ravel(n));  // n is powers, rn is ravel of n
- A gn; RZ(gn=grade1(rn)); A p; RZ(p=nub(from(gn,rn)));  // gn is grade of power, p is sorted list of unique powers we want
+ A gn; RZ(gn=grade1(rn)); A p; RZ(p=nub(fromA(gn,rn)));  // gn is grade of power, p is sorted list of unique powers we want
  // find index of first nonneg power, remember, set scan pointer, set direction forward.  Set current power to 0.  Indic read of power needed
  I *pv=IAV(p); I np=AN(p);  // base of array of powers, and the number of them
  A z=w;  // the next input/previous result
@@ -161,7 +176,7 @@ static DF1(jtply1){PROLOG(0040);DECLFG;A zz=0;
      // This is regrettable, but rare.  If we cared, we could save the whole gc3() call any time the result is going to be stored in zzbox, since there's
      // nothing else to free; but that's not worth it.  zzbox itself becomes nonrecursive but its descendants remain recursive, which is important because
      // tpop expects recursive contents
-     AFLAGAND(zzbox,~BOX); DQ(AN(zzbox), if(AAV(zzbox)[i])tpush(AAV(zzbox)[i]);)  // mark zzbox nonrecursive; for each child, replace the implied free with an explicit one on the stack
+     AFLAGANDLOCAL(zzbox,~BOX); DQ(AN(zzbox), if(AAV(zzbox)[i])tpush(AAV(zzbox)[i]);)  // mark zzbox nonrecursive; for each child, replace the implied free with an explicit one on the stack
     }
    } 
   }
@@ -173,8 +188,7 @@ static DF1(jtply1){PROLOG(0040);DECLFG;A zz=0;
  // if (there is a negative power) p =. (nnegs }. p) , |. nnegs {. p to match the order in which results were stored
  if(pscan0){A sneg; RZ(sneg=sc(pscan0)); RZ(p=apip(drop(sneg,p),reverse(take(sneg,p))));}
  // result is ($n) $ (p i. ,n) { result - avoid the reshape if n is a list, and avoid the from if (p i. ,n) is an index vector
- RZ(p=indexof(p,rn));  // for each input power, the position of its executed result
- if(!equ(IX(np),p))RZ(zz=from(p,zz));  // order result-cells in order of the input powers
+ if(!jtisravelix(jt,n))RZ(zz=fromA(indexof(p,rn),zz));   // if n is not i. #,n already, put zz into order of p i. ,n
  if(AR(n)!=1)zz=reitem(shape(n),zz);  // if n is an array, use its shape
  EPILOG(zz);
 }
@@ -198,16 +212,17 @@ static DF2(jtpinf12){PROLOG(0340);A z;  // no reason to inplace, since w must be
  }
 }
 
-static DF1(jtinv1){F1PREFIP;DECLFG;A z; ARGCHK1(w);A i; RZ(i=inv((fs))); FDEPINC(1);  z=(FAV(i)->valencefns[0])(FAV(i)->flag&VJTFLGOK1?jtinplace:jt,w,i);       FDEPDEC(1); RETF(z);}  // was invrecur(fix(fs))
+static DF1(jtinv1){F1PREFIP;DECLFG;A z; ARGCHK1(w);A i; RZ(i=inv((fs))); FDEPINC(1);  WITHEFORMATDEFERRED(z=(FAV(i)->valencefns[0])(FAV(i)->flag&VJTFLGOK1?jtinplace:jt,w,i);)       FDEPDEC(1); RETF(z);}  // was invrecur(fix(fs))
 static DF1(jtinvh1){F1PREFIP;DECLFGH;A z; ARGCHK1(w);    FDEPINC(1); z=(FAV(hs)->valencefns[0])(jtinplace,w,hs);        FDEPDEC(1); RETF(z);}
-static DF2(jtinv2){DECLFG;A z; ARGCHK2(a,w); FDEPINC(1); df1(z,w,inv(amp(a,fs))); FDEPDEC(1); STACKCHKOFL RETF(z);}  // the CHKOFL is to avoid tail recursion, which prevents a recursion loop from being broken
+static DF2(jtinv2){DECLFG;A z; ARGCHK2(a,w); FDEPINC(1); WITHEFORMATDEFERRED(df1(z,w,inv(amp(a,fs)));) FDEPDEC(1); STACKCHKOFL RETF(z);}  // the CHKOFL is to avoid tail recursion, which prevents a recursion loop from being broken
 static DF1(jtinverr){F1PREFIP;ASSERT(0,EVDOMAIN);}  // used for uninvertible monads
 
 // old static CS2(jtply2, df1(z,w,powop(amp(a,fs),gs,0)),0107)  // dyad adds x to make x&u, and then reinterpret the compound.  We could interpret u differently now that it has been changed (x {~^:a: y)
-DF2(jtply2){PROLOG(107);DECLFG;A z, zz; PREF2(jtply2); z=(df1(zz,w,powop(amp(a,fs),gs,0))); EPILOG(z);}
+DF2(jtply2){PROLOG(107);DECLFG;A z, zz; z=(df1(zz,w,powop(amp(a,fs),gs,0))); EPILOG(z);}
 
-static DF1(jtpowg1){A z,h=FAV(self)->fgh[2]; R df1(z,  w,AAV(h)[0]);}
-static DF2(jtpowg2){A z,h=FAV(self)->fgh[2]; R df2(z,a,w,AAV(h)[0]);}
+
+static DF1(jtpowg1){A z,h=FAV(self)->fgh[2]; R df1(z,  w,C(AAV(h)[0]));}
+static DF2(jtpowg2){A z,h=FAV(self)->fgh[2]; R df2(z,a,w,C(AAV(h)[0]));}
 
 // When u^:v is encountered, we replace it with a verb that comes to one of these.
 // This creates a verb, jtpowxx, which calls jtdf1 within a PROLOG/EPILOG pair, after creating several names:
@@ -226,12 +241,11 @@ static DF2(jtpowg2){A z,h=FAV(self)->fgh[2]; R df2(z,a,w,AAV(h)[0]);}
 // here for u^:v y
 DF1(jtpowv1cell){F1PREFIP;DECLFG;A z;PROLOG(0108);
 A u; A v; RZ(u=CALL1(g1,  w,gs));  /* execute v */
-if(!AR(u) && (v=vib(u)) && !(IAV(v)[0]&~1)){z=IAV(v)[0]?(FAV(fs)->valencefns[0])(FAV(fs)->flag&VJTFLGOK1?jtinplace:jt,w,fs):w;}
+if(!AR(u) && (v=vib(u)) && !(IAV(v)[0]&~1)){z=IAV(v)[0]?(FAV(fs)->valencefns[0])(FAV(fs)->flag&VJTFLGOK1?jtinplace:jt,w,fs,fs):w;}
 else{RESETERR; RZ(u = powop(fs,u,(A)1)); 
-z=(FAV(u)->valencefns[0])(FAV(u)->flag&VJTFLGOK1?jtinplace:jt,w,u);}
+z=(FAV(u)->valencefns[0])(FAV(u)->flag&VJTFLGOK1?jtinplace:jt,w,u,u);}
 EPILOG(z);
 }
-static DF1(fjtpowv1){PREF1(jtpowv1cell); R jtpowv1cell(jt,w,self);}
 // here for x u^:v y 
 static DF2(jtpowv2cell){F2PREFIP;DECLFG;A z;PROLOG(0109);
 A u; A v; RZ(u=CALL2(g2,a,w,gs));  /* execute v */
@@ -239,16 +253,14 @@ if(!AR(u) && (v=vib(u)) && !(IAV(v)[0]&~1)){z=IAV(v)[0]?(FAV(fs)->valencefns[1])
 else{RESETERR; RZ(u = powop(fs,u,(A)1)); 
 z=(FAV(u)->valencefns[1])(FAV(u)->flag&VJTFLGOK2?jtinplace:jt,a,w,u);}
 EPILOG(z);}
-static DF2(jtpowv2){PREF2(jtpowv2cell); R jtpowv2cell(jt,a,w,self);}
 // here for x u@:]^:v y and x u@]^:v y
 static DF2(jtpowv2acell){F2PREFIP;DECLFG;A z;PROLOG(0110);
 jtinplace=(J)((I)jtinplace&~JTINPLACEA); /* monads always have IP2 clear */
 A u; A v; fs=FAV(fs)->fgh[0]; RZ(u=CALL2(g2,a,w,gs));  /* execute v */
-if(!AR(u) && (v=vib(u)) && !(IAV(v)[0]&~1)){z=IAV(v)[0]?(FAV(fs)->valencefns[0])(FAV(fs)->flag&VJTFLGOK1?jtinplace:jt,w,fs):w;}
+if(!AR(u) && (v=vib(u)) && !(IAV(v)[0]&~1)){z=IAV(v)[0]?(FAV(fs)->valencefns[0])(FAV(fs)->flag&VJTFLGOK1?jtinplace:jt,w,fs,fs):w;}
 else{RESETERR; RZ(u = powop(fs,u,(A)1)); 
-z=(FAV(u)->valencefns[0])(FAV(u)->flag&VJTFLGOK1?jtinplace:jt,w,u);}
+z=(FAV(u)->valencefns[0])(FAV(u)->flag&VJTFLGOK1?jtinplace:jt,w,u,u);}
 EPILOG(z);}
-static DF2(jtpowv2a){PREF2(jtpowv2acell); R jtpowv2acell(jt,a,w,self);}
 
 // This executes the conjunction u^:v to produce a derived verb.  If the derived verb
 // contains verb v or gerund v, it executes v on the xy arguments and then calls jtpowop
@@ -257,19 +269,21 @@ static DF2(jtpowv2a){PREF2(jtpowv2acell); R jtpowv2acell(jt,a,w,self);}
 // kibosh on it by setting self (otherwise unused, and set to nonzero in the initial invocation
 // from parse) to 0 in all calls resulting from execution of gerund v.  Then we fail any gerund
 // if self is 0.
-DF2(jtpowop){A hs;B b;V*v;
+DF2(jtpowop){F2PREFIP;A hs;B b;V*v;
  ARGCHK2(a,w);
  ASSERT(AT(a)&VERB,EVDOMAIN);  // u must be a verb
+ A z; fdefallo(z)  // allocate normal result area
  if(AT(w)&VERB){
   // u^:v.  Create derived verb to handle it.
   v=FAV(a); b=((v->id&~1)==CATCO)&&ID(v->fgh[1])==CRIGHT;  // detect u@]^:v  (or @:)
   // The action routines are inplaceable; take ASGSAFE from u and v, inplaceability from u
-  R CDERIV(CPOWOP,jtpowv1cell,b?jtpowv2acell:jtpowv2cell,(v->flag&FAV(w)->flag&VASGSAFE)+(v->flag&(VJTFLGOK1|VJTFLGOK2)), RMAX,RMAX,RMAX);
+  fdeffill(z,0L,CPOWOP,VERB,jtpowv1cell,b?jtpowv2acell:jtpowv2cell,a,w,0L,(v->flag&FAV(w)->flag&VASGSAFE)+(v->flag&(VJTFLGOK1|VJTFLGOK2)), RMAX,RMAX,RMAX)
+  RETF(z);
  }
  // u^:n.  Check for special types.
  if(BOX&AT(w)){A x,y;AF f1,f2;
   // Boxed v.  It could be <n or [v0`]v1`v2 or <''.
-  if(!AR(w)&&(x=AAV(w)[0],!AR(x)&&NUMERIC&AT(x)||1==AR(x)&&!AN(x))){
+  if(!AR(w)&&(x=C(AAV(w)[0]),!AR(x)&&NUMERIC&AT(x)||1==AR(x)&&!AN(x))){
    // here for <n or <''.  That will be handled by special code.
    f1=jtpowseq; f2=jtply2; v=FAV(a);
    // if u is {&n or {~, and n is <_ or <'', do the tclosure trick
@@ -277,7 +291,8 @@ DF2(jtpowop){A hs;B b;V*v;
     if(CAMP==v->id&&(CFROM==ID(v->fgh[0])&&(y=v->fgh[1],INT&AT(y)&&1==AR(y)))){f1=jtindexseqlim1;}  // {&b^:_ y
     else if(CTILDE==v->id&&CFROM==ID(v->fgh[0])){f2=jtindexseqlim2;}   // x {~^:_ y
    }
-   R CDERIV(CPOWOP,f1,f2,VFLAGNONE, RMAX,RMAX,RMAX);  // create the derived verb for <n
+   fdeffill(z,0L,CPOWOP,VERB,f1,f2,a,w,0L,VFLAGNONE, RMAX,RMAX,RMAX)
+   RETF(z);
   }
 //    ASSERT(self!=0,EVDOMAIN);  // If gerund returns gerund, error.  This check is removed pending further design
   R gconj(a,w,CPOWOP);  // create the derived verb for [v0`]v1`v2
@@ -295,17 +310,19 @@ DF2(jtpowop){A hs;B b;V*v;
    if(IAV(hs)[0]<0){  // u^:_1
     // if there are no names, calculate the monadic inverse and save it in h.  Inverse of the dyad, or the monad if there are names,
     // must wait until we get arguments
-    A h=0; f1=jtinv1; if(nameless(a)){if(h=inv(a)){f1=jtinvh1;}else{f1=jtinverr; RESETERRANDMSG}} // h must be valid for free.  If no names in w, take the inverse.  If it doesn't exist, fail the monad but keep the dyad going
+    A h=0; f1=jtinv1; if(nameless(a)){if(h=inv(a)){f1=jtinvh1;}else{f1=jtinverr; RESETERR}} // h must be valid for free.  If no names in w, take the inverse.  If it doesn't exist, fail the monad but keep the dyad going
     flag = (FAV(a)->flag&VASGSAFE) + (h?FAV(h)->flag&VJTFLGOK1:VJTFLGOK1);  // inv1 inplaces and calculates ip for next step; invh has ip from inverse
-    R fdef(0,CPOWOP,VERB,(AF)(f1),jtinv2,a,w,h,flag,RMAX,RMAX,RMAX);
+    fdeffill(z,0,CPOWOP,VERB,(AF)(f1),jtinv2,a,w,h,flag,RMAX,RMAX,RMAX);
    }else{  // u^:_
-    R fdef(0,CPOWOP,VERB,jtpinf12,jtpinf12,a,w,0,VFLAGNONE,RMAX,RMAX,RMAX);
+    fdeffill(z,0,CPOWOP,VERB,jtpinf12,jtpinf12,a,w,0,VFLAGNONE,RMAX,RMAX,RMAX);
    }
+   RETF(z);
   }
   if(IAV(hs)[0]>=0){f1=jtfpown; flag=FAV(a)->flag&VJTFLGOK1;}  // if nonneg atom, go to special routine for that, which supports inplace
  }
  // If not special case, fall through to handle general case
  I m=AN(hs); // m=#atoms of n; n=1st atom; r=n has rank>0
  ASSERT(m!=0,EVDOMAIN);  // empty power is error
- R fdef(0,CPOWOP,VERB, f1,jtply2, a,w,hs,flag, RMAX,RMAX,RMAX);   // Create derived verb: pass in integer powers as h
+ fdeffill(z,0,CPOWOP,VERB, f1,jtply2, a,w,hs,flag, RMAX,RMAX,RMAX);   // Create derived verb: pass in integer powers as h
+ RETF(z);
 }

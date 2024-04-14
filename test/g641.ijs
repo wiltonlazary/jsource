@@ -1,14 +1,26 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g641.ijs'
+prolog './g641.ijs'
 NB. ?.y -----------------------------------------------------------------
 
 seed =. 9!:0 ''
 x=.30$1e6
 a -: b [ a=.?.x [ b=.?.x
 seed -: 9!:0 ''
+x=.30$1000000x
+a -: b [ a=.?.x [ b=.?.x
 
 seed =. 9!:0 ''
 (s$?.1e6) -: ?."0 s$1e6 [ s=.5 6 7
 seed -: 9!:0 ''
+
+NB.  0 1 0 6 7 4 1 52 162 406 942 1905 -: ?. 2x ^ i. 12 NB. tentative
+
+9!:43 ] 2
+'domain error' -: ?. etx _1
+2 -: 9!:42 ''
+'domain error' -: 5 ?. etx _1
+2 -: 9!:42 ''
+1: ?. 10$10
+2 -: 9!:42 ''
 
 'domain error' -: ?. etx 0 _1                          
 'domain error' -: ?. etx 'abc'                         
@@ -51,6 +63,11 @@ seed -: 9!:0 ''
 
 'length error' -: 2 3 ?. etx 4 5 6
 
+270869761 1880044261 -: q: :: q: 509247139646491621x   NB. Twice to elude nonce error
+
 4!:55 ;:'a b s seed x'
 
+
+
+epilog''
 

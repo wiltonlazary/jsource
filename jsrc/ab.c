@@ -1,4 +1,4 @@
-/* Copyright 1990-2008, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Adverbs: b. bitwise functions                                           */
@@ -9,7 +9,7 @@
 #include "ve.h"
 #include "ar.h"
 
-#if (C_AVX&&SY_64) || EMU_AVX
+#if C_AVX2 || EMU_AVX2
 primop256(bw0000II,1,,zz=_mm256_setzero_pd(),R EVOK;)
 primop256(bw0001II,1,,zz=_mm256_and_pd(xx,yy),R EVOK;)
 primop256(bw0010II,0,,zz=_mm256_andnot_pd(yy,xx),R EVOK;)
@@ -44,6 +44,40 @@ APFX(bw1101II, UI,UI,UI, BW1101,, R EVOK;)
 APFX(bw1110II, UI,UI,UI, BW1110,, R EVOK;)
 APFX(bw1111II, UI,UI,UI, BW1111,, R EVOK;)
 #endif
+APFX(bw0000I2I2, UI2,UI2,UI2, BW0000,, R EVOK;)
+APFX(bw0001I2I2, UI2,UI2,UI2, BW0001,, R EVOK;) 
+APFX(bw0010I2I2, UI2,UI2,UI2, BW0010,, R EVOK;)
+APFX(bw0011I2I2, UI2,UI2,UI2, BW0011,, R EVOK;)
+APFX(bw0100I2I2, UI2,UI2,UI2, BW0100,, R EVOK;)
+APFX(bw0101I2I2, UI2,UI2,UI2, BW0101,, R EVOK;)
+APFX(bw0110I2I2, UI2,UI2,UI2, BW0110,, R EVOK;)
+APFX(bw0111I2I2, UI2,UI2,UI2, BW0111,, R EVOK;)
+APFX(bw1000I2I2, UI2,UI2,UI2, BW1000,, R EVOK;)
+APFX(bw1001I2I2, UI2,UI2,UI2, BW1001,, R EVOK;)
+APFX(bw1010I2I2, UI2,UI2,UI2, BW1010,, R EVOK;)
+APFX(bw1011I2I2, UI2,UI2,UI2, BW1011,, R EVOK;)
+APFX(bw1100I2I2, UI2,UI2,UI2, BW1100,, R EVOK;)
+APFX(bw1101I2I2, UI2,UI2,UI2, BW1101,, R EVOK;)
+APFX(bw1110I2I2, UI2,UI2,UI2, BW1110,, R EVOK;)
+APFX(bw1111I2I2, UI2,UI2,UI2, BW1111,, R EVOK;)
+
+APFX(bw0000I4I4, UI4,UI4,UI4, BW0000,, R EVOK;)
+APFX(bw0001I4I4, UI4,UI4,UI4, BW0001,, R EVOK;) 
+APFX(bw0010I4I4, UI4,UI4,UI4, BW0010,, R EVOK;)
+APFX(bw0011I4I4, UI4,UI4,UI4, BW0011,, R EVOK;)
+APFX(bw0100I4I4, UI4,UI4,UI4, BW0100,, R EVOK;)
+APFX(bw0101I4I4, UI4,UI4,UI4, BW0101,, R EVOK;)
+APFX(bw0110I4I4, UI4,UI4,UI4, BW0110,, R EVOK;)
+APFX(bw0111I4I4, UI4,UI4,UI4, BW0111,, R EVOK;)
+APFX(bw1000I4I4, UI4,UI4,UI4, BW1000,, R EVOK;)
+APFX(bw1001I4I4, UI4,UI4,UI4, BW1001,, R EVOK;)
+APFX(bw1010I4I4, UI4,UI4,UI4, BW1010,, R EVOK;)
+APFX(bw1011I4I4, UI4,UI4,UI4, BW1011,, R EVOK;)
+APFX(bw1100I4I4, UI4,UI4,UI4, BW1100,, R EVOK;)
+APFX(bw1101I4I4, UI4,UI4,UI4, BW1101,, R EVOK;)
+APFX(bw1110I4I4, UI4,UI4,UI4, BW1110,, R EVOK;)
+APFX(bw1111I4I4, UI4,UI4,UI4, BW1111,, R EVOK;)
+
 
        static APFX(bw0000CC, UC,UC,UC, BW0000,, R EVOK;)
        static APFX(bw0001CC, UC,UC,UC, BW0001,, R EVOK;)
@@ -100,7 +134,7 @@ static AHDRR(bw1010insC,UC,UC){I k=d*(n-1);UC t=(UC)((n&1)-1); x+=k; DQ(m, DQ(d,
 
 
 #define BITWISE(f,T,op)  \
- F2(f){A z;I *av,k=0,x;T*wv,y,*zv;             \
+ DF2(f){A z;I *av,k=0,x;T*wv,y,*zv;             \
   F2PREFIP;ARGCHK2(a,w);  /* kludge we allow inplace call but we don't honor it yet */ \
   if(!ISDENSETYPE(AT(a),INT))RZ(a=cvt(INT,a));                                    \
   if(!ISDENSETYPE(AT(w),INT))RZ(w=cvt(INT,w));                                    \
@@ -158,7 +192,7 @@ DF2(jtbitwisechar){DECLFG;A*p,x,y,z;B b;I j,m,n,zn;AHDR2FN* ado;
 /* http://www.jsoftware.com/jwiki/Essays/Bitwise_Functions_on_Characters */
 
 B jtbitwisecharamp(J jt,UC*t,I n,UC*wv,UC*zv){I p;UC c,i,j,*pv,s[256];AHDR2FN* ado;
- i=t[0]; j=t[255];
+ i=t[0]; j=t[255];  // by spot-checking a few spots, see if the table might represent AND, ], OR, XOR, NAND
  if     (i==0    ){c=j; ado=(AHDR2FN*)bw0001II;}
  else if(j==i    ){c=i; ado=(AHDR2FN*)bw0011II;}
  else if(j==255  ){c=i; ado=(AHDR2FN*)bw0111II;}
@@ -167,8 +201,8 @@ B jtbitwisecharamp(J jt,UC*t,I n,UC*wv,UC*zv){I p;UC c,i,j,*pv,s[256];AHDR2FN* a
  else if(i==255  ){c=j; ado=(AHDR2FN*)bw1011II;}
  else R 0;
  pv=(UC*)&p; DO(SZI, pv[i]=c;);
- ado((I)(256/SZI),(I)1,AV(ds(CALP)),pv,s,jt); if(memcmpne(s,t,256L))R 0;
- ado((n+SZI-1)>>LGSZI,(I)1,wv,pv,zv,jt); zv[n]=0;
+ ado((I)(256/SZI),(I)1,AV(ds(CALP)),pv,s,jt); if(memcmpne(s,t,256L))R 0;  // see if the table we are given exactly matches the function we inferred.  If not, abort
+ ado((n+SZI-1)>>LGSZI,(I)1,wv,pv,zv,jt); zv[n]=0;  // if we found the function, apply it wordwise
  R 1;
 }  // kludge this should be scrapped in favor of wordlong ops
 

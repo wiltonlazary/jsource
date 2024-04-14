@@ -1,4 +1,4 @@
-/* Copyright 1990-2008, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Verbs: Grades                                                           */
@@ -43,10 +43,10 @@
 // On VS this sequence, where a single byte is returned, creates a CMP/JE/SETL sequence, performing only one (fused) compare
 // #define COMPGRADE(T,t) T av=*a, bv=*b; if(av!=bv) R av t bv; while(--n){++a; ++b; av=*a, bv=*b; if(av!=bv) R av t bv;} R a<b;
 #define COMPGRADE(T,t) do{T av=*a, bv=*b; if(av!=bv) R av t bv; if(!--n)break; ++a; ++b;}while(1); R a<b;
-static __forceinline B compiu(I n, I *a, I *b){COMPGRADE(I,<)}
-static __forceinline B compid(I n, I *a, I *b){COMPGRADE(I,>)}
-static __forceinline B compdu(I n, D *a, D *b){COMPGRADE(D,<)}
-static __forceinline B compdd(I n, D *a, D *b){COMPGRADE(D,>)}
+static INLINE B compiu(I n, I *a, I *b){COMPGRADE(I,<)}
+static INLINE B compid(I n, I *a, I *b){COMPGRADE(I,>)}
+static INLINE B compdu(I n, D *a, D *b){COMPGRADE(D,<)}
+static INLINE B compdd(I n, D *a, D *b){COMPGRADE(D,>)}
 
 // General sort, with comparisons by function call, but may do extra comparisons to avoid mispredicted branches
 #define GRADEFNNAME jmsort
@@ -110,7 +110,7 @@ void msort(SORT *sortblok, I n, void **zv, void **xv, I sortparm){
 
 // m: #cells in w (# sorts to do)   n: #items in a cell of w   ai: #atoms in an item of a cell of w
 // JTDESCEND in jt is set for descending
-#define GF(f)         B f(J jt,I m,I ai,I n,A w,I*zv)
+#define GF(f)         B f(J jt,I m,I ai,I n,A w,I* RESTRICT zv)
 
 /* m  - # cells (# individual grades to do) */
 /* c  - # atoms in a cell                   */
@@ -119,12 +119,14 @@ void msort(SORT *sortblok, I n, void **zv, void **xv, I sortparm){
 /* zv - result values                       */
 
 static struct {
- CMP comproutine;
+ CMP comproutine;   // 0 if comparison bundled w/sort
  void **(*sortfunc)();
-} sortroutines[][2] = {  // index is [bitx][up]
+} sortroutines[][2] = {  // index is [precisionx][up]
 [B01X]={{compcd,jmsort},{compcu,jmsort}}, [LITX]={{compcd,jmsort},{compcu,jmsort}}, [INTX]={{0,jmsortid},{0,jmsortiu}}, [FLX]={{0,jmsortdd},{0,jmsortdu}},
 [CMPXX]={{0,jmsortdd},{0,jmsortdu}},[BOXX]={{compr,jmsortmincomp},{compr,jmsortmincomp}}, [XNUMX]={{compxd,jmsortmincomp},{compxu,jmsortmincomp}}, [RATX]={{compqd,jmsortmincomp},{compqu,jmsortmincomp}},
-[C2TX]={{compud,jmsort},{compuu,jmsort}}, [C4TX]={{comptd,jmsort},{comptu,jmsort}}, [SBTX]={{compcd,jmsort},{compcu,jmsort}}
+[QPX]={{0,jmsortdd},{0,jmsortdu}},
+[C2TX]={{compud,jmsort},{compuu,jmsort}}, [C4TX]={{comptd,jmsort},{comptu,jmsort}}, [SBTX]={{compcd,jmsort},{compcu,jmsort}},
+[INT2X]={{compsd,jmsort},{compsu,jmsort}}, [INT4X]={{compld,jmsort},{complu,jmsort}},
 };
 
 
@@ -134,7 +136,7 @@ static GF(jtgrx){F1PREFJT;A x;I ck,t,*xv;I c=ai*n;
  void **(*sortfunc)() = sortroutines[CTTZ(t)][(~(I)jtinplace>>JTDESCENDX)&1].sortfunc;  // the major routine to use (normal merge or minimum comparisons)
  sortblok.f=sortroutines[CTTZ(t)][(~(I)jtinplace>>JTDESCENDX)&1].comproutine;  // comparison function
  sortblok.jt=jtinplace;  // jt including direction bit
- I natoms=ai<<((t>>CMPXX)&1);   // number of atoms to compare in loop
+ I natoms=ai<<!!(t&CMPX+QP);   // number of atoms to compare in loop
  sortblok.n=natoms;  // pass in as parm
  natoms=(t&BOX+XNUM+RAT)?(I)&sortblok:natoms;  // for simple compares, pass in #atoms.  For more complex ones, the whole sort block
  sortblok.k=ai<<bplg(t); ck=sortblok.k*n;  // item size in bytes, for copying
@@ -268,9 +270,9 @@ I grcol2(I d,I c,US*yv,I n,I*xv,I*zv,const I m,US*u,I flags){
 // We interpret the input as integer form so that we can hide the item number in an infinity without turning it into a NaN
 static GF(jtgrdq){F1PREFJT;
  // For stability, we keep all the interior sorts ascending.  Here we set a code to precondition the values so that comes out right
- I sortdown63=SGNIF((I)jtinplace,JTDESCENDX)&IMIN;  // sign bit set if sorting down; other bits 0
+ I sortdown63=SGNIF(jtinplace,JTDESCENDX)&IMIN;  // sign bit set if sorting down; other bits 0
  // See how many bits we must reserve for the item number, and make a mask for the item number
- unsigned long hbit; CTLZI(n-1,hbit); ++hbit; I itemmask=((I)1<<hbit)-1;  // mask where the item number will go
+ unsigned long hbit=CTLZI(n-1); ++hbit; I itemmask=((I)1<<hbit)-1;  // mask where the item number will go
  // Loop over each grade
  I *wv=IAV(w);  // we interpret the floats in w as if they were integers.
  while(--m>=0){
@@ -282,7 +284,7 @@ static GF(jtgrdq){F1PREFJT;
   // install item number
   DO(n, I v=wv[i]^sortdown63; v^=(UI)REPSGN(v)>>1; v=(v==0)?-1:v; zv[i]=(v&(~itemmask))+i;)
   // sort the result area in place
-  sortiq1(zv,n);  // always ascending
+  vvsortqs8ai(zv,n);  // always ascending
   // pass through the result area, removing the upper bits.  If consecutive values have the same upper bits, go through them,
   // replacing the upper bits with the actual bits from the input (after honoring sign/direction bits), and then re-sort the result in place.
   // remove the upper bits from that sorted result
@@ -294,7 +296,7 @@ static GF(jtgrdq){F1PREFJT;
     I j=i;do{
      I v=wv[zv[j]&itemmask]^sortdown63; v^=(UI)REPSGN(v)>>1; v=(v==0)?-1:v; zv[j]=((v&itemmask)<<hbit)+(zv[j]&itemmask); // fetch original v, reconstitute; get itemmask in uppper bits 
     }while(!(++j==n || (((nextv=zv[j])^currv)&~itemmask)));
-    sortiq1(zv+i,j-i);  // sort the collision area in place, ascending.  j points to first item beyond the collision area, and nextv is its value
+    vvsortqs8ai(zv+i,j-i);  // sort the collision area in place, ascending.  j points to first item beyond the collision area, and nextv is its value
     while(i<j){zv[i]&=itemmask; ++i;}
     i=j-1;  // pick up after the batch
    }
@@ -420,7 +422,7 @@ static GF(jtgriq){F1PREFJT;
  // For stability, we keep all the interior sorts ascending.  Here we set a code to precondition the values so that comes out right
  I gradedown=REPSGN(SGNIF(jtinplace,JTDESCENDX));  // ~0 if sorting down, else 0
  // See how many bits we must reserve for the item number, and make a mask for the item number
- unsigned long hbit; CTLZI(n-1,hbit); ++hbit; I itemmask=((I)1<<hbit)-1;  // mask where the item number will go
+ unsigned long hbit=CTLZI(n-1); ++hbit; I itemmask=((I)1<<hbit)-1;  // mask where the item number will go
  I itemmsb=(I)1<<(BW-1-hbit); I itemsigmsk=2*-itemmsb;  // get bit at place we will shift into sign bit, and a mask for all higher bits
  // Loop over each grade
  I *wv=IAV(w);  // we interpret the floats in w as if they were integers.
@@ -434,7 +436,7 @@ static GF(jtgriq){F1PREFJT;
   DO(n, I v=wv[i]^gradedown; if(siglost|=itemsigmsk&((v&-itemmsb)+itemmsb))break; zv[i]=(v<<hbit)+i;)
   // If there was no loss of significance, just sort the values and return the indexes
   if(!siglost){
-   sortiq1(zv,n);  // sort em (in place), ascending
+   vvsortqs8ai(zv,n);  // sort em (in place), ascending
    DO(n, zv[i]&=itemmask;)   // the indexes are right
   }else{
    // We encountered significance when we tried to shift the values to make room for the indexes.  We will have to sort
@@ -442,7 +444,7 @@ static GF(jtgriq){F1PREFJT;
    // First, install the item number in the LSBs
    DO(n, I v=wv[i]^gradedown; zv[i]=(v&~itemmask)+i;)
    // sort the result area in place
-   sortiq1(zv,n);
+   vvsortqs8ai(zv,n);
    // pass through the result area, removing the upper bits.  If consecutive values have the same upper bits, go through them,
    // replacing the upper bits with the actual bits from the input (after honoring sign/direction bits), and then re-sort the result in place.
    // remove the upper bits from that sorted result
@@ -454,7 +456,7 @@ static GF(jtgriq){F1PREFJT;
      I j=i;do{
       I v=wv[zv[j]&itemmask]^gradedown; zv[j]=((v&itemmask)<<hbit)+(zv[j]&itemmask); // fetch original v, reconstitute; get itemmask in upper bits 
      }while(!(++j==n || (((nextv=zv[j])^currv)&~itemmask)));
-     sortiq1(zv+i,j-i);  // sort the collision area in place.  j points to first item beyond the collision area, and nextv is its value
+     vvsortqs8ai(zv+i,j-i);  // sort the collision area in place.  j points to first item beyond the collision area, and nextv is its value
      while(i<j){zv[i]&=itemmask; ++i;}  // the item numbers are guaranteed right after this sort
      i=j-1;  // pick up after the batch
     }
@@ -471,7 +473,7 @@ static GF(jtgriq){F1PREFJT;
 #endif
 
 
-static GF(jtgri){F1PREFJT;A x,y;B up;I e,i,*v,*wv,*xv;UI4 *yv,*yvb;I c=ai*n;
+static GF(jtgri){F1PREFJT;A x,y;B up;I e,i,* RESTRICT v,*wv,*xv;UI4 * RESTRICT yv,* RESTRICT yvb;I c=ai*n;
  wv=AV(w);
  // select algorithm based on size & range.  To develop models for the different algorithms, modify the code here to force one choice
  // & run test lines.
@@ -535,7 +537,7 @@ static GF(jtgri){F1PREFJT;A x,y;B up;I e,i,*v,*wv,*xv;UI4 *yv,*yvb;I c=ai*n;
 #if SY_64  // no quickgrade unless INTs are 64 bits
  if(ai==1){  // for atoms, usually use smallrange or quicksort
   if(n<10)R jtgriq(jtinplace,m,ai,n,w,zv);  // for short lists just use qsort
-  UI4 lgn3; CTLZI(n,lgn3); lgn3 = (UI4)((lgn3*8) - 8 + (n>>(lgn3-3)));  // approx lg(n)<<3
+  UI4 lgn3=CTLZI(n); lgn3 = (UI4)((lgn3*8) - 8 + (n>>(lgn3-3)));  // approx lg(n)<<3
   rng = condrange(wv,AN(w),IMAX,IMIN,MIN((L2CACHESIZE>>LGSZI),(n*lgn3)>>(3-1)));  // let range go up to 2n lgn, but never more than L2 size
   if(!rng.range){
    if(!BETWEENC(n,5500,500000))R jtgriq(jtinplace,m,ai,n,w,zv);  // quicksort except for 5500-500000
@@ -575,7 +577,7 @@ static GF(jtgri){F1PREFJT;A x,y;B up;I e,i,*v,*wv,*xv;UI4 *yv,*yvb;I c=ai*n;
   // refetch each input and take its position from the +/\ list.  After taking a position, add 1 so the next identical value gets the next position
   // store the index of the fetched input value into the indicated position
   v=wv+ai-1;  // rescan lowest-significance column
-  DO(n, zv[yv[*v]++]=i; v+=ai;);
+  DO(n, zv[yv[*v]++]=i; v+=ai;);  // do the grade
   v=wv+ai-1;
   // if items contain multiple atoms, process the remanining atoms similarly, from lowest to highest significance
   for(e=ai-2;0<=e;--e){  // loop d-1 times
@@ -597,7 +599,7 @@ static GF(jtgri){F1PREFJT;A x,y;B up;I e,i,*v,*wv,*xv;UI4 *yv,*yvb;I c=ai*n;
   wv+=c; zv+=n;
  }
  R 1;
-}    /* grade"r w on small-range integers w */
+}    /* grade"r w on integers w, checking for range */
 
 
 static GF(jtgru){F1PREFJT;A x,y;B up;I e,i,*xv;UI4 *yv,*yvb;C4 *v,*wv;I c=ai*n;
@@ -606,7 +608,7 @@ static GF(jtgru){F1PREFJT;A x,y;B up;I e,i,*xv;UI4 *yv,*yvb;C4 *v,*wv;I c=ai*n;
  if(ai<=6){rng = condrange4(wv,AN(w),-1,0,(MIN(((ai*n<(L2CACHESIZE>>LGSZI))?16:4),80>>ai))*n);   //  TUNE
  }else rng.range=0;
  if(!rng.range)R c==n&&n>1500?gru1(m,ai,n,w,zv):grx(m,ai,n,w,zv);  // revert to other methods if not small-range    TUNE
- GATV0(y,C4T,rng.range,1); yvb=C4AV(y); yv=yvb-rng.min; up=(~(I)jtinplace>>JTDESCENDX);
+ GATV0(y,C4T,rng.range,1); yvb=C4AV(y); yv=yvb-rng.min; up=(~(I)jtinplace>>JTDESCENDX)&1;
  if(1<ai){GATV0(x,INT,n,1); xv=AV(x);
  }
  for(i=0;i<m;++i){
@@ -631,11 +633,11 @@ static GF(jtgru){F1PREFJT;A x,y;B up;I e,i,*xv;UI4 *yv,*yvb;C4 *v,*wv;I c=ai*n;
   wv+=c; zv+=n;
  }
  R 1;
-}    /* grade"r w on small-range c4t w */
+}    /* grade"r w on c4t w, checking for range */
 
 
 #define DOCOL1(p,iicalc0,iicalc1,ind,vinc)  \
- {I*g,*h,   j=p-1,k,s=0;UC*v;                          \
+ {I j=p-1,k,s=0;UC*v;                          \
   if(b){g=xv; h=zv; b=0;}else{g=zv; h=xv; b=1;}        \
   mvc(ps,yv,1,MEMSET00);                                    \
   v=vv; DQ(n, ++yv[iicalc0]; v+=ai;);                   \
@@ -645,7 +647,7 @@ static GF(jtgru){F1PREFJT;A x,y;B up;I e,i,*xv;UI4 *yv,*yvb;C4 *v,*wv;I c=ai*n;
  }
 
 #define DOCOL4(p,iicalc0,iicalc1,ind,vinc)  \
- {I*g,*h,ii,j=p-1,k,s=0;UC*v;                          \
+ {I ii,j=p-1,k,s=0;UC*v;                          \
   if(b){g=xv; h=zv; b=0;}else{g=zv; h=xv; b=1;}        \
   mvc(ps,yv,1,MEMSET00);                                    \
   v=vv; DQ(n, IND4(iicalc0); ++yv[ii]; v+=ai;);         \
@@ -654,8 +656,8 @@ static GF(jtgru){F1PREFJT;A x,y;B up;I e,i,*xv;UI4 *yv,*yvb;C4 *v,*wv;I c=ai*n;
   v=vv; DO(n, IND4(iicalc1); h[yv[ii]++]=ind; vinc;);  \
  }
 
-static GF(jtgrb){F1PREFJT;A x;B b,up;I i,p,ps,q,*xv,yv[16];UC*vv,*wv;I c=ai*n;
- UI4 lgn; CTLZI(n,lgn);
+static GF(jtgrb){F1PREFJT;A x;B b,up;I *g,*h,i,p,ps,q,*xv,yv[16];UC*vv,*wv;I c=ai*n;
+ UI4 lgn=CTLZI(n);
  if((UI)ai>4*lgn)R grx(m,ai,n,w,zv);     // TUNE
  q=ai>>2; p=16; ps=p*SZI; wv=UAV(w); up=(~(I)jtinplace>>JTDESCENDX)&1;
  if(1<q){GATV0(x,INT,n,1); xv=AV(x);}
@@ -668,8 +670,8 @@ static GF(jtgrb){F1PREFJT;A x;B b,up;I i,p,ps,q,*xv,yv[16];UC*vv,*wv;I c=ai*n;
  R 1;
 }    /* grade"r w on boolean w, works 4 columns at a time (d%4 guaranteed to be 0)*/
 
-static GF(jtgrc){F1PREFJT;A x;B b,q,up;I e,i,p,ps,*xv,yv[256];UC*vv,*wv;
- UI4 lgn; CTLZI(n,lgn);
+static GF(jtgrc){F1PREFJT;A x;B b,q,up;I *g,*h,e,i,p,ps,*xv,yv[256];UC*vv,*wv;
+ UI4 lgn=CTLZI(n);
  if((UI)ai>lgn)R grx(m,ai,n,w,zv);   // TUNE
  ai<<=((AT(w)>>C2TX)&1);
  p=B01&AT(w)?2:256; ps=p*SZI; wv=UAV(w); up=(~(I)jtinplace>>JTDESCENDX)&1;
@@ -707,17 +709,17 @@ F2(jtgrade1p){PROLOG(0074);A x,z;I n,*s,*xv,*zv;
 /* zv - result values                       */
 
 static B (*grroutine[])(J,I,I,I,A,I*) = {  // index is [bitx]
-[B01X]=jtgrc, [LITX]=jtgrc, [INTX]=jtgri, [FLX]=jtgrd, [CMPXX]=jtgrx,[BOXX]=jtgrx, [XNUMX]=jtgrx, [RATX]=jtgrx, [C2TX]=jtgrc, [C4TX]=jtgru, [SBTX]=jtgrs};
+[B01X]=jtgrc, [LITX]=jtgrc, [INTX]=jtgri, [FLX]=jtgrd, [CMPXX]=jtgrx,[BOXX]=jtgrx, [XNUMX]=jtgrx, [RATX]=jtgrx, [QPX]=jtgrx,[C2TX]=jtgrc, [C4TX]=jtgru, [INT2X]=jtgrx, [INT4X]=jtgrx, [SBTX]=jtgrs};
 
 // /: and \: with IRS support
-A jtgr1(J jt,A w){F1PREFJT;PROLOG(0075);A z;I c,f,ai,m,n,r,*s,t,wn,wr,zn;
+A jtgr1(J jt,A w){F1PREFJT;PROLOG(0075);A z;I f,ai,m,n,r,*s,t,wn,wr,zn;
  ARGCHK1(w);
  t=AT(w); wr=AR(w); r=(RANKT)jt->ranks; r=wr<r?wr:r; RESETRANK;
  f=wr-r; s=AS(w);
  // Calculate m: #cells in w   n: #items in a cell of w   ai: #atoms in an item of a cell of w  c: #atoms in a cell of w  
  SETICFR(w,f,r,n);  if(wn=AN(w)){
   // If w is not empty, it must have an acceptable number of cells
-  PROD(m,f,s); PROD(ai,r-1,f+s+1); c=ai*n; zn=m*n;
+  PROD(m,f,s); PROD(ai,r-1,f+s+1); zn=m*n;
  }else{
   // empty w.  The number of cells may overflow, but reshape will catch that
   DPMULDE(prod(f,s),n,zn);

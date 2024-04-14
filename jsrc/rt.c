@@ -1,4 +1,4 @@
-/* Copyright 1990-2004, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Representations: Tree                                                   */
@@ -13,12 +13,12 @@ static F1(jttrc){A bot,p,*v,x,y;B b;C*bv,c,ul,ll,*pv;I j,k,m,*s,xn,*xv,yn,*yv;
  s=AS(w); v=AAV(w);
  xn=s[0]; RZ(x=apvwr(xn,0L,0L)); xv=AV(x);
  yn=s[1]; RZ(y=apvwr(yn,0L,0L)); yv=AV(y);
- j=0; DO(xn, xv[i]=SETIC(v[j],k); j+=yn;);
+ j=0; DO(xn, xv[i]=SETIC(C(v[j]),k); j+=yn;);
  GATV0(bot,LIT,yn,1); bv=CAV(bot);
  ul=JT(jt,bx)[0]; ll=JT(jt,bx)[6];
  for(j=b=0;j<xn;++j,b=0<j)
   for(k=0;k<yn;++k){
-   p=*v++;
+   p=C(*v++);
    if(AN(p)){
     m=AS(p)[1]; yv[k]=MAX(yv[k],m);
     pv=CAV(p); c=*pv;
@@ -26,7 +26,7 @@ static F1(jttrc){A bot,p,*v,x,y;B b;C*bv,c,ul,ll,*pv;I j,k,m,*s,xn,*xv,yn,*yv;
     bv[k]=pv[AN(p)-m];
    }else bv[k]=' ';
   }
- R link(x,y);
+ R jlink(x,y);
 }
 
 static I jtpad(J jt,A a,A w,C*zv){C dash,*u,*v,*wv;I c,d,r,*s;
@@ -44,15 +44,15 @@ static I jtpad(J jt,A a,A w,C*zv){C dash,*u,*v,*wv;I c,d,r,*s;
 
 static F1(jtgraft){A p,q,t,*u,x,y,z,*zv;C*v;I d,j,k,m,n,*pv,*s,xn,*xv,yn,*yv;
  RZ(t=trc(w)); u=AAV(t);
- x=u[0]; xn=AN(x); xv=AV(x); m=0; DO(xn,m+=xv[i];);
- y=u[1]; yn=AN(y); yv=AV(y);
+ x=C(u[0]); xn=AN(x); xv=AV(x); m=0; DO(xn,m+=xv[i];);
+ y=C(u[1]); yn=AN(y); yv=AV(y);
  RZ(p=v2(0L,0L));  pv=AV(p);
  GATV0(z,BOX,yn,1); zv=AAV(z);
  u=AAV(w);
  for(j=0;j<yn;++j){
   DPMULDE(m,yv[j],k); GATV0(q,LIT,k,2); s=AS(q); *s=m; *++s=yv[j];
   v=CAV(q); mvc(AN(q),v,1,iotavec-IOTAVECBEGIN+' ');
-  pv[1]=yv[j]; k=j-yn; DO(xn, *pv=xv[i]; RE(v+=pad(p,u[k+=yn],v)););
+  pv[1]=yv[j]; k=j-yn; DO(xn, *pv=xv[i]; RE(v+=pad(p,C(u[k+yn]),v)); k+=yn;);
   zv[j]=incorp(q);
  }
  t=zv[0]; n=yv[0];
@@ -81,10 +81,10 @@ static F2(jttroot){A t,x;B b;C*u,*v;I j=0,k=0,m,n,*s;
  m=AN(a); u=CAV(a); b=!m||1==m&&BETWEENC(*u,'0','9');
  GATV0(x,LIT,b?1:4+m,1); v=CAV(x);
  *v=JT(jt,bx)[10]; if(!b){v[3+m]=JT(jt,bx)[10]; v[1]=v[2+m]=' '; MC(2+v,u,m);}
- t=AAV(w)[0]; s=AS(t); m=s[0]; n=s[1];
+ t=C(AAV(w)[0]); s=AS(t); m=s[0]; n=s[1];
  u=CAV(t);         DO(m, if(' '!=*u){j=i; break;} u+=n;);
  u=CAV(t)+(m-1)*n; DO(m, if(' '!=*u){k=i; break;} u-=n;);
- R link(center(x,j,k,m),w);
+ R jlink(center(x,j,k,m),w);
 }
 
 static F1(jttleaf){A t,z;C*v;I n,*s;
@@ -98,11 +98,11 @@ static F1(jttleaf){A t,z;C*v;I n,*s;
 
 static F1(jttconnect){A*wv,x,y,z;B b,d;C c,*u,*xv,*yv,*zv;I e,i,j,m,n,p,q,zn;
  ARGCHK1(w);
- n=AN(w); wv=AAV(w); y=wv[0]; m=AS(y)[0];
- e=0; DO(n,e+=AS(wv[i])[1];);
+ n=AN(w); wv=AAV(w); y=C(wv[0]); m=AS(y)[0];
+ e=0; DO(n,e+=AS(C(wv[i]))[1];);
  DPMULDE(m,e,zn); GATVR(z,LIT,zn,2,AS(y)); AS(z)[1]=e; zv=CAV(z);
  for(i=0;i<n;++i){
-  y=wv[i]; q=AS(y)[1]; yv=CAV(y);
+  y=C(wv[i]); q=AS(y)[1]; yv=CAV(y);
   if(i){
    xv=CAV(x)+p-1;
    for(j=0;j<m;++j){
@@ -128,18 +128,21 @@ static F1(jttrr){PROLOG(0058);A hs,s,t,*x,z;B ex,xop;C id;I fl,*hv,m;V*v;
  if(AT(w)&NOUN+NAME){RETF(tleaf(lrep(w)));}
  v=FAV(w); id=v->id; fl=v->flag;
  I fndx=(id==CBDOT)&&!v->fgh[0]; A fs=v->fgh[fndx]; A gs=v->fgh[fndx^1];  // In verb for m b., if f is empty look to g for the left arg.  It would be nice to be more general
+ if(id==CATCO&&AT(w)&VERB&&FAV(gs)->id==CTDOT)R trr(gs);  // if <@:t. discard the <@:
  hs=v->fgh[2]; if(id==CBOX)gs=0;  // ignore gs field in BOX, there to simulate BOXATOP
+ if(id==CIBEAM&&!(AT(w)&CONJ)){fs=scib(FAV(w)->localuse.lu1.foreignmn[0]); gs=scib(FAV(w)->localuse.lu1.foreignmn[1]);} 
  if(id==CFORK&&hs==0){hs=gs; gs=fs; fs=ds(CCAP);}  // reconstitute capped fork
  if(fl&VXOPCALL){RETF(trr(hs));}
- xop=1&&VXOP&fl; ex=id==CCOLON&&hs&&!xop;
+ xop=id==CCOLON&&VXOP&fl; ex=id==CCOLON&&hs&&!xop;
  m=(I )!!fs+(I )(gs||ex)+(I )(id==CFORK||xop&&hs);
  if(!m){RETF(tleaf(spella(w)));}
  if(evoke(w)){RZ(w=sfne(w)); RETF((AT(w)&FUNC?jttrr:jttleaf)(jt,w));}
  GATV0(t,BOX,m,1); x=AAV(t);
  if(0<m)RZ(x[0]=incorp(fl&VGERL?treach(fxeach(fs,(A)&jtfxself[0])):trr(fs)));
- if(1<m)RZ(x[1]=incorp(fl&VGERR?treach(fxeach(gs,(A)&jtfxself[0])):ex?trr(unparsem(num(0),w)):trr(gs)));
+ // we emulate Fold in an explicit defn which has the parts of f and h: in that case we pull g from h
+ if(1<m)RZ(x[1]=incorp(fl&VGERR?treach(fxeach(BETWEENC(id,CFDOT,CFCODOT)?hs:gs,(A)&jtfxself[0])):ex?trr(unparsem(num(0),w)):trr(BETWEENC(id,CFDOT,CFCODOT)?hs:gs)));
  if(2<m)RZ(x[2]=incorp(trr(hs)));
- s=xop?spellout('0'):fl&VDDOP?(hv=AV(hs),over(thorn1(sc(hv[0])),over(spellout(id),thorn1(sc(hv[1]))))):spellout(id);
+ s=xop?spellout('0'):spellout(id);
  z=troot(s,graft(ope(t)));
  EPILOG(z);
 }

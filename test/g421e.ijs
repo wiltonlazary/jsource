@@ -1,11 +1,11 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g421e.ijs'
+prolog './g421e.ijs'
 NB. f//. y --------------------------------------------------------------
 
 randuni''
 
 NB. test with zero tolerance - no, can't, because +/ may reorder the inputs.  In fact, we have to INCREASE the tolerance
 ct   =: 9!:18''
-9!:19[1e_12
+9!:19[5e_11
 
 data=: 4 : 0
  select. x 
@@ -62,4 +62,7 @@ test2=: 2 : 0
 
 4!:55 ;:'adot1 adot2 sdot0 ct data test test2 xx yy'
 randfini''
+
+
+epilog''
 

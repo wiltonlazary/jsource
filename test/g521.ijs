@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g521.ijs'
+prolog './g521.ijs'
 NB. {.y -----------------------------------------------------------------
 
 randuni''
@@ -536,7 +536,7 @@ NB. x{.y with infinite left arguments -----------------------------------
 
 'domain error' -: 2.5 _ {. etx i.3 4
 
-'limit error'  -: (>IF64{(_,_1+2^31);_,_1+2^63){. etx i.3 4
+('domain error';'limit error') e.~ < (>IF64{(_,_1+2^31);_,_1+2^63){. etx i.3 4
 
 NB. inplaceable x}.y x{.y ------------------------------------------------------------------------
 
@@ -554,4 +554,7 @@ a =. i. 1e6
 4!:55 ;:'s t take taker targ ti x '
 4!:55 ;: 'a'
 randfini''
+
+
+epilog''
 

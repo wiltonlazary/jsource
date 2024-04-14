@@ -1,4 +1,4 @@
-/* Copyright 1990-2003, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* For Symbol Tables aka Locales                                           */
@@ -13,6 +13,9 @@
 /* SELECT  - selection function on a name                       */
 /* PROCESS - processing on a selected name                      */
 
+// The created function is called as f(jt,a,w).  Within SELECT and PROCESS, L* d is the symbol being processed
+// w is the symbol table to be traversed, a is unused in the macro
+
 #define SYMWALK(f,T,TYPE,COUNT,COL,SELECT,PROCESS)  \
  F2(f){A z;LX *e,j,k;I i,m=0,n;L*d;T*zv;                         \
   ARGCHK1(w);                                                     \
@@ -20,10 +23,10 @@
   GATVS(z,(TYPE),(COUNT)*(COL),(1<(COL))?2:1,0,TYPE##SIZE,GACOPYSHAPE0,R 0);                \
   if(1<(COL)){AS(z)[0]=(COUNT); AS(z)[1]=(COL);}             \
   zv=(T*)AV(z);                                              \
-  for(i=1;i<n;++i){                  \
+  for(i=SYMLINFOSIZE;i<n;++i){                  \
    k=SYMNEXT(*e++);  /* initial symbol index */  \
    while(j=k){                         \
-   d=j+JT(jt,sympv);                                            \
+   d=j+SYMORIGIN;                                            \
    k=SYMNEXT(d->next);                                                \
    if((d->name)&&(d->val)&&(SELECT)){                        \
     if(m==AS(z)[0]){RZ(z=ext(0,z)); zv=(m*(COL))+(T*)AV(z);}   \

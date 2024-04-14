@@ -1,6 +1,22 @@
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
+/* Licensed use only. Any other use is in violation of copyright.          */
+/*                                                                         */
+/* CPU information                                                         */
+
 #include "cpuinfo.h"
 
+#ifdef _WIN32
+#include <windows.h>
+#elif defined(__APPLE__)
+#include <sys/param.h>
+#include <sys/sysctl.h>
+#else
+#include <unistd.h>
+#endif
+
 extern uint64_t g_cpuFeatures;
+extern uint64_t g_cpuFeatures2;
+extern int numberOfCores;
 
 #if defined(__aarch32__)||defined(__arm__)||defined(_M_ARM)
 uint32_t OPENSSL_armcap_P;
@@ -8,12 +24,14 @@ uint32_t OPENSSL_armcap_P;
 void cpuInit(void)
 {
   g_cpuFeatures = 0;
+  g_cpuFeatures2 = 0;
   OPENSSL_armcap_P = 0;
+  numberOfCores=getNumberOfCores();
 }
 
 #elif defined(__aarch64__)||defined(_M_ARM64)
 
-#ifndef __APPLE__
+#if defined(__linux__)
 #include <sys/auxv.h>
 #include <asm/hwcap.h>
 #include <arm_neon.h>
@@ -24,9 +42,12 @@ uint32_t OPENSSL_armcap_P;
 void cpuInit(void)
 {
   g_cpuFeatures = 0;
+  g_cpuFeatures2 = 0;
+  numberOfCores=getNumberOfCores();
 
-#ifndef __APPLE__
+#if defined(__linux__)
   unsigned long hwcaps= getauxval(AT_HWCAP);
+  unsigned long hwcaps2= getauxval(AT_HWCAP2);
 
 #if defined(ANDROID)
   if(hwcaps & HWCAP_FP) g_cpuFeatures |= ARM_HWCAP_FP;
@@ -57,6 +78,46 @@ void cpuInit(void)
   if(hwcaps & HWCAP_USCAT) g_cpuFeatures |= ARM_HWCAP_USCAT;
   if(hwcaps & HWCAP_ILRCPC) g_cpuFeatures |= ARM_HWCAP_ILRCPC;
   if(hwcaps & HWCAP_FLAGM) g_cpuFeatures |= ARM_HWCAP_FLAGM;
+  if(hwcaps & HWCAP_SSBS) g_cpuFeatures |= ARM_HWCAP_SSBS;
+  if(hwcaps & HWCAP_SB) g_cpuFeatures |= ARM_HWCAP_SB;
+  if(hwcaps & HWCAP_PACA) g_cpuFeatures |= ARM_HWCAP_PACA;
+  if(hwcaps & HWCAP_PACG) g_cpuFeatures |= ARM_HWCAP_PACG;
+
+  if(hwcaps2 & HWCAP2_DCPODP) g_cpuFeatures2 |= ARM_HWCAP2_DCPODP;
+  if(hwcaps2 & HWCAP2_SVE2) g_cpuFeatures2 |= ARM_HWCAP2_SVE2;
+  if(hwcaps2 & HWCAP2_SVEAES) g_cpuFeatures2 |= ARM_HWCAP2_SVEAES;
+  if(hwcaps2 & HWCAP2_SVEPMULL) g_cpuFeatures2 |= ARM_HWCAP2_SVEPMULL;
+  if(hwcaps2 & HWCAP2_SVEBITPERM) g_cpuFeatures2 |= ARM_HWCAP2_SVEBITPERM;
+  if(hwcaps2 & HWCAP2_SVESHA3) g_cpuFeatures2 |= ARM_HWCAP2_SVESHA3;
+  if(hwcaps2 & HWCAP2_SVESM4) g_cpuFeatures2 |= ARM_HWCAP2_SVESM4;
+  if(hwcaps2 & HWCAP2_FLAGM2) g_cpuFeatures2 |= ARM_HWCAP2_FLAGM2;
+  if(hwcaps2 & HWCAP2_FRINT) g_cpuFeatures2 |= ARM_HWCAP2_FRINT;
+  if(hwcaps2 & HWCAP2_SVEI8MM) g_cpuFeatures2 |= ARM_HWCAP2_SVEI8MM;
+  if(hwcaps2 & HWCAP2_SVEF32MM) g_cpuFeatures2 |= ARM_HWCAP2_SVEF32MM;
+  if(hwcaps2 & HWCAP2_SVEF64MM) g_cpuFeatures2 |= ARM_HWCAP2_SVEF64MM;
+  if(hwcaps2 & HWCAP2_SVEBF16) g_cpuFeatures2 |= ARM_HWCAP2_SVEBF16;
+  if(hwcaps2 & HWCAP2_I8MM) g_cpuFeatures2 |= ARM_HWCAP2_I8MM;
+  if(hwcaps2 & HWCAP2_BF16) g_cpuFeatures2 |= ARM_HWCAP2_BF16;
+  if(hwcaps2 & HWCAP2_DGH) g_cpuFeatures2 |= ARM_HWCAP2_DGH;
+  if(hwcaps2 & HWCAP2_RNG) g_cpuFeatures2 |= ARM_HWCAP2_RNG;
+  if(hwcaps2 & HWCAP2_BTI) g_cpuFeatures2 |= ARM_HWCAP2_BTI;
+  if(hwcaps2 & HWCAP2_MTE) g_cpuFeatures2 |= ARM_HWCAP2_MTE;
+#if 0
+  if(hwcaps2 & HWCAP2_ECV) g_cpuFeatures2 |= ARM_HWCAP2_ECV;
+  if(hwcaps2 & HWCAP2_AFP) g_cpuFeatures2 |= ARM_HWCAP2_AFP;
+  if(hwcaps2 & HWCAP2_RPRES) g_cpuFeatures2 |= ARM_HWCAP2_RPRES;
+  if(hwcaps2 & HWCAP2_MTE3) g_cpuFeatures2 |= ARM_HWCAP2_MTE3;
+  if(hwcaps2 & HWCAP2_SME) g_cpuFeatures2 |= ARM_HWCAP2_SME;
+  if(hwcaps2 & HWCAP2_SME_I16I64) g_cpuFeatures2 |= ARM_HWCAP2_SME_I16I64;
+  if(hwcaps2 & HWCAP2_SME_F64F64) g_cpuFeatures2 |= ARM_HWCAP2_SME_F64F64;
+  if(hwcaps2 & HWCAP2_SME_I8I32) g_cpuFeatures2 |= ARM_HWCAP2_SME_I8I32;
+  if(hwcaps2 & HWCAP2_SME_F16F32) g_cpuFeatures2 |= ARM_HWCAP2_SME_F16F32;
+  if(hwcaps2 & HWCAP2_SME_B16F32) g_cpuFeatures2 |= ARM_HWCAP2_SME_B16F32;
+  if(hwcaps2 & HWCAP2_SME_F32F32) g_cpuFeatures2 |= ARM_HWCAP2_SME_F32F32;
+  if(hwcaps2 & HWCAP2_SME_FA64) g_cpuFeatures2 |= ARM_HWCAP2_SME_FA64;
+  if(hwcaps2 & HWCAP2_WFXT) g_cpuFeatures2 |= ARM_HWCAP2_WFXT;
+  if(hwcaps2 & HWCAP2_EBF16) g_cpuFeatures2 |= ARM_HWCAP2_EBF16;
+#endif
 #else
 // see <uapi/asm/hwcap.h> kernel header
   if(hwcaps & ARM_HWCAP_FP) g_cpuFeatures |= ARM_HWCAP_FP;
@@ -87,6 +148,43 @@ void cpuInit(void)
   if(hwcaps & ARM_HWCAP_USCAT) g_cpuFeatures |= ARM_HWCAP_USCAT;
   if(hwcaps & ARM_HWCAP_ILRCPC) g_cpuFeatures |= ARM_HWCAP_ILRCPC;
   if(hwcaps & ARM_HWCAP_FLAGM) g_cpuFeatures |= ARM_HWCAP_FLAGM;
+  if(hwcaps & ARM_HWCAP_SSBS) g_cpuFeatures |= ARM_HWCAP_SSBS;
+  if(hwcaps & ARM_HWCAP_SB) g_cpuFeatures |= ARM_HWCAP_SB;
+  if(hwcaps & ARM_HWCAP_PACA) g_cpuFeatures |= ARM_HWCAP_PACA;
+
+  if(hwcaps2 & ARM_HWCAP2_DCPODP) g_cpuFeatures2 |= ARM_HWCAP2_DCPODP;
+  if(hwcaps2 & ARM_HWCAP2_SVE2) g_cpuFeatures2 |= ARM_HWCAP2_SVE2;
+  if(hwcaps2 & ARM_HWCAP2_SVEAES) g_cpuFeatures2 |= ARM_HWCAP2_SVEAES;
+  if(hwcaps2 & ARM_HWCAP2_SVEPMULL) g_cpuFeatures2 |= ARM_HWCAP2_SVEPMULL;
+  if(hwcaps2 & ARM_HWCAP2_SVEBITPERM) g_cpuFeatures2 |= ARM_HWCAP2_SVEBITPERM;
+  if(hwcaps2 & ARM_HWCAP2_SVESHA3) g_cpuFeatures2 |= ARM_HWCAP2_SVESHA3;
+  if(hwcaps2 & ARM_HWCAP2_SVESM4) g_cpuFeatures2 |= ARM_HWCAP2_SVESM4;
+  if(hwcaps2 & ARM_HWCAP2_FLAGM2) g_cpuFeatures2 |= ARM_HWCAP2_FLAGM2;
+  if(hwcaps2 & ARM_HWCAP2_FRINT) g_cpuFeatures2 |= ARM_HWCAP2_FRINT;
+  if(hwcaps2 & ARM_HWCAP2_SVEI8MM) g_cpuFeatures2 |= ARM_HWCAP2_SVEI8MM;
+  if(hwcaps2 & ARM_HWCAP2_SVEF32MM) g_cpuFeatures2 |= ARM_HWCAP2_SVEF32MM;
+  if(hwcaps2 & ARM_HWCAP2_SVEF64MM) g_cpuFeatures2 |= ARM_HWCAP2_SVEF64MM;
+  if(hwcaps2 & ARM_HWCAP2_SVEBF16) g_cpuFeatures2 |= ARM_HWCAP2_SVEBF16;
+  if(hwcaps2 & ARM_HWCAP2_I8MM) g_cpuFeatures2 |= ARM_HWCAP2_I8MM;
+  if(hwcaps2 & ARM_HWCAP2_BF16) g_cpuFeatures2 |= ARM_HWCAP2_BF16;
+  if(hwcaps2 & ARM_HWCAP2_DGH) g_cpuFeatures2 |= ARM_HWCAP2_DGH;
+  if(hwcaps2 & ARM_HWCAP2_RNG) g_cpuFeatures2 |= ARM_HWCAP2_RNG;
+  if(hwcaps2 & ARM_HWCAP2_BTI) g_cpuFeatures2 |= ARM_HWCAP2_BTI;
+  if(hwcaps2 & ARM_HWCAP2_MTE) g_cpuFeatures2 |= ARM_HWCAP2_MTE;
+  if(hwcaps2 & ARM_HWCAP2_ECV) g_cpuFeatures2 |= ARM_HWCAP2_ECV;
+  if(hwcaps2 & ARM_HWCAP2_AFP) g_cpuFeatures2 |= ARM_HWCAP2_AFP;
+  if(hwcaps2 & ARM_HWCAP2_RPRES) g_cpuFeatures2 |= ARM_HWCAP2_RPRES;
+  if(hwcaps2 & ARM_HWCAP2_MTE3) g_cpuFeatures2 |= ARM_HWCAP2_MTE3;
+  if(hwcaps2 & ARM_HWCAP2_SME) g_cpuFeatures2 |= ARM_HWCAP2_SME;
+  if(hwcaps2 & ARM_HWCAP2_SME_I16I64) g_cpuFeatures2 |= ARM_HWCAP2_SME_I16I64;
+  if(hwcaps2 & ARM_HWCAP2_SME_F64F64) g_cpuFeatures2 |= ARM_HWCAP2_SME_F64F64;
+  if(hwcaps2 & ARM_HWCAP2_SME_I8I32) g_cpuFeatures2 |= ARM_HWCAP2_SME_I8I32;
+  if(hwcaps2 & ARM_HWCAP2_SME_F16F32) g_cpuFeatures2 |= ARM_HWCAP2_SME_F16F32;
+  if(hwcaps2 & ARM_HWCAP2_SME_B16F32) g_cpuFeatures2 |= ARM_HWCAP2_SME_B16F32;
+  if(hwcaps2 & ARM_HWCAP2_SME_F32F32) g_cpuFeatures2 |= ARM_HWCAP2_SME_F32F32;
+  if(hwcaps2 & ARM_HWCAP2_SME_FA64) g_cpuFeatures2 |= ARM_HWCAP2_SME_FA64;
+  if(hwcaps2 & ARM_HWCAP2_WFXT) g_cpuFeatures2 |= ARM_HWCAP2_WFXT;
+  if(hwcaps2 & ARM_HWCAP2_EBF16) g_cpuFeatures2 |= ARM_HWCAP2_EBF16;
 #endif
 
 #else
@@ -99,8 +197,10 @@ void cpuInit(void)
   g_cpuFeatures |= ARM_HWCAP_SHA1;
   g_cpuFeatures |= ARM_HWCAP_SHA2;
   g_cpuFeatures |= ARM_HWCAP_CRC32;
-//  g_cpuFeatures |= ARM_HWCAP_ATOMICS;
-//  g_cpuFeatures |= ARM_HWCAP_FPHP;
+#if defined(TARGET_OS_OSX)
+  g_cpuFeatures |= ARM_HWCAP_ATOMICS;
+  g_cpuFeatures |= ARM_HWCAP_FPHP;
+#endif
 //  g_cpuFeatures |= ARM_HWCAP_ASIMDHP;
   g_cpuFeatures |= ARM_HWCAP_CPUID;
 //  g_cpuFeatures |= ARM_HWCAP_ASIMDRDM;
@@ -108,11 +208,15 @@ void cpuInit(void)
 //  g_cpuFeatures |= ARM_HWCAP_FCMA;
 //  g_cpuFeatures |= ARM_HWCAP_LRCPC;
 //  g_cpuFeatures |= ARM_HWCAP_DCPOP;
-//  g_cpuFeatures |= ARM_HWCAP_SHA3;
+#if defined(TARGET_OS_OSX)
+  g_cpuFeatures |= ARM_HWCAP_SHA3;
+#endif
 //  g_cpuFeatures |= ARM_HWCAP_SM3;
 //  g_cpuFeatures |= ARM_HWCAP_SM4;
 //  g_cpuFeatures |= ARM_HWCAP_ASIMDDP;
-//  g_cpuFeatures |= ARM_HWCAP_SHA512;
+#if defined(TARGET_OS_OSX)
+  g_cpuFeatures |= ARM_HWCAP_SHA512;
+#endif
 //  g_cpuFeatures |= ARM_HWCAP_SVE;
 //  g_cpuFeatures |= ARM_HWCAP_ASIMDFHM;
 //  g_cpuFeatures |= ARM_HWCAP_DIT;
@@ -127,6 +231,10 @@ void cpuInit(void)
 
 #elif defined(__x86_64__)||defined(__i386__)||defined(_M_X64)||defined(_M_IX86)
 
+#if defined(__linux__)
+#include <sys/auxv.h>
+#endif
+
 // mask off avx if os does not support
 static int AVX=0;
 // OSXSAVE
@@ -135,21 +243,11 @@ static int vendorIsIntel = 0, vendorIsAMD = 0;
 
 uint32_t OPENSSL_ia32cap_P[4];
 
-#ifdef MMSC_VER
-#include <windows.h>
-extern void __cpuid(int CPUInfo[4], int InfoType);
-#define x86_cpuid(x,y) __cpuid(y,x)
-#else
 #ifndef _WIN32
 #include <string.h>
 #include <sys/utsname.h>
-#if defined(__x86_64__)||defined(__i386__)
-#ifndef ANDROID
+#endif
 #include <cpuid.h>
-#endif
-#endif
-#endif
-#endif
 
 #if defined(__x86_64__)||defined(__i386__)||defined(_M_X64)||defined(_M_IX86)
 static int check_xcr0_ymm()
@@ -164,8 +262,6 @@ static int check_xcr0_ymm()
 }
 #endif
 
-#ifndef MMSC_VER
-#if !defined(ANDROID) && !defined(_WIN32)
 static __inline int
 get_cpuid_count (unsigned int __level, unsigned int __count,
                  unsigned int *__eax, unsigned int *__ebx,
@@ -179,54 +275,12 @@ get_cpuid_count (unsigned int __level, unsigned int __count,
   return 1;
 }
 #define x86_cpuid(func, values) get_cpuid_count(func, 0, values, values+1, values+2, values+3)
-#else
-#ifdef __i386__
-static __inline__ void x86_cpuid(unsigned int func, unsigned int values[4])
-{
-  int a, b, c, d;
-  /* We need to preserve ebx since we're compiling PIC code */
-  /* this means we can't use "=b" for the second output register */
-  __asm__ __volatile__ ( \
-                         "push %%ebx\n"
-                         "xor %%ecx,%%ecx\n"
-                         "cpuid\n" \
-                         "mov %%ebx, %1\n"
-                         "pop %%ebx\n"
-                         : "=a" (a), "=r" (b), "=c" (c), "=d" (d) \
-                         : "a" (func) \
-                       );
-  values[0] = a;
-  values[1] = b;
-  values[2] = c;
-  values[3] = d;
-}
-#elif defined(__x86_64__)
-static __inline__ void x86_cpuid(unsigned int func, unsigned int values[4])
-{
-  int64_t a, b, c, d;
-  /* We need to preserve ebx since we're compiling PIC code */
-  /* this means we can't use "=b" for the second output register */
-  __asm__ __volatile__ ( \
-                         "push %%rbx\n"
-                         "xor %%ecx,%%ecx\n"
-                         "cpuid\n" \
-                         "mov %%rbx, %1\n"
-                         "pop %%rbx\n"
-                         : "=a" (a), "=r" (b), "=c" (c), "=d" (d) \
-                         : "a" (func) \
-                       );
-  values[0] = a;
-  values[1] = b;
-  values[2] = c;
-  values[3] = d;
-}
-#endif
-#endif
-#endif
+#define x86_cpuid_ex(func, subfunc, values) get_cpuid_count(func, subfunc, values, values+1, values+2, values+3)
 
 void cpuInit(void)
 {
   g_cpuFeatures = 0;
+  numberOfCores=getNumberOfCores();
 
 #if defined(__i386__) || defined(__x86_64__) || defined(_M_X64) || defined(_M_IX86)
   unsigned int regs[4];
@@ -314,6 +368,50 @@ void cpuInit(void)
     if ((regs[1] & (1 << 5)) != 0) {
       g_cpuFeatures |= CPU_X86_FEATURE_AVX2;
     }
+/*
+EAX=07H, ECX=0
+EBX[bit 16]  AVX512F
+EBX[bit 17]  AVX512DQ
+EBX[bit 21]  AVX512_IFMA
+EBX[bit 26]  AVX512PF
+EBX[bit 27]  AVX512ER
+EBX[bit 28]  AVX512CD
+EBX[bit 30]  AVX512BW
+EBX[bit 31]  AVX512VL
+ECX[bit 01]  AVX512_VBMI
+ECX[bit 06]  AVX512_VBMI2
+ECX[bit 08]  GFNI
+ECX[bit 09]  VAES
+ECX[bit 10]  VPCLMULQDQ
+ECX[bit 11]  AVX512_VNNI
+ECX[bit 12]  AVX512_BITALG
+ECX[bit 14]  AVX512_VPOPCNTDQ
+EDX[bit 02]  AVX512_4VNNIW
+EDX[bit 03]  AVX512_4FMAPS
+EDX[bit 08]  AVX512_VP2INTERSECT
+EDX[bit 23]  AVX512_FP16
+*/
+    if ((regs[1] & (1 << 16)) != 0) {
+      g_cpuFeatures |= CPU_X86_FEATURE_AVX512F;
+    }
+    if ((regs[1] & (1 << 17)) != 0) {
+      g_cpuFeatures |= CPU_X86_FEATURE_AVX512DQ;
+    }
+    if ((regs[1] & (1 << 21)) != 0) {
+      g_cpuFeatures |= CPU_X86_FEATURE_AVX512IFMA;
+    }
+    if ((regs[1] & (1 << 30)) != 0) {
+      g_cpuFeatures |= CPU_X86_FEATURE_AVX512BW;
+    }
+    if ((regs[1] & (1 << 31)) != 0) {
+      g_cpuFeatures |= CPU_X86_FEATURE_AVX512VL;
+    }
+    if ((regs[2] & (1 << 1)) != 0) {
+      g_cpuFeatures |= CPU_X86_FEATURE_AVX512VBMI;
+    }
+    if ((regs[2] & (1 << 6)) != 0) {
+      g_cpuFeatures |= CPU_X86_FEATURE_AVX512VBMI2;
+    }
     if ((regs[1] & (1 << 29)) != 0) {
       g_cpuFeatures |= CPU_X86_FEATURE_SHA_NI;
     }
@@ -346,7 +444,7 @@ void cpuInit(void)
   AVX=1;
 #endif
   if (!(g_cpuFeatures & CPU_X86_FEATURE_AVX) || !check_xcr0_ymm()) AVX=0;
-#elif defined(__MACH__)
+#elif defined(__APPLE__)
 // TODO
   AVX=1;
 #else
@@ -362,10 +460,29 @@ void cpuInit(void)
     g_cpuFeatures &= ~CPU_X86_FEATURE_AVX;
     g_cpuFeatures &= ~CPU_X86_FEATURE_FMA;
     g_cpuFeatures &= ~CPU_X86_FEATURE_AVX2;
+    g_cpuFeatures &= ~CPU_X86_FEATURE_AVX512F;
+    g_cpuFeatures &= ~CPU_X86_FEATURE_AVX512VL;
+    g_cpuFeatures &= ~CPU_X86_FEATURE_AVX512DQ;
+    g_cpuFeatures &= ~CPU_X86_FEATURE_AVX512BW;
+    g_cpuFeatures &= ~CPU_X86_FEATURE_AVX512IFMA;
+    g_cpuFeatures &= ~CPU_X86_FEATURE_AVX512VBMI;
+    g_cpuFeatures &= ~CPU_X86_FEATURE_AVX512VBMI2;
   }
 #endif
 
   OPENSSL_setcap();
+
+#if defined(__linux__) && !defined(ANDROID)
+#ifndef HWCAP2_RING3MWAIT
+#define HWCAP2_RING3MWAIT      (1 << 0)
+#endif
+#ifndef HWCAP2_FSGSBASE
+#define HWCAP2_FSGSBASE        (1 << 1)
+#endif
+  unsigned long hwcaps2= getauxval(AT_HWCAP2);
+  if (hwcaps2 & HWCAP2_FSGSBASE) g_cpuFeatures2 |= CPU_X86_FEATURE2_RING3MWAIT;
+  if (hwcaps2 & HWCAP2_FSGSBASE) g_cpuFeatures2 |= CPU_X86_FEATURE2_FSGSBASE;
+#endif
 }
 
 #else
@@ -373,6 +490,7 @@ void cpuInit(void)
 void cpuInit(void)
 {
   g_cpuFeatures = 0;
+  numberOfCores=getNumberOfCores();
 }
 
 #endif
@@ -382,6 +500,10 @@ uint64_t getCpuFeatures(void)
   return g_cpuFeatures;
 }
 
+uint64_t getCpuFeatures2(void)
+{
+  return g_cpuFeatures2;
+}
 
 intptr_t getCpuFamily(void)
 {
@@ -412,6 +534,13 @@ void OPENSSL_setcap(void)
     g_cpuFeatures &= ~CPU_X86_FEATURE_AVX;
     g_cpuFeatures &= ~CPU_X86_FEATURE_FMA;
     g_cpuFeatures &= ~CPU_X86_FEATURE_AVX2;
+    g_cpuFeatures &= ~CPU_X86_FEATURE_AVX512F;
+    g_cpuFeatures &= ~CPU_X86_FEATURE_AVX512VL;
+    g_cpuFeatures &= ~CPU_X86_FEATURE_AVX512DQ;
+    g_cpuFeatures &= ~CPU_X86_FEATURE_AVX512BW;
+    g_cpuFeatures &= ~CPU_X86_FEATURE_AVX512IFMA;
+    g_cpuFeatures &= ~CPU_X86_FEATURE_AVX512VBMI;
+    g_cpuFeatures &= ~CPU_X86_FEATURE_AVX512VBMI2;
   }
   OPENSSL_ia32cap_P[1] &= ~(1 << 9);
   OPENSSL_ia32cap_P[1] |= (g_cpuFeatures & CPU_X86_FEATURE_SSSE3) ? (1 << 9) : 0;
@@ -440,3 +569,43 @@ void OPENSSL_setcap(void)
 
 #endif
 }
+
+int getNumberOfCores(void) {
+#if defined(__wasm__)
+ return 1;
+#elif defined(_WIN32)
+ DWORD_PTR ProcessAffinityMask, SystemAffinityMask;
+ if(GetProcessAffinityMask(GetCurrentProcess(), &ProcessAffinityMask, &SystemAffinityMask)){
+#if defined(_WIN64)||defined(__LP64__)
+  return __builtin_popcountll(ProcessAffinityMask);
+#else
+  return __builtin_popcount(ProcessAffinityMask);
+#endif
+ }else{
+  SYSTEM_INFO sysinfo;
+  GetSystemInfo(&sysinfo);
+  return sysinfo.dwNumberOfProcessors;
+ }
+#elif defined(__APPLE__)
+ int nm[2];
+ size_t len = 4;
+ uint32_t count;
+
+ nm[0] = CTL_HW; nm[1] = HW_AVAILCPU;
+ sysctl(nm, 2, &count, &len, NULL, 0);
+
+ if(count < 1) {
+  nm[1] = HW_NCPU;
+  sysctl(nm, 2, &count, &len, NULL, 0);
+  if(count < 1) { count = 1; }
+ }
+ return count;
+#elif defined(__linux__)
+ cpu_set_t set;
+ CPU_ZERO(&set);
+ return (!sched_getaffinity(getpid(), sizeof(set), &set)) ? CPU_COUNT(&set) : sysconf(_SC_NPROCESSORS_ONLN);
+#else
+ return sysconf(_SC_NPROCESSORS_ONLN);
+#endif
+}
+

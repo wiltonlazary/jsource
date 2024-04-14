@@ -1,4 +1,4 @@
-/* Copyright 1990-2014, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Verbs: Index-of                                                         */
@@ -108,37 +108,37 @@ static UI jthia(J jt,D hct,A y){UC*yv;D d;I n,t;Q*u;
   case INTX:  d=(D)*(I*)yv; break;
   case FLX: 
   case CMPXX: d=*(D*)yv; break;
-  case XNUMX: d=xdouble(*(X*)yv); break;
-  case RATX:  u=(Q*)yv; d=xdouble(u->n)/xdouble(u->d);
+  case XNUMX: d=DgetX(*(X*)yv); break;
+  case RATX:  d=DgetQ(*(Q*)yv); break;
  }
  R hid(d*hct);
 }
 
 // Hash y, which is not a singleton.  Integral types do not hash bytes that equal 0 or 255 (why??).
-static UI jthiau(J jt,A y){I m,n;UC*v=UAV(y);UI z=2038074751;X*u,x;
+static UI jthiau(J jt,A y){I m,n;UI z=2038074751;X*u,x;
  m=n=AN(y);
  if(!n)R 0;
  switch(CTTZ(AT(y))){
   case RATX:  m+=n;  /* fall thru */
-  case XNUMX: u=XAV(y); DQ(m, x=*u++; v=UAV(x); z+=hicnz(AN(x)*SZI,UAV(x));); R z;
+  case XNUMX: u=XAV(y); DQ(m, x=*u++; z+=hicnz(SZI+XLIMBLEN(x)*SZI,UAV(x)-SZI);); R z; /* shape immediately preceeds limbs, sign is in shape */
   case INTX:                                    z =hicnz(n    *SZI,UAV(y));   R z;
   default:   R hic(n<<bplg(AT(y)),UAV(y));
 }}
 
 // Hashes for extended/rational types.  Hash only the numerator of rationals.  These are
 // Q and X types (Q is a brace of X types)
-static UI hix(X*v){A y=*v;   R hic(AN(y)*SZI,UAV(y));}
-static UI hiq(Q*v){A y=v->n; R hic(AN(y)*SZI,UAV(y));}
+static UI hix(X*v){A y=*v;   R hic(XLIMBLEN(y)*SZI,UAV(y));}
+static UI hiq(Q*v){A y=v->n; R hic(XLIMBLEN(y)*SZI,UAV(y));}
 
 // Comparisons for extended/rational/float/complex types.  teq should use the macro
-static B jteqx(J jt,I n,X*u,X*v){DQ(n, if(!equ(*u,*v))R 0; ++u; ++v;); R 1;}
+static B jteqx(J jt,I n,X*u,X*v){DQ(n, if(icmpXX(*u,*v))R 0; ++u; ++v;); R 1;}
 static B jteqq(J jt,I n,Q*u,Q*v){DQ(n, if(!QEQ(*u,*v))R 0; ++u; ++v;); R 1;}
 static B jteqd(J jt,I n,D*u,D*v){DQ(n, if(!TEQ(*u,*v))R 0; ++u; ++v;); R 1;}
 static B jteqz(J jt,I n,Z*u,Z*v){DQ(n, if(!zeq(*u,*v))R 0; ++u; ++v;); R 1;}
 
 // test a subset of two boxed arrays for match.  u/v point to pointers to contants, c and d are the relative flags
 // We test n subboxes
-static B jteqa(J jt,I n,A*u,A*v){DQ(n, if(!equ(*u,*v))R 0; ++u; ++v;); R 1;}
+static B jteqa(J jt,I n,A*u,A*v){DQ(n, if(!equ(C(*u),C(*v)))R 0; ++u; ++v;); R 1;}
 
 /*
  mode one of the following:
@@ -271,8 +271,8 @@ static I hashallo(IH * RESTRICT hh,UI p,UI m,I md){
 
   // Cost of allocating on the left comes
   // (1) now, as we use (m*currenthi) units of index space
-  // (2) in the future, as all future allocations on the right lose index space,
-  // in the amount of (new left index end-right index end-future m)*(width-currenthi).  We estimate future values to equal current ones.
+  // (2) in the future, as all pyx allocations on the right lose index space,
+  // in the amount of (new left index end-right index end-pyx m)*(width-currenthi).  We estimate future values to equal current ones.
   // (3) now, if we have to clear the invalid area (1 store per word cleared)
   // BUT: if the cleared invalid area covers the entire p, we use m rather than left-index+m for calculating the other costs
   // The cost of a unit of index space is 1 store per (width*maxindex)/(m*p) index-space unit, with m and p rounded up if large;
@@ -369,7 +369,8 @@ static I hashallo(IH * RESTRICT hh,UI p,UI m,I md){
   md=mode<IPHOFFSET?mode:mode-IPHOFFSET;                                             \
   b=a==w&&ac==wc&&(mode==IIDOT||mode==IICO||mode==INUBSV||mode==INUB||mode==INUBI||mode==IFORKEY);  \
   zb=(B*)zv; zc=(C*)zv; zi=zv; cm=w==mark?0:c;                                       \
-  for(l=0;l<ac;++l,av+=acn,wv+=wcn){                                                 \
+  I wrepssv=0; if(1==wc){wrepssv=ac;}else if(unlikely(ac>wc))wrepssv=(ac/wc)-1; I wreps=wrepssv; if(w==mark){c=0;} \
+  for(l=0;l<ac;++l,av+=acn,wv+=--wreps<0?wcn:0,wreps=wreps<0?wrepssv:wreps){                                                 \
    if(mode<IPHOFFSET){DO(p,hv[i]=m;); if(!b){if(mode==IICO)XDQA(hash,exp,dec) else XDOA(hash,exp,inc);}}  \
     switch(md){                                                                       \
     case IIDOT:   if(b){          XDO(hash,exp,inc,*zv++=m==hj?(hv[j]=i):hj);}       \
@@ -395,8 +396,8 @@ static I hashallo(IH * RESTRICT hh,UI p,UI m,I md){
  }
 
 //
-static IOFX(A,jtioax1,hia(t1,*v),!equ(*v,av[hj]),++v,   --v  )  /* boxed exact 1-element item */   
-static IOFX(A,jtioau, hiau(*v),  !equ(*v,av[hj]),++v,   --v  )  /* boxed uniform type         */
+static IOFX(A,jtioax1,hia(t1,*v),!equ(C(*v),C(av[hj])),++v,   --v  )  /* boxed exact 1-element item */   
+static IOFX(A,jtioau, hiau(*v),  !equ(C(*v),C(av[hj])),++v,   --v  )  /* boxed uniform type         */
 static IOFX(X,jtiox,  hix(v),            !eqx(n,v,av+n*hj),               v+=cn, v-=cn)  /* extended integer           */   
 static IOFX(Q,jtioq,  hiq(v),            !eqq(n,v,av+n*hj),               v+=cn, v-=cn)  /* rational number            */   
 static IOFX(C,jtioc,  hic(k,(UC*)v),     memcmp(v,av+k*hj,k),             v+=cn, v-=cn)  /* boolean, char, or integer  */
@@ -484,7 +485,8 @@ static IOFX(I,jtioi,  hicw(v),           *v!=av[hj],                      ++v,  
   b=a==w&&ac==wc&&(mode==IIDOT||mode==IICO||mode==INUBSV||mode==INUB||mode==INUBI||mode==IFORKEY);              \
   zb=(B*)zv; zc=(C*)zv; zd=(D*)zv; zi=zv; e=cn*(m-1); bx=1&&BOX&AT(a);                           \
   jx=0; dl.d=dr.d=dx.d=x=0.0;                                                                    \
-  for(l=0;l<ac;++l,av+=acn,wv+=wcn){                                                             \
+  I wrepssv=0; if(1==wc){wrepssv=ac;}else if(unlikely(ac>wc))wrepssv=(ac/wc)-1; I wreps=wrepssv; if(w==mark){c=0;} \
+  for(l=0;l<ac;++l,av+=acn,wv+=--wreps<0?wcn:0,wreps=wreps<0?wrepssv:wreps){                                                             \
    if(mode<IPHOFFSET){                                                                           \
     DO(p,hv[i]=m;);                                                                              \
     if(bx||!b){                                                                                  \
@@ -528,90 +530,11 @@ static IOFT(D,jtiod1,THASHA, TFINDXY,TFINDY1,x!=av[hj],                       !T
 // boxed array with more than 1 box
 static IOFT(A,jtioa, THASHBX,TFINDBX,TFINDBX,!eqa(n,v,av+n*hj),          !eqa(n,v,av+n*hj)          )
 // singleton box
-static IOFT(A,jtioa1,THASHBX,TFINDBX,TFINDBX,!equ(*v,av[hj]),!equ(*v,av[hj]))
+static IOFT(A,jtioa1,THASHBX,TFINDBX,TFINDBX,!equ(C(*v),C(av[hj])),!equ(C(*v),C(av[hj])))
 
 // ********************* third class: small-range arguments ****************************
 
-#if 0
-// create the value vector
-
-// v0 is the EMPTY value.  Clear to empty, then go through and set TRUE for each value found.  Used for [: u e.  where the position doesn't matter
-#define SDO(v0)         if(mode<IPHOFFSET){B v1=!(v0); memset(hv,v0,p); u=av; DQ(m, hb[*u++]=v1;);}
-// Clear to empty, then go through and remember the index for each value.  Leaves last index, so used for i:
-#define SDOA            if(mode<IPHOFFSET){DO(p,hv[i]=m; ); u=av;   DO(m,hu[*u++]=i;);}
-// Clear to empty, then go through and remember the index for each value.  Reverse order, so leaves first index, so used for i.
-#define SDQA            if(mode<IPHOFFSET){DO(p,hv[i]=m; ); u=av+m; DQ(m,hu[*--u]=i;);}
-
-// Execute stmt on each cell of w.  stmt is responsible for incrementing input and output pointers
-#define SDOW(stmt)      {u=wv;   DQ(cm, stmt;);}
-
-// loop through the items of w, creating the output.  hh->the value vector
-
-// first, versions for i. i: e.    zz is an lvalue that stores to *zz++, vv is the value to use for not-found
-// this version (used for 1- and 2-byte values) we just store the value from the value vector
-#define SCOZ(hh,zz,vv)  {u=wv;   DQ(cm, zz=hh[*u++];                      );}
-// This version for fullword values (which have a partial table); use the table only if the value is represented there
-#define SCOZ1(hh,zz,vv) {u=wv;   DQ(cm, x=*u++; zz=min<=x&&x<max?hh[x]:vv;);}
-
-// for u@e. - for each item of w, see if it is in the value table, execute stmt if so.  Save w value in x before executing stmt
-#define SCOW1(hh,stmt)  {u=wv;   DQ(cm, x=*u++; if(min<=x&&x< max&&hh[x     ]){stmt;});}
-// reversed: execute stmt when the cell of w is NOT in the value table
-#define SCOW0(hh,stmt)  {u=wv;   DQ(cm, x=*u++; if(x<min ||max<=x||hh[x     ]){stmt;});}
-// faster version of SCOW1 for use when the table contains all possible values
-#define SCOWX(hh,stmt)  {u=wv;   DQ(cm,         if(                hh[x=*u++]){stmt;});}
-// still faster version of SCOWX, don't bother setting x
-#define SCOW(hh,stmt)   {u=wv;   DQ(cm,         if(                hh[  *u++]){stmt;});}
-
-// just like SCOW1/SCOW0/SCOW, but scanning from the end of w
-#define SCQW(hh,stmt)   {u=wv+c; DQ(cm,         if(                hh[  *--u]){stmt;});}
-#define SCQW1(hh,stmt)  {u=wv+c; DQ(cm, x=*--u; if(min<=x&&x< max&&hh[x     ]){stmt;});}
-#define SCQW0(hh,stmt)  {u=wv+c; DQ(cm, x=*--u; if(x<min ||max<=x||hh[x     ]){stmt;});}
-
-// Do the operation on small-range arguments
-// COZ1 is the result loop for i. i: e.
-// COW0 is the result loop for (e. i. 0:)  ([: *./ e.)
-// COW1 is the result loop for (e. i. 1:)  ([: +./ e.) ([: +/ e.) ([: I. e.)
-// COWX is the result loop for -.
-// CQW0 is the result loop for (e. i: 0:)
-// CQW1 is the result loop for (e. i: 1:)
-// cm is the number of cells of w per cell of a 
-// clear the value table; 
-#define IOFSMALLRANGE(f,T,COZ1,COW0,COW1,COWX,CQW0,CQW1)    \
- IOF(f){A h=*hp;B b,*hb,*zb;I cm,e,*hu,*hv,l,max,md,min,p,s,*v,*zi,*zv;T*av,*u,*wv,x,*zu;       \
-  md=mode<IPHOFFSET?mode:mode-IPHOFFSET; b=(mode==IIDOT||mode==IICO)&&a==w&&ac==wc;             \
-  av=(T*)AV(a); wv=(T*)AV(w); zv=zi=AV(z); zb=(B*)zv; zu=(T*)zv;                                \
-  p=AN(h); min=jt->min; max=p+min; hv=AV(h); hb=(B*)hv-min; hu=hv-min;                          \
-  e=1==wc?0:c; cm=w==mark?0:c;                                                                  \
-  for(l=0;l<ac;++l,av+=m,wv+=e){                                                                \
-   if(b){                                                                                       \
-    if(mode==IIDOT){DO(p,hv[i]=-1;); u=wv;          DO(m, v=hu+*u++; if(0>*v)*v=i; *zv++=*v;);       }  \
-    else           {DO(p,hv[i]=-1;); u=wv+m; zv+=m; DQ(m, v=hu+*--u; if(0>*v)*v=i; *--zv=*v;); zv+=m;}  \
-   }else switch(md){                                                                            \
-    case INUBSV:  memset(hv,C1,p); SDOW(if(*zb++=hb[x=*u++])hb[x]=0);                   break;  \
-    case INUB:    memset(hv,C1,p); SDOW(if(hb[x=*u++]){*zu++=x; hb[x]=0;}); ZUSHAPE(T); break;  \
-    case INUBI:   memset(hv,C1,p); SDOW(if(hb[x=*u++]){*zi++=i; hb[x]=0;}); ZISHAPE;    break;  \
-    case IIDOT:   SDQA;         COZ1(hu, *zv++, m);                                     break;  \
-    case IICO:    SDOA;         COZ1(hu, *zv++, m);                                     break;  \
-    case IEPS:    SDO(C0);      COZ1(hb, *zb++, 0);                                     break;  \
-    case ILESS:   SDO(C1);      COWX(hb, *zu++=x   );                       ZUSHAPE(T); break;  \
-    case II0EPS:  SDO(C1); s=c; COW0(hb, s=i; break); *zv++=s;                          break;  \
-    case II1EPS:  SDO(C0); s=c; COW1(hb, s=i; break); *zv++=s;                          break;  \
-    case IJ0EPS:  SDO(C1); s=c; CQW0(hb, s=i; break); *zv++=s;                          break;  \
-    case IJ1EPS:  SDO(C0); s=c; CQW1(hb, s=i; break); *zv++=s;                          break;  \
-    case IANYEPS: SDO(C0); s=0; COW1(hb, s=1; break); *zb++=1&&s;                       break;  \
-    case IALLEPS: SDO(C1); s=1; COW0(hb, s=0; break); *zb++=1&&s;                       break;  \
-    case ISUMEPS: SDO(C0); s=0; COW1(hb, ++s       ); *zv++=s;                          break;  \
-    case IIFBEPS: SDO(C0);      COW1(hb, *zi++=i   );                       ZISHAPE;    break;  \
-  }}                                                                                            \
-  R z;                                                                                          \
- }
-
-// The verbs to do the work, for different item lengths
-static IOFSMALLRANGE(jtio1,UC,SCOZ, SCOW, SCOW, SCOWX,SCQW, SCQW )  /* 1-byte    items */
-static IOFSMALLRANGE(jtio2,US,SCOZ, SCOW, SCOW, SCOWX,SCQW, SCQW )  /* 2-byte    items */
-static IOFSMALLRANGE(jtio4,I ,SCOZ1,SCOW0,SCOW1,SCOW0,SCQW0,SCQW1)  /* word size items */
-
-#else  // *********************** new version **************************
+// *********************** new version **************************
 // Macros to convert bit index to byte index and bit#.  We address to the byte to avoid rounding problems, as long as the compiler doesn't extend
 #define BYTENO(b) ((b)>>3)
 #define BITNO(b) ((b)&7)
@@ -767,128 +690,12 @@ static IOFSMALLRANGE(jtio4,I ,SCOZ1,SCOW0,SCOW1,SCOW0,SCQW0,SCQW1)  /* word size
   R z; \
  }
 // init to 1 for ~. ~: NUBI LESS   others to 0
-#if 0
-
-#define SCOZ(T,Ttype,vv) {T* RESTRICT mwv=wv-zi; Ttype def[1]; zie=zi+c; def[0]=(Ttype)(vv+zi0); \
-                          while(zi!=zie){T v=mwv[zi]; Ttype *hv=hu+v; if(v<min)hv=def; if(v>max)hv=def; I hvv; if((hvv=(I)*hv-zi0)<0)hvv=vv; zv[zi]=(Ttype)hvv; ++zi;}}
- /* printf("v=%d, hv=0x%p, def=0x%p, zi0=%d, *hv=%d, hvv=%d\n",v,hv,def,zi0,*hv,hvv); */
-// this version is used when the result vector is known to be full (out-of-range not possible).  Omit the out-of-bounds check.
-#define SCOZF(T,Ttype,vv)  {T* RESTRICT mwv=wv-zi; zie=zi+c; while(zi!=zie){I hvv; if((hvv=(I)hu[mwv[zi]]-zi0)<0)hvv=vv; zv[zi]=(Ttype)hvv; ++zi;}}  // zi always starts at 0
-// these versions are used if the table is known to start at offset 0.  Omit the not-found check, since m was already loaded; and zi is 0
-
-
-#define SCQW(T,stmt)  {UC def[1]; def[0]=0; DQ(c, T x=wv[i]; UC *hv=hu+x; if(x<min)hv=def; if(x>max)hv=def; UC v=*hv; stmt)}
-#define SCQWF(T,stmt)  {DQ(c, UC v=hu[wv[i]]; stmt)}
-#define SCQWP(T,stmt)  {UC def[1]; def[0]=0; DQ(c, T x=wv[i]; UC *hv=hu+BYTENO(x); if(x<min)hv=def; if(x>max)hv=def; UC v=(*hv>>BITNO(x))&1; stmt)}
-#define SCQWPF(T,stmt)  {DQ(c, T x=wv[i]; UC *hv=hu+BYTENO(x); UC v=(*hv>>BITNO(x))&1; stmt)}
-   SMCASE0(IEPS,   {SDO(T); DCLZVO(B) SCOW (T,zv[i]=v;);}) \
-   SMCASEF(IEPS,   {SDO(T); DCLZVO(B) SCOWF(T,zv[i]=v;);}) \
-   SMCASE0(ILESS,  {SDO(T); DCLZVO(T) T *zv0=zv; SCOW (T,*zv=wv[i]; v^=1; zv+=v;); *AS(z)= zv-zv0; AN(z)=n*(zv-zv0);})  \
-   SMCASEF(ILESS,  {SDO(T); DCLZVO(T) T *zv0=zv; SCOWF(T,*zv=wv[i]; v^=1; zv+=v;); *AS(z)= zv-zv0; AN(z)=n*(zv-zv0);})  \
-   SMCASE0(II0EPS, {SDO(T); DCLZVO(I) I s=c; SCOW (T,if(!v){s=i; break;});*zv++=s;})  \
-   SMCASEF(II0EPS, {SDO(T); DCLZVO(I) I s=c; SCOWF(T,if(!v){s=i; break;});*zv++=s;})  \
-   SMCASE0(II1EPS, {SDO(T); DCLZVO(I) I s=c; SCOW (T,if(v){s=i; break;});*zv++=s; })  \
-   SMCASEF(II1EPS, {SDO(T); DCLZVO(I) I s=c; SCOWF(T,if(v){s=i; break;});*zv++=s; })  \
-   SMCASE0(IJ0EPS, {SDO(T); DCLZVQ(I) I s=c; SCQW (T,if(!v){s=i; break;});*zv++=s;})  \
-   SMCASEF(IJ0EPS, {SDO(T); DCLZVQ(I) I s=c; SCQWF(T,if(!v){s=i; break;});*zv++=s;})  \
-   SMCASE0(IJ1EPS, {SDO(T); DCLZVQ(I) I s=c; SCQW (T,if(v){s=i; break;}); *zv++=s;})  \
-   SMCASEF(IJ1EPS, {SDO(T); DCLZVQ(I) I s=c; SCQWF(T,if(v){s=i; break;}); *zv++=s;})  \
-   SMCASE0(IANYEPS,{SDO(T); DCLZVO(B) B s=0; SCOW (T,if(v){s=1; break;}); *zv++=s;})  \
-   SMCASEF(IANYEPS,{SDO(T); DCLZVO(B) B s=0; SCOWF(T,if(v){s=1; break;}); *zv++=s;})  \
-   SMCASE0(IALLEPS,{SDO(T); DCLZVO(B) B s=1; SCOW (T,if(!v){s=0; break;}); *zv++=s;})  \
-   SMCASEF(IALLEPS,{SDO(T); DCLZVO(B) B s=1; SCOWF(T,if(!v){s=0; break;}); *zv++=s;})  \
-   SMCASE0(ISUMEPS,{SDO(T); DCLZVO(I) I s=0; SCOW (T,s+=v;); *zv++=s;})  \
-   SMCASEF(ISUMEPS,{SDO(T); DCLZVO(I) I s=0; SCOWF(T,s+=v;); *zv++=s;})  \
-   SMCASE0(IIFBEPS,{SDO(T); DCLZVO(I) I *zv0=zv; SCOW (T,*zv=i; zv+=v;); *AS(z)=AN(z)=zv-zv0;})  \
-   SMCASEF(IIFBEPS,{SDO(T); DCLZVO(I) I *zv0=zv; SCOWF(T,*zv=i; zv+=v;); *AS(z)=AN(z)=zv-zv0;})  
-//   /* case IEPS:               {SDO(T); DCLZVO(B) SCOW(T,zv[i]=v;);}  break; */ \
-//   /* case IIMODFULL+IEPS:     {SDO(T); DCLZVO(B) SCOWF(T,zv[i]=v;);}  break; */  \
-//   case ILESS:              {SDO(T); DCLZVO(T) T *zv0=zv; SCOW(T,*zv=wv[i]; v^=1; zv+=v;); *AS(z)= zv-zv0; AN(z)=n*(zv-zv0);} break;  \
-//   case IIMODFULL+ILESS:    {SDO(T); DCLZVO(T) T *zv0=zv; SCOWF(T,*zv=wv[i]; v^=1; zv+=v;); *AS(z)= zv-zv0; AN(z)=n*(zv-zv0);} break;  \
-//   case II0EPS:             {SDO(T); DCLZVO(I) I s=c; SCOW(T,if(!v){s=i; break;});*zv++=s;} break;  \
-//   case IIMODFULL+II0EPS:   {SDO(T); DCLZVO(I) I s=c; SCOWF(T,if(!v){s=i; break;});*zv++=s;} break;  \
-//   case II1EPS:             {SDO(T); DCLZVO(I) I s=c; SCOW(T,if(v){s=i; break;});*zv++=s; } break;  \
-//   case IIMODFULL+II1EPS:   {SDO(T); DCLZVO(I) I s=c; SCOWF(T,if(v){s=i; break;});*zv++=s; } break;  \
-//   case IJ0EPS:             {SDO(T); DCLZVQ(I) I s=c; SCQW(T,if(!v){s=i; break;});*zv++=s;} break;  \
-//   case IIMODFULL+IJ0EPS:   {SDO(T); DCLZVQ(I) I s=c; SCQWF(T,if(!v){s=i; break;});*zv++=s;} break;  \
-//   case IJ1EPS:             {SDO(T); DCLZVQ(I) I s=c; SCQW(T,if(v){s=i; break;}); *zv++=s;} break;  \
-//   case IIMODFULL+IJ1EPS:   {SDO(T); DCLZVQ(I) I s=c; SCQWF(T,if(v){s=i; break;}); *zv++=s;} break;  \
-//   case IANYEPS:            {SDO(T); DCLZVO(B) B s=0; SCOW(T,if(v){s=1; break;}); *zv++=s;} break;  \
-//   case IIMODFULL+IANYEPS:  {SDO(T); DCLZVO(B) B s=0; SCOWF(T,if(v){s=1; break;}); *zv++=s;} break;  \
-//   case IALLEPS:            {SDO(T); DCLZVO(B) B s=1; SCOW(T,if(!v){s=0; break;}); *zv++=s;} break;  \
-//   case IIMODFULL+IALLEPS:  {SDO(T); DCLZVO(B) B s=1; SCOWF(T,if(!v){s=0; break;}); *zv++=s;} break;  \
-//   case ISUMEPS:            {SDO(T); DCLZVO(I) I s=0; SCOW(T,s+=v;       ); *zv++=s;} break;  \
-//   case IIMODFULL+ISUMEPS:  {SDO(T); DCLZVO(I) I s=0; SCOWF(T,s+=v;       ); *zv++=s;} break;  \
-//   case IIFBEPS:            {SDO(T); DCLZVO(I) I *zv0=zv; SCOW(T,*zv=i; zv+=v;); *AS(z)=AN(z)=zv-zv0;}     break;  \
-//  case IIMODFULL+IIFBEPS:  {SDO(T); DCLZVO(I) I *zv0=zv; SCOWF(T,*zv=i; zv+=v;); *AS(z)=AN(z)=zv-zv0;}     break;  \
-//   case IEPS:    {SDO(T); B * RESTRICT zv=BAV(z)+l*c; SCOZ(T,UC,0);}  break;  
-//   case IIMODFULL+IEPS:    {SDO(T); B * RESTRICT zv=BAV(z)+l*c; SCOZ(T,UC,0);}  break;  
-//  {I zi=0, zie=m;  B * RESTRICT zv=BAV(z)+l*m; UC* RESTRICT hu=hh->data.UC-min; /* biased start,end+1 index, and data pointers */ 
-//                 while(zi!=zie){UC v=hu[wv[zi]]; hu[wv[zi]]=1; v^=1; zv[zi]=v; ++zi;} } break;  
-//    {I zi=0, zie=m;  T * RESTRICT zv=(T*)AV(z), *zv0=zv; UC* RESTRICT hu=hh->data.UC-min; /* biased start,end+1 index, and data pointers */ 
-//                 while(zi!=zie){UC v=hu[wv[zi]]; hu[wv[zi]]=1; v^=1; *zv=wv[zi]; zv+=v; ++zi;} *AS(z)=zv-zv0; AN(z)=n*(zv-zv0); } break;  
-//   {I zi=0, zie=m;  I * RESTRICT zv=AV(z), *zv0=zv; UC* RESTRICT hu=hh->data.UC-min; /* biased start,end+1 index, and data pointers */ 
-//                 while(zi!=zie){UC v=hu[wv[zi]]; hu[wv[zi]]=1; v^=1; *zv=zi; zv+=v; ++zi;} *AS(z)=AN(z)=zv-zv0; } break;
-#define f jtio4
-#define T UC
-#define Ttype US
- IOF(f){IH *hh=IHAV(*hp);I e,l,md;T*av,*wv;T max,min,p; 
-  md=(mode&~-IPHOFFSET); md|=(((mode&~((IIDOT^IICO)|IIMODFIELD|IPHOFFSET))|((I)a^(I)w)|(ac^wc))?0:IIMODREFLEX); 
-  av=(T*)AV(a); wv=(T*)AV(w); 
-  min=(T)hh->currentlo; p=(T)hh->currentindexofst; max=min+p-1; 
-  e=1==wc?0:c; if(w==mark)c=0; 
-  for(l=0;l<ac;++l,av+=m,wv+=e){ 
-   if(!(mode&IPHOFFSET)){hashallo(hh,p,m,md);}  /* set parms for this loop */ 
-   switch(md){ 
-   case IIMODREFLEX+IIDOT: {I zi=hh->currentindexofst, zi0=zi, zie=zi+m;  I * RESTRICT zv=AV(z)+l*m; T* RESTRICT mwv=wv-zi; Ttype* RESTRICT hu=hh->data.Ttype-min+hh->currentlo; /* biased start,end+1 index, and data pointers */ 
-                           while(zi!=zie){I vv = hu[mwv[zi]]; if(vv<zi0)vv=zi; hu[mwv[zi]]=(Ttype)vv; zv[zi]=vv-zi0; ++zi;} } break; /* scan sequentially; if prev value present, rewrite it, otherwise write index */ 
-   case IIMODREFLEX+IICO: {I zi=hh->currentindexofst, zi0=zi, zie=zi+m;  I * RESTRICT zv=AV(z)+l*m; T* RESTRICT mwv=wv-zi; Ttype* RESTRICT hu=hh->data.Ttype-min+hh->currentlo; 
-                           do{--zie; I vv = hu[mwv[zie]]; if(vv<zi0)vv=zie; hu[mwv[zie]]=(Ttype)vv; zv[zie]=vv-zi0;}while(zie!=zi); } break; /* same in reverse */ 
-   case IIDOT:   {SDQA(T,Ttype);  I * RESTRICT zv=AV(z)+l*m-zi; SCOZ(T,Ttype,m);} break;  
-   case IIMODFULL+IIDOT:   {SDQA(T,Ttype);  I * RESTRICT zv=AV(z)+l*m-zi; SCOZ(T,Ttype,m);} break;  
-   case IICO:    {SDOA(T,Ttype);  I * RESTRICT zv=AV(z)+l*m-zi; SCOZ(T,Ttype,m);} break;  
-   case IIMODFULL+IICO:    {SDOA(T,Ttype);  I * RESTRICT zv=AV(z)+l*m-zi; SCOZ(T,Ttype,m);} break;  
-   case IEPS:    {SDO(T); B * RESTRICT zv=BAV(z)+l*m; SCOZ(T,UC,0);}  break;  
-   case IIMODFULL+IEPS:    {SDO(T); B * RESTRICT zv=BAV(z)+l*m; SCOZ(T,UC,0);}  break;  
-   case IIMODFULL+INUBSV: 
-   case INUBSV:  {I zi=0, zie=m;  B * RESTRICT zv=BAV(z)+l*m; T* RESTRICT mwv=wv; UC* RESTRICT hu=hh->data.UC-min; /* biased start,end+1 index, and data pointers */ 
-                 while(zi!=zie){UC v=hu[wv[zi]]; hu[wv[zi]]=1; v^=1; zv[zi]=v; ++zi;} } break;  
-   case IIMODFULL+INUB: 
-   case INUB:    {I zi=0, zie=m;  T * RESTRICT zv=(T*)AV(z)+l*m, *zv0=zv; T* RESTRICT mwv=wv; UC* RESTRICT hu=hh->data.UC-min; /* biased start,end+1 index, and data pointers */ 
-                 while(zi!=zie){UC v=hu[wv[zi]]; hu[wv[zi]]=1; *zv=wv[zi]; v^=1; zv+=v; ++zi;} *AS(z)= zv-zv0; AN(z)=n*(zv-zv0); } break;  
-   case IIMODFULL+INUBI: 
-   case INUBI:   {I zi=0, zie=m;  I * RESTRICT zv=AV(z)+l*m, *zv0=zv; T* RESTRICT mwv=wv; UC* RESTRICT hu=hh->data.UC-min; /* biased start,end+1 index, and data pointers */ 
-                 while(zi!=zie){UC v=hu[wv[zi]]; hu[wv[zi]]=1; *zv=zi; v^=1; zv+=v; ++zi;} *AS(z)=AN(z)=zv-zv0; } break;  
-   case ILESS:   {SDO(T); T * RESTRICT zv=(T*)AV(z)+l*m, *zv0=zv; SCOW(T,*zv=*mwv; v^=1; zv+=v;); *AS(z)= zv-zv0; AN(z)=n*(zv-zv0);} break;  
-   case IIMODFULL+ILESS:   {SDO(T); T * RESTRICT zv=(T*)AV(z)+l*m, *zv0=zv; SCOW(T,*zv=*mwv; v^=1; zv+=v;); *AS(z)= zv-zv0; AN(z)=n*(zv-zv0);} break;  
-   case II0EPS:  {SDO(T); I * RESTRICT zv=IAV(z)+l*m; I s=c; SCOW(T,if(!v){s=i; break;});*zv++=s;} break;  
-   case IIMODFULL+II0EPS:  {SDO(T); I * RESTRICT zv=IAV(z)+l*m; I s=c; SCOW(T,if(!v){s=i; break;});*zv++=s;} break;  
-   case II1EPS:  {SDO(T); I * RESTRICT zv=IAV(z)+l*m; I s=c; SCOW(T,if(v){s=i; break;});*zv++=s; } break;  
-   case IIMODFULL+II1EPS:  {SDO(T); I * RESTRICT zv=IAV(z)+l*m; I s=c; SCOW(T,if(v){s=i; break;});*zv++=s; } break;  
-   case IJ0EPS:  {SDO(T); I * RESTRICT zv=IAV(z)+l*m; I s=c; SCQW(T,if(!v){s=i; break;});*zv++=s;} break;  
-   case IIMODFULL+IJ0EPS:  {SDO(T); I * RESTRICT zv=IAV(z)+l*m; I s=c; SCQW(T,if(!v){s=i; break;});*zv++=s;} break;  
-   case IJ1EPS:  {SDO(T); I * RESTRICT zv=IAV(z)+l*m; I s=c; SCQW(T,if(v){s=i; break;}); *zv++=s;} break;  
-   case IIMODFULL+IJ1EPS:  {SDO(T); I * RESTRICT zv=IAV(z)+l*m; I s=c; SCQW(T,if(v){s=i; break;}); *zv++=s;} break;  
-   case IANYEPS: {SDO(T); B * RESTRICT zv=BAV(z)+l*m; B s=0; SCOW(T,if(v){s=1; break;}); *zv++=s;} break;  
-   case IIMODFULL+IANYEPS: {SDO(T); B * RESTRICT zv=BAV(z)+l*m; B s=0; SCOW(T,if(v){s=1; break;}); *zv++=s;} break;  
-   case IALLEPS: {SDO(T); B * RESTRICT zv=BAV(z)+l*m; B s=1; SCOW(T,if(!v){s=0; break;}); *zv++=s;} break;  
-   case IIMODFULL+IALLEPS: {SDO(T); B * RESTRICT zv=BAV(z)+l*m; B s=1; SCOW(T,if(!v){s=0; break;}); *zv++=s;} break;  
-   case ISUMEPS: {SDO(T); I * RESTRICT zv=IAV(z)+l*m; I s=0; SCOW(T,s+=v;       ); *zv++=s;} break;  
-   case IIMODFULL+ISUMEPS: {SDO(T); I * RESTRICT zv=IAV(z)+l*m; I s=0; SCOW(T,s+=v;       ); *zv++=s;} break;  
-   case IIFBEPS: {SDO(T); I * RESTRICT zv=IAV(z)+l*m, *zv0=zv; SCOW(T,*zv=i; v^=1; zv+=v;); *AS(z)= zv-zv0; AN(z)=n*(zv-zv0);}     break;  
-   case IIMODFULL+IIFBEPS: {SDO(T); I * RESTRICT zv=IAV(z)+l*m, *zv0=zv; SCOW(T,*zv=i; v^=1; zv+=v;); *AS(z)= zv-zv0; AN(z)=n*(zv-zv0);}     break;  
-   }  
-  }  
-  R z; 
- }
-#else
 
 // The verbs to do the work, for different item lengths and hashtable sizes
 static IOFSMALLRANGE(jtio12,UC,US)  static IOFSMALLRANGE(jtio14,UC,UI4)  // 1-byte items, using small/large hashtable
 static IOFSMALLRANGE(jtio22,US,US)  static IOFSMALLRANGE(jtio24,US,UI4)  // 2-byte items, using small/large hashtable
 static IOFSMALLRANGE(jtio42,I,US)  static IOFSMALLRANGE(jtio44,I,UI4)  // 4-byte items, using small/large hashtable
-#endif
-#endif
+
 // ******************* fourth class: sequential comparison ***************************************
 
 // we is the expression for reading one comparand, exp is the expression
@@ -902,23 +709,23 @@ static IOFSMALLRANGE(jtio42,I,US)  static IOFSMALLRANGE(jtio44,I,UI4)  // 4-byte
    case IEPS:  {T*av=(T*)u+m; DQ(ac, DQ(c, x=(xe); j=-m;   while(j<0 &&(exp))++j; *zb++=j<0;     wv+=q;); av+=p; if(1==wc)wv=v0;);} break;  \
  }}
 
-static void jtiosc(J jt,I mode,I m,I c,I ac,I wc,A a,A w,A z){B*zb;I j,p,q,*u,*v,zn,*zv;
+static A jtiosc(J jt,I mode,I m,I c,I ac,I wc,A a,A w,A z){B*zb;I j,p,q,*u,*v,*zv;
  p=1<ac?m:0; q=1<wc||1<c;
- zn=AN(z); 
  zv=AV(z); zb=(B*)zv; u=AV(a); v=AV(w); 
  switch(CTTZ(AT(a))){
   default:                SCDO(C, *wv,x!=av[j]      ); break;
-  case C2TX:               SCDO(S, *wv,x!=av[j]      ); break;
-  case C4TX:               SCDO(C4,*wv,x!=av[j]      ); break;
-  case CMPXX:              SCDO(Z, *wv,!zeq(x, av[j])); break;
-  case XNUMX:              SCDO(A, *wv,!equ(x, av[j])); break;
-  case RATX:               SCDO(Q, *wv,!QEQ(x, av[j])); break;
-  case INTX:               SCDO(I, *wv,x!=av[j]      ); break;
-  case SBTX:               SCDO(SB,*wv,x!=av[j]      ); break;
-  case BOXX:  {RDECL;      SCDO(A, *wv,!equ(x,av[j]));} break;
+  case C2TX: case INT2X:  SCDO(S, *wv,x!=av[j]      ); break;
+  case C4TX: case INT4X:  SCDO(C4,*wv,x!=av[j]      ); break;
+  case CMPXX: case QPX:   SCDO(Z, *wv,!zeq(x, av[j])); break;
+  case XNUMX:             SCDO(A, *wv,icmpXX(x, av[j])); break;
+  case RATX:              SCDO(Q, *wv,!QEQ(x, av[j])); break;
+  case INTX:              SCDO(I, *wv,x!=av[j]      ); break;
+  case SBTX:              SCDO(SB,*wv,x!=av[j]      ); break;
+  case BOXX:  {RDECL;     SCDO(A, *wv,!equ(C(x),C(av[j])));} break;
   case FLX:   if(1.0==jt->cct)SCDO(D, *wv,x!=av[j]) 
              else{D cct=jt->cct;    SCDO(D, *wv,!TCMPEQ(cct,x,av[j]));} break; 
  }
+ RETF(z);
 }    /* right argument cell is scalar; only for modes IIDOT IICO IEPS */
 
 
@@ -929,7 +736,7 @@ static void jtiosc(J jt,I mode,I m,I c,I ac,I wc,A a,A w,A z){B*zb;I j,p,q,*u,*v
 static B jtusebs(J jt,A a,I ac,I m){A*av,x;I t;
  if(!(BOX&AT(a)&&1.0==jt->cct))R 0;
  av=AAV(a); 
- DO(ac*m, x=av[i]; t=AT(x); if(t&BOX+CMPX||1<AN(x)&&t&NUMERIC)R 1;);
+ DO(ac*m, x=C(av[i]); t=AT(x); if(t&BOX+CMPX||1<AN(x)&&t&NUMERIC)R 1;);
  R 0;
 }    /* n (# elements in a target item) is assumed to be 1 */
 
@@ -986,7 +793,7 @@ static A jtnodupgrade(J jt,A a,I acr,I ac,I acn,I ad,I n,I m,B b,B bk){A*av,h,*u
    p=0; q=m1;                        \
    while(p<=q){                      \
     t=0; j=(p+q)>>1; v=av+n*hu[j];    \
-    DO(n, if(t=compare(u[i],v[i]))break;);  \
+    DO(n, if(t=compare(C(u[i]),C(v[i])))break;);  \
     if(0<t)p=j+1; else q=t?j-1:-2;   \
    }                                 \
    zstmt;                            \
@@ -1041,7 +848,7 @@ static IOF(jtiobs){A*av,h=*hp,*wv,y;B b,bk,*yb,*zb;C*zc;I acn,*hu,*hv,l,m1,md,s,
 static I jtutype(J jt,A w,I c){A*wv,x;I m,t;
  if(!AN(w))R 1;
  m=AN(w)/c; wv=AAV(w); 
- DO(c, t=0; DO(m, x=wv[i]; if(AN(x)){if(t)RZ(TYPESEQ(t,AT(x))) else{t=AT(x); if(t&FL+CMPX+BOX)R 0;}}););
+ DO(c, t=0; DO(m, x=C(wv[i]); if(AN(x)){if(t)RZ(TYPESEQ(t,AT(x))) else{t=AT(x); if(t&FL+CMPX+BOX)R 0;}}););
  R t;
 }    /* return type if opened atoms of cells of w has uniform type (but not one that may contain -0), else 0. c is # of cells */
 
@@ -1233,8 +1040,8 @@ A jtindexofsub(J jt,I mode,A a,A w){PROLOG(0079);A h=0,hi=mtv,z;B mk=w==mark,th;
  // other words the frame of the results each cell of w will produce
  if(ISSPARSE(at|wt)){A z;
   // Handle sparse arguments
-  if(1>=acr)R af?sprank2(a,w,0L,acr,RMAX,jtindexof):ISSPARSE(wt)?iovxs(mode,a,w):iovsd(mode,a,w);
-  if(af||wf)R sprank2(a,w,0L,acr,wcr,jtindexof);
+  if(1>=acr)R af?sprank2(a,w,NOEMSGSELF,acr,RMAX,jtindexof):ISSPARSE(wt)?iovxs(mode,a,w):iovsd(mode,a,w);
+  if(af||wf)R sprank2(a,w,NOEMSGSELF,acr,wcr,jtindexof);
   switch((ISSPARSE(at)?2:0)+(ISSPARSE(wt)?1:0)){
    case 1: z=indexofxx(mode,a,w); break;
    case 2: z=indexofxx(mode,a,w); break;
@@ -1403,10 +1210,10 @@ A jtindexofsub(J jt,I mode,A a,A w){PROLOG(0079);A h=0,hi=mtv,z;B mk=w==mark,th;
     // but never increase the range if that would exceed the L2 cache - just pay the 4 instructions
     if(k==2){
      allowrange=MIN(MAX(L2CACHESIZE/(LGSZUS),(I)p),MAX(allowrange,(I)(p+(p>>3))));  // allowed range, with expansion
-     crres = condrange2(USAV(w),(AN(w)*bp(AT(w)))>>LGSZS,datamin,datamin+p-1,allowrange);
+     crres = condrange2(USAV(w),(AN(w)*bpnoun(AT(w)))>>LGSZS,datamin,datamin+p-1,allowrange);
     }else{
      allowrange=MIN(MAX(L2CACHESIZE/(LGSZUI4),(I)p),MAX(allowrange,(I)(p+(p>>3))));  // allowed range, with expansion
-     crres = condrange(AV(w),(AN(w)*bp(AT(w)))>>LGSZI,datamin,datamin+p-1,allowrange);
+     crres = condrange(AV(w),(AN(w)*bpnoun(AT(w)))>>LGSZI,datamin,datamin+p-1,allowrange);
     }
     if(crres.range){datamin=crres.min; p=crres.range; mode |= IIMODFULL;}
    }  
@@ -1749,4 +1556,4 @@ A jtiocol(J jt,I mode,A a,A w){A h,z;I ar,at,c,d,m,p,t,wr,*ws,wt;void(*fn)();
  R z;
 }    /* a i."1 &.|:w or a i:"1 &.|:w */
 
-#endif /* C_AVX */
+#endif /* !(C_CRC32C && SY_64) */

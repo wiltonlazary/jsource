@@ -1,11 +1,11 @@
-/* Copyright 1990-2008, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Verbs: "Mathematical" Functions (Irrational, Transcendental, etc.)      */
 
 #include "j.h"
 #include "ve.h"
-#if defined(__GNUC__) && !((C_AVX&&SY_64) || EMU_AVX)
+#if defined(__GNUC__) && !(C_AVX2 || EMU_AVX2)
 static int64_t m7f = 0x7fffffffffffffffLL;
 #define COMMA ,
 #endif
@@ -17,11 +17,11 @@ D jtintpow(J jt,D x,I n){D r=1;
 }    /* x^n where x is real and n is integral */
 
 D jtpospow(J jt,D x,D y){
- if(0==y)R 1.0;
- if(0==x)R 0<y?0.0:inf;
+ if(unlikely(0==y))R 1.0;
+ if(unlikely(0==x))R 0<y?0.0:inf;
  if(0<x){
-  if(y== inf)R 1<x?inf:1>x?0.0:1.0;
-  if(y==-inf)R 1<x?0.0:1>x?inf:1.0;
+  if(unlikely(y== inf))R 1<x?inf:1>x?0.0:1.0;
+  if(unlikely(y==-inf))R 1<x?0.0:1>x?inf:1.0;
   R exp(y*log(x));
  }
  if(y==-inf){ASSERT(-1>x,EVDOMAIN); R 0.0;}
@@ -56,12 +56,12 @@ APFX(cirZZ, Z,Z,Z, zcir  ,NAN0;,HDR1JERRNAN)
 
 
 // Call SLEEF after checking symmetric 2-sided limits.  If comp is not true everywhere, signal err, else call sleeffn
-#if (C_AVX&&SY_64) || EMU_AVX
+#if C_AVX2 || EMU_AVX2
 #define TRIGSYMM(lbl,limit,comp,err,sleeffn)  {AVXATOMLOOP(1, \
  __m256d thmax; thmax=_mm256_broadcast_sd(&limit); \
  __m256d absmask; absmask=_mm256_broadcast_sd((D*)&Iimax); \
  , \
- ASSERTWR(_mm256_movemask_pd(_mm256_cmp_pd(_mm256_and_pd(u,absmask), thmax,comp))==0,err); \
+ ASSERTWR(_mm256_testc_pd(absmask,_mm256_cmp_pd(_mm256_and_pd(u,absmask), thmax,comp)),err); /* assert all bits 0 */ \
  u=sleeffn(u); \
  , \
  )}
@@ -105,7 +105,57 @@ APFX(cirZZ, Z,Z,Z, zcir  ,NAN0;,HDR1JERRNAN)
  )}
 #endif
 
+#if SLEEFQUAD
+// the Sleef QP functions are called in the purecfma version, except for platforms that don't support fma
+#if HASFMA
+#define Sleef_expq1_u10 Sleef_expq1_u10purecfma
+#define Sleef_logq1_u10 Sleef_logq1_u10purecfma
+#define Sleef_subq1_u05 Sleef_subq1_u05purecfma
+#define Sleef_mulq1_u05 Sleef_mulq1_u05purecfma
+#define Sleef_sinq1_u10 Sleef_sinq1_u10purecfma
+#define Sleef_cosq1_u10 Sleef_cosq1_u10purecfma
+#define Sleef_tanq1_u10 Sleef_tanq1_u10purecfma
+#define Sleef_addq1_u05 Sleef_addq1_u05purecfma
+#define Sleef_sqrtq1_u05 Sleef_sqrtq1_u05purecfma
+#define Sleef_sinhq1_u10 Sleef_sinhq1_u10purecfma
+#define Sleef_coshq1_u10 Sleef_coshq1_u10purecfma
+#define Sleef_tanhq1_u10 Sleef_tanhq1_u10purecfma
+#define Sleef_icmpleq1 Sleef_icmpleq1_purecfma
+#define Sleef_negq1 Sleef_negq1_purecfma
+#define Sleef_asinq1_u10 Sleef_asinq1_u10purecfma
+#define Sleef_fabsq1 Sleef_fabsq1_purecfma
+#define Sleef_acosq1_u10 Sleef_acosq1_u10purecfma
+#define Sleef_atanq1_u10 Sleef_atanq1_u10purecfma
+#define Sleef_icmpgeq1 Sleef_icmpgeq1_purecfma
+#define Sleef_icmpeqq1 Sleef_icmpeqq1_purecfma
+#define Sleef_divq1_u05 Sleef_divq1_u05purecfma
+#else
+#define Sleef_expq1_u10 Sleef_expq1_u10purec
+#define Sleef_logq1_u10 Sleef_logq1_u10purec
+#define Sleef_subq1_u05 Sleef_subq1_u05purec
+#define Sleef_mulq1_u05 Sleef_mulq1_u05purec
+#define Sleef_sinq1_u10 Sleef_sinq1_u10purec
+#define Sleef_cosq1_u10 Sleef_cosq1_u10purec
+#define Sleef_tanq1_u10 Sleef_tanq1_u10purec
+#define Sleef_addq1_u05 Sleef_addq1_u05purec
+#define Sleef_sqrtq1_u05 Sleef_sqrtq1_u05purec
+#define Sleef_sinhq1_u10 Sleef_sinhq1_u10purec
+#define Sleef_coshq1_u10 Sleef_coshq1_u10purec
+#define Sleef_tanhq1_u10 Sleef_tanhq1_u10purec
+#define Sleef_icmpleq1 Sleef_icmpleq1_purec
+#define Sleef_negq1 Sleef_negq1_purec
+#define Sleef_asinq1_u10 Sleef_asinq1_u10purec
+#define Sleef_fabsq1 Sleef_fabsq1_purec
+#define Sleef_acosq1_u10 Sleef_acosq1_u10purec
+#define Sleef_atanq1_u10 Sleef_atanq1_u10purec
+#define Sleef_icmpgeq1 Sleef_icmpgeq1_purec
+#define Sleef_icmpeqq1 Sleef_icmpeqq1_purec
+#define Sleef_divq1_u05 Sleef_divq1_u05purec
+#endif
+#endif
+
 #if SLEEF
+
 AHDR1(expD,D,D) {  AVXATOMLOOP(1,
  ,
  u=Sleef_expd4(u);
@@ -114,11 +164,12 @@ AHDR1(expD,D,D) {  AVXATOMLOOP(1,
  )
 }
 
-#if (C_AVX&&SY_64) || EMU_AVX
+
+#if C_AVX2 || EMU_AVX2
 AHDR1(logD,D,D) {  AVXATOMLOOP(1,
  __m256d zero; zero=_mm256_setzero_pd();
  ,
- ASSERTWR(_mm256_movemask_pd(_mm256_cmp_pd(u, zero,_CMP_LT_OQ))==0,EWIMAG);
+ ASSERTWR(_mm256_testc_pd(zero,_mm256_cmp_pd(u, zero,_CMP_LT_OQ)),EWIMAG);  // assert compares all 0
  u=Sleef_logd4(u);
  ,
  R EVOK;
@@ -156,13 +207,13 @@ AHDR2(powDD,D,D,D) {D v;
  else{  // repeated exponent: use parallel instructions
   DQ(m, v=*y++;  // for each exponent
    if(v==0){DQ(n, *z++=1.0;) x+=n;}
-   else if(ABS(v)==inf){DQ(n, D u=*x++; ASSERT(u>=0,EWIMAG); if(u==1.0)*z=1.0; else{D vv = u>1.0?v:-v;*z=v>0?inf:0.0;} ++z;)}
+   else if(ABS(v)==inf){DQ(n, D u=*x++; ASSERT(u>=0,EWIMAG); if(u==1.0)*z=1.0; else{*z=(v>0)^(u>1.0)?0.0:inf;} ++z;)}
    else{
     AVXATOMLOOP(1,  // build result in u, which is also the input
       __m256d zero = _mm256_setzero_pd();
       __m256d vv = _mm256_broadcast_sd(&v);  // 4 copies of exponent  (2 if __SSE2__)
      ,
-      ASSERTWR(_mm256_movemask_pd(_mm256_cmp_pd(u, zero,_CMP_LT_OQ))==0,EWIMAG);
+      ASSERTWR(_mm256_testc_pd(zero,_mm256_cmp_pd(u, zero,_CMP_LT_OQ)),EWIMAG);  // assert all compare bit 0
       u=Sleef_log2d4(u);
       u=_mm256_mul_pd(u,vv);
       u=Sleef_exp2d4(u);
@@ -215,7 +266,7 @@ AHDR2(powDD,D,D,D) {D v;
  else{  // repeated exponent: use parallel instructions
   DQ(m, v=*y++;  // for each exponent
    if(v==0){DQ(n, *z++=1.0;) x+=n;}
-   else if(ABS(v)==inf){DQ(n, D u=*x++; ASSERT(u>=0,EWIMAG); if(u==1.0)*z=1.0; else{D vv = u>1.0?v:-v;*z=v>0?inf:0.0;} ++z;)}
+   else if(ABS(v)==inf){DQ(n, D u=*x++; ASSERT(u>=0,EWIMAG); if(u==1.0)*z=1.0; else{*z=(v>0)^(u>1.0)?0.0:inf;} ++z;)}
    else{
     AVXATOMLOOP(1,  // build result in u, which is also the input
       float64x2_t zero = {0.0 COMMA 0.0};
@@ -232,8 +283,8 @@ AHDR2(powDD,D,D,D) {D v;
  }      
  HDR1JERR
 }
-#endif
 
+#endif
 
 #else
 AMON(expD,   D,D, *z=*x<EMIN?0.0:EMAX<*x?inf:exp(   *x);)
@@ -326,6 +377,111 @@ NAN0;
  R EVOK;
 }
 
+#if SLEEFQUAD  // SLEEF quad required
+#define sleefq0 *(Sleef_quad*)&zeroZ   // Sleef QP 0
+#define zeroE *(E*)&zeroZ  // E 0
+static Sleef_quad etof128(E w){
+ if(w.hi==0)R sleefq0;  // true 0 must have exactly 0 exponent
+ IL ehi=*(IL*)&w.hi; UIL elo=*(UIL*)&w.lo;  // IEEE bits of w
+ UIL loneg=(IL)(ehi^elo)>>63;  // -1 if bottom part has a different sign from the top part
+ IL ihi=ehi+loneg;   // if the bottom part has a different sign from the top, its significance must be subtracted from the upper.  That will occasion a borrow, which we handle here.
+ I eexpxs=((ihi>>52)&0x7ff)-53-((elo>>52)&0x7ff);  // excess exponent of elo, i. e. gap between ehi and elo.  Range is [-1,any].  If 0, the bits of elo are right next to ehi.  -1 is possible if exponent changed
+ eexpxs=MIN(eexpxs,62);  // clamp shift count to within range
+ elo=(elo&0x000fffffffffffffll)|(likely((elo&0x7ff0000000000000)!=0)?0x0010000000000000ll:0);  // remove sign of elo, add hidden bit
+ elo=((((elo<<8)>>(eexpxs+1))^loneg)-loneg);  // shift sig to adj to hi, then add gap (all unsigned); then make the lo bits neg if needed.  If eexpxs is 0 this leaves no gap
+ // The low bits are in the right position, leaving room for 4 upper bits normally, but only 3 if the exponent was decremented.  Clear bits above the valid ones
+ if(likely(((ehi^ihi)&0x0010000000000000)==0)){elo&=0x0fffffffffffffff;}
+ else{ihi&=~1; elo&=0x1fffffffffffffff;}   // if the decrement flowed through to the exponent, we have to shift the bits of ihi left to raise their significance to match
+                                        // the lower exponent.  All the bits of ihi are 1, so we just turn off the low 1 bit.  low bits were shifted because we used the updated exponent for eexpxs
+ elo|=ihi<<60;  // take contiguous lower bits, possibly with some low-order 0s
+ ehi=((ihi&0x7fffffffffffffffll)>>4)+0x3c00000000000000ll+(ihi&0x8000000000000000ll);  // shift exponent (& mantissa) down 4; rebias exponent; preserve sign
+ R *(Sleef_quad*)&(IL[2]){elo,ehi};  // return the value
+}
+E f128toe(Sleef_quad w){
+ UIL exp=(((UIL*)&w)[1]>>48)&0x7fff;  // extract 15-bit biased SLEEF exponent
+ if(unlikely(!BETWEENO(exp,0x3c00,0x4400))){  // exponent too big or too small
+  R (E){.hi=exp<0x4000?0.:copysign(inf,((D*)&w)[1]),.lo=0.};   // clamp at limit
+ }
+ IL ihi=(((IL*)&w)[1]<<4)|(((UIL*)&w)[0]>>(64-4));  //shortened frac + 52 bits of mantissa
+ ihi=((ihi+0x4000000000000000ll)&0x7fffffffffffffffLL)|(((IL*)&w)[1]&0x8000000000000000ll);  // rebias exp and replace sign
+ D hi1=*(D*)&(IL){ihi&0xfff0000000000000ll};  // 1.0 with sign+exponent of hi, i. e. exponent of hidden bit of hi which is bit 104 of combined mantissa
+ hi1*=4.9303806576313238e-32;  // mult by 2^_104 to get value of LSB of combined mantissa
+ IL ilo=(((IL*)&w)[0]>>8)&0x000fffffffffffffll;   // low significance of mantissa, bits 8-59 
+ D dlo=hi1*ilo;  // low significance, with correct weight and sign
+ D hi,lo; TWOSUMBS1(*(D*)&ihi,dlo,hi,lo)  // remove any overlap
+ R CANONE1(hi,lo);  // return canonical form
+}
+
+
+AMON(expE,   E,E, *z=x->hi<(2*EMIN)?zeroE:f128toe(Sleef_expq1_u10(etof128(*x)));)
+AMON(logE,   E,E, ASSERTWR(0<=x->hi,EWIMAG); *z=f128toe(Sleef_logq1_u10(etof128(*x)));)
+#endif
+
+static I jtcire(J jt,I n,I k,E*z,E*x){E p,t;
+#if SLEEFQUAD
+ Sleef_quad sleefq1=sleef_q(+0x1000000000000LL, 0x0000000000000000ULL, 0);
+ Sleef_quad sleefq05=sleef_q(+0x1000000000000LL, 0x0000000000000000ULL, -1);
+ NAN0;  // Note some of the SLEEF function raise NaN errors that we must clear: sqrt(0), log(0)
+ switch(k){
+ default: ASSERTWR(0,EWIMAG);
+
+
+
+
+ case  0: {DQ(n, t=*x++; Sleef_quad ts=etof128(t); Sleef_quad tsqm1=Sleef_subq1_u05(sleefq1,Sleef_mulq1_u05(ts,ts));
+    ASSERTWR(Sleef_icmpgeq1(tsqm1,sleefq0), EWIMAG ) *z++=f128toe(Sleef_sqrtq1_u05(tsqm1));); } NAN0; break;
+ case  1: ;
+   DQ(n, t=*x++; ASSERTWR(ABS(t.hi)<THMAX,EVLIMIT); *z++=f128toe(Sleef_sinq1_u10(etof128(t))););   break;
+ case  2:  ;
+   DQ(n, t=*x++; ASSERTWR(ABS(t.hi)<THMAX,EVLIMIT); *z++=f128toe(Sleef_cosq1_u10(etof128(t)));); break;
+ case  3:  ;
+   DQ(n, t=*x++; ASSERTWR(ABS(t.hi)<THMAX,EVLIMIT); *z++=f128toe(Sleef_tanq1_u10(etof128(t)));); break;
+ break;
+ case  4: {DQ(n, t=*x++; if(ABS(t.hi)>1e17){if(t.hi>0)*z++=t; else{z->hi=-t.hi; z->lo=-t.lo;}} else {Sleef_quad ts=etof128(t); Sleef_quad tsqp1=Sleef_addq1_u05(Sleef_mulq1_u05(ts,ts),sleefq1);
+    *z=f128toe(Sleef_sqrtq1_u05(tsqp1));} ++z;) } break;
+ case  5:   DQ(n, t=*x++; if(ABS(t.hi)>EMAX2){*z++=(E){.hi=t.hi<0?infm:inf,.lo=copysign(0.,t.hi)};} else {*z++=f128toe(Sleef_sinhq1_u10(etof128(t)));});   break;
+ case  6:   DQ(n, t=*x++; if(ABS(t.hi)>EMAX2){*z++=(E){.hi=inf,.lo=0};} else {*z++=f128toe(Sleef_coshq1_u10(etof128(t)));});   break;
+ case  7:   DQ(n, t=*x++; if(ABS(t.hi)>TMAX){*z++=(E){.hi=t.hi<0?-1.:1.,.lo=copysign(0.,t.hi)};} else {*z++=f128toe(Sleef_tanhq1_u10(etof128(t)));});   break;
+ case -1: ;
+  DQ(n, t=*x++; Sleef_quad ts=etof128(t); ASSERTWR(Sleef_icmpleq1(Sleef_fabsq1(ts),sleefq1), EWIMAG); *z++=f128toe(Sleef_asinq1_u10(ts)););   NAN0; break;
+ case -2: ;
+   DQ(n, t=*x++; Sleef_quad ts=etof128(t); ASSERTWR(Sleef_icmpleq1(Sleef_fabsq1(ts),sleefq1), EWIMAG); *z++=f128toe(Sleef_acosq1_u10(ts)););   NAN0; break;
+ case -3: ;
+   DQ(n, t=*x++; *z++=f128toe(Sleef_atanq1_u10(etof128(t))););   break;
+  break;
+ case -4: DQ(n, t=*x++; Sleef_quad ts=etof128(t);  ASSERTWR(Sleef_icmpgeq1(Sleef_fabsq1(ts),sleefq1),  EWIMAG );
+          if(ABS(t.hi)>1e17)*z++=t;
+          else {
+           Sleef_quad tsp1=Sleef_addq1_u05(ts,sleefq1);
+           if(Sleef_icmpeqq1(tsp1,sleefq0))*z++=(E){.hi=0.,.lo=0.};
+           else{Sleef_quad tsm1=Sleef_subq1_u05(ts,sleefq1); *z++=f128toe(Sleef_mulq1_u05(tsp1,Sleef_sqrtq1_u05(Sleef_divq1_u05(tsm1,tsp1))));}
+          }
+            );  NAN0; break;
+ case -5: DQ(n, t=*x++; Sleef_quad ts=etof128(t);
+                if(t.hi>1e17){*z++=f128toe(Sleef_addq1_u05(Sleef_logq1_u10(ts),SLEEF_M_LN2q));
+                }else if(t.hi<-5e7){*z++=f128toe(Sleef_negq1(Sleef_addq1_u05(Sleef_logq1_u10(Sleef_negq1(ts)),SLEEF_M_LN2q)));
+                }else{*z++=f128toe(Sleef_logq1_u10(Sleef_addq1_u05(ts,Sleef_sqrtq1_u05(Sleef_addq1_u05(Sleef_mulq1_u05(ts,ts),sleefq1)))));
+                }
+            );   break;
+ case -6: DQ(n, t=*x++; Sleef_quad ts=etof128(t); ASSERTWR(Sleef_icmpgeq1(ts,sleefq1), EWIMAG);
+                if(t.hi>1e17){*z++=f128toe(Sleef_addq1_u05(Sleef_logq1_u10(ts),SLEEF_M_LN2q));
+                }else{*z++=f128toe(Sleef_logq1_u10(Sleef_addq1_u05(ts,Sleef_sqrtq1_u05(Sleef_subq1_u05(Sleef_mulq1_u05(ts,ts),sleefq1)))));
+                }  NAN0;
+            );   break;
+ case -7: DQ(n, t=*x++; Sleef_quad ts=etof128(t); ASSERTWR(Sleef_icmpleq1(Sleef_fabsq1(ts),sleefq1), EWIMAG);
+                *z++=f128toe(Sleef_mulq1_u05(sleefq05,Sleef_logq1_u10(Sleef_divq1_u05(Sleef_addq1_u05(sleefq1,ts),Sleef_subq1_u05(sleefq1,ts)))));
+            );   NAN0; break;
+       
+ case  9: DQ(n,         *z++=*x++;);           break;    
+ case 10: DQ(n, t=*x++; D oldsgn=t.hi; z->hi=ABS(t.hi); *(IL*)&z->lo=*(IL*)&t.lo^(*(IL*)&oldsgn&0x8000000000000000);    z++;);         break;
+ case 11: DQ(n,         z->hi=z->lo=0.0; ++z;)            break;
+ case 12: DQ(n,         *z++=0<=x->hi?zeroE:epi; ++x;); break;
+ }
+ ASSERTWR(!NANTEST,EVNAN);
+#endif
+ R EVOK;
+}
+
 AHDR2(cirBD,D,B,D){ASSERTWR(n<=1&&1==m,EWIMAG); n^=REPSGN(n); R cirx(n,   (I)*x,z,y);}
 AHDR2(cirID,D,I,D){ASSERTWR(n<=1&&1==m,EWIMAG); n^=REPSGN(n); R cirx(n,   *x,z,y);}
 
@@ -335,6 +491,26 @@ AHDR2(cirDD,D,D,D){I k=(I)jround(*x);
  n^=REPSGN(n);   // convert complementary n to nonneg
  R cirx(n,k,z,y);
 }
+
+AHDR2(cirEE,E,E,E){I k=(I)jround(x->hi);
+ ASSERTWR(k==x->hi,EVDOMAIN); 
+ ASSERTWR(n<=1&&1==m,EWIMAG); // if more than one x value, retry as general case
+ n^=REPSGN(n);   // convert complementary n to nonneg
+ R jtcire(jt,n,k,z,y);
+}
+
+static E jtpospowE(J jt,E x,E y){
+ if(unlikely(0==y.hi))R (E){.hi=1.0,.lo=0.};
+ if(unlikely(0==y.hi))R (E){.hi=0<y.hi?0.0:inf,.lo=0.};
+ if(0<x.hi){
+  R f128toe(Sleef_expq1_u10(Sleef_mulq1_u05(etof128(y),Sleef_logq1_u10(etof128(x)))));
+ }
+ jt->jerr=EWIMAG;
+ R (E){.hi=0.0,.lo=0.};
+}    /* x^y where x and y are qp */
+
+#define pospowE(x,y) jtpospowE(jt,(x),(y))
+APFX(powEE, E,E,E, pospowE,,HDR1JERR)
 
 
 F2(jtlogar2){A z;I t;
@@ -355,21 +531,33 @@ F2(jtroot){A z;I t;
  if(!(t&XNUM))R expn2(mw,recip(ma));  // not inplaceable - could be IMAG
  z=rank2ex0(ma,mw,DUMMYSELF,jtxroota);
  switch(jt->jerr){
-  case EWIMAG: RESETERR; R expn2(cvt(CMPX,w),recip(cvt(CMPX,a)));
-  case EWRAT: 
-  case EWIRR:  RESETERR; R expn2(cvt(FL,  w),recip(cvt(FL,  a)));
-  default:     R z;
-}}
+ case EWIMAG: RESETERR; R expn2(cvt(CMPX,w),recip(cvt(CMPX,a)));
+ case EWRAT: 
+ case EWIRR:  RESETERR; R expn2(cvt(FL,  w),recip(cvt(FL,  a)));
+ default:     R z;
+ }
+}
 
 F1(jtjdot1){R tymes(a0j1,w);}
-F2(jtjdot2){R plus(a,tymes(a0j1,w));}
+// j. should preserve -0 when given real arguments
+F2(jtjdot2){
+ ARGCHK2(a,w); I at=AT(a), wt=AT(w);
+ if((~(SGNIFSPARSE(at)|SGNIFSPARSE(wt))&-(at&B01+INT+FL)&-(wt&B01+INT+FL))<0){A z;  // if both args real and not sparse
+  I ar=AR(a), wr=AR(w);
+  ASSERTAGREE(AS(a),AS(w),MIN(ar,wr))  // verify agreement
+  if(!(at&FL))RZ(a=cvt(FL,a)) if(!(wt&FL))RZ(w=cvt(FL,w))  // convert to FL if needed
+  RZ(IRS2(a,w,DUMMYSELF,0,0,jtover,z)) makewritable(z) AN(z)>>=1; AR(z)=MAX(AR(a),AR(w)); AT(z)=CMPX;  // z=a ,"0 w, then switch to CMPX
+  R z;
+ }
+ R plus(a,tymes(a0j1,w));
+}
 F1(jtrdot1){R expn1(jdot1(w));}
 F2(jtrdot2){R tymes(a,rdot1(w));}
 
 
 F1(jtpolar){ARGCHK1(w); A z; R cvt((AT(w)&SPARSE)+FL,df2(z,v2(10L,12L),w,qq(ds(CCIRCLE),v2(1L,0L))));}
 
-F1(jtrect){A e,z;B b;I r,t;P*wp,*zp;Z c;
+DF1(jtrect){A e,z;B b;I r,t;P*wp,*zp;Z c;
  ARGCHK1(w); 
  t=AT(w); r=AR(w); RESETRANK;   // Run as infinite rank
  ASSERT(!AN(w)||t&NUMERIC,EVDOMAIN);
@@ -384,5 +572,5 @@ F1(jtrect){A e,z;B b;I r,t;P*wp,*zp;Z c;
   SPB(zp,i,ca(SPA(wp,i)));
   SPB(zp,x,rect(SPA(wp,x)));
   R z;
- }else R IRS2(w,num(0),0,0,0,jtover,z);
+ }else R IRS2(w,num(0),self,0,0,jtover,z);
 }

@@ -1,4 +1,4 @@
-/* Copyright 1990-2009, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Conjunctions: Forks                                                     */
@@ -11,10 +11,10 @@
 
 // 9!:63 return [((AC of x) ; x) ;] inplacingflags ; < (AC of y) ; y
 F1(jtshowinplacing1){F1PREFIP;
-R link(sc((I)jtinplace&JTFLAGMSK),box(link(sc(AC(w)),w)));
+R jlink(sc((I)jtinplace&JTFLAGMSK),box(jlink(sc(AC(w)),w)));
 }
 F2(jtshowinplacing2){F2PREFIP;
-R link(link(sc(AC(a)),a),link(sc((I)jtinplace&JTFLAGMSK),box(link(sc(AC(w)),w))));
+R jlink(jlink(sc(AC(a)),a),jlink(sc((I)jtinplace&JTFLAGMSK),box(jlink(sc(AC(w)),w))));
 }
 
 FORK1(fork100,0x00) FORK1(fork101,0x01) FORK1(fork110,0x10) FORK1(fork111,0x11) FORK1(fork120,0x20) FORK1(fork121,0x21) 
@@ -35,13 +35,12 @@ static AF fork2tbl[6][5]={
 FORK2(jtfolk2,0x1000)    // this version used by reversions, where localuse may not be set
 
 // see if f is defined as [:, as a single name
-static B jtcap(J jt,A x){V*v;L *l;
- if(v=VAV(x),CTILDE==v->id&&NAME&AT(v->fgh[0])&&(l=syrd(v->fgh[0],jt->locsyms))&&(x=l->val))v=VAV(x);  // don't go through chain of names, since it might loop (on u) and it's ugly to chase the chain
- R CCAP==v->id;
+static B jtcap(J jt,A x){V*v;
+ if(v=VAV(x),CTILDE==v->id&&NAME&AT(v->fgh[0])&&(x=QCWORD(syrd(v->fgh[0],jt->locsyms)))){v=VAV(x); fa(x);}  // don't go through chain of names, since it might loop (on u) and it's ugly to chase the chain   syrd ra()s the value
+ R CCAP==v->id;  //
 }
 
-static DF1(jtcharmapa){V*v=FAV(self); R charmap(w,FAV(v->fgh[2])->fgh[0],v->fgh[0]);}
-static DF1(jtcharmapb){V*v=FAV(self); R charmap(w,FAV(v->fgh[0])->fgh[0],FAV(v->fgh[2])->fgh[0]);}
+
 
 FORK2(jthook2cell,0x118)
 FORK1(jthook1cell,0x110)
@@ -51,18 +50,19 @@ FORK1(jthook1cell,0x110)
 A jtfolk(J jt,A f,A g,A h){F2PREFIP;A p,q,x,y;AF f1=0,f2=0;B b;C c,fi,gi,hi;I flag,flag2=0,j,m=-1,fline,hcol;V*fv,*gv,*hv,*v;
  RZ(f&&g&&h);
  // by the parsing rules, g and h must be verbs here
+ A z; fdefallo(z);  // allocate the result early to free regs during function body
  gv=FAV(g); gi=gv->id;
  hv=FAV(h); hi=hv->id;
- D cct=0.0;  // cct to use, 0='use default'
+ D cct=0.0;  // cct to use for comparison/setintersect, 0='use default'
  // Start flags with ASGSAFE (if g and h are safe), and with INPLACEOK to match the setting of f1,f2.  Turn off inplacing that neither f nor h can handle
  if(NOUN&AT(f)){  /* nvv, including y {~ x i. ] */
+  // f will be INCORPed by fdef
   flag=(hv->flag&(VJTFLGOK1|VJTFLGOK2))+((gv->flag&hv->flag)&VASGSAFE);  // We accumulate the flags for the derived verb.  Start with ASGSAFE if all descendants are.
-  RZ(f=makenounasgsafe(jt, f))   // adjust usecount so that the value cannot be inplaced
   fline=5;  // set left argtype
   if(((AT(f)^B01)|AR(f)|BAV0(f)[0])==0&&BOTHEQ8(gi,hi,CEPS,CDOLLAR))f1=jtisempty;  // 0 e. $, accepting only boolean 0
   if(LIT&AT(f)&&1==AR(f)&&BOTHEQ8(gi,hi,CTILDE,CFORK)&&CFROM==ID(gv->fgh[0])){
    x=hv->fgh[0];
-   if(LIT&AT(x)&&1==AR(x)&&CIOTA==ID(hv->fgh[1])&&CRIGHT==ID(hv->fgh[2])){f1=jtcharmapa;  flag &=~(VJTFLGOK1);}  // (N {~ N i. ])
+   if(LIT&AT(x)&&1==AR(x)&&CIOTA==ID(hv->fgh[1])&&CRIGHT==ID(hv->fgh[2])){f1=jtcharmap;}  // (N {~ N i. ])  supports inplacing
   }
  }else{
   // not nvv
@@ -82,8 +82,6 @@ A jtfolk(J jt,A f,A g,A h){F2PREFIP;A p,q,x,y;AF f1=0,f2=0;B b;C c,fi,gi,hi;I fl
    flag2|=((hv->flag2&(VF2WILLOPEN1PROP|VF2WILLOPEN2WPROP|VF2WILLOPEN2APROP))&REPSGN(SGNIF(gv->flag2,VF2WILLOPEN1X)))<<(VF2WILLOPEN1X-VF2WILLOPEN1PROPX);
    // if u and v both propagate, the compound does so also
    flag2|=((hv->flag2&(VF2WILLOPEN1PROP|VF2WILLOPEN2WPROP|VF2WILLOPEN2APROP))&REPSGN(SGNIF(gv->flag2,VF2WILLOPEN1PROPX)));
-// obsolete    // Copy the open/raze status from v into u@v
-// obsolete    flag2 |= hv->flag2&(VF2WILLOPEN1|VF2WILLOPEN2W|VF2WILLOPEN2A|VF2USESITEMCOUNT1|VF2USESITEMCOUNT2W|VF2USESITEMCOUNT2A);
   }
   switch(fi){
   case CCAP:
@@ -94,11 +92,6 @@ A jtfolk(J jt,A f,A g,A h){F2PREFIP;A p,q,x,y;AF f1=0,f2=0;B b;C c,fi,gi,hi;I fl
    if(gi==CPOUND){f1=hi==CCOMMA?jtnatoms:f1; f1=hi==CDOLLAR?jtrank:f1;}  // [: # ,   [: # $
                break; /* [: g h */
   case CSLASH: if(BOTHEQ8(gi,hi,CDIV,CPOUND)&&CPLUS==FAV(fv->fgh[0])->id){f1=jtmean; flag|=VIRS1; flag &=~(VJTFLGOK1);} break;  /* +/%# */
-  case CAMP:   /* x&i.     { y"_ */
-  case CFORK:  /* (x i. ]) { y"_ */
-   if(hi==CQQ&&(y=hv->fgh[0],LIT&AT(y)&&1==AR(y))&&equ(ainf,hv->fgh[1])&&
-       (x=fv->fgh[0],LIT&AT(x)&&1==AR(x))&&CIOTA==ID(fv->fgh[1])&&
-       (fi==CAMP||CRIGHT==ID(fv->fgh[2]))){f1=jtcharmapb; flag &=~(VJTFLGOK1);} break;
   case CAT:    /* <"1@[ { ] */
    if(BOTHEQ8(gi,hi,CLBRACE,CRIGHT)){                                   
     p=fv->fgh[0]; q=fv->fgh[1]; 
@@ -106,7 +99,7 @@ A jtfolk(J jt,A f,A g,A h){F2PREFIP;A p,q,x,y;AF f1=0,f2=0;B b;C c,fi,gi,hi;I fl
    }
    break;
  // special code for x ((<[!.0] |) * ]) y, implemented as if !.0, also if <:
- #if (C_AVX&&SY_64) || EMU_AVX
+ #if C_AVX2 || EMU_AVX2
   case CHOOK:    // (< |[!.0]) * ]  or  ] * (< |[!.0])
    if(BOTHEQ8(gi,hi,CSTAR,CRIGHT) || BOTHEQ8(gi,fi,CSTAR,CRIGHT)){        
     V *hka=hi==CRIGHT?fv:hv;  // point to the time that must be the hook                           
@@ -124,7 +117,7 @@ A jtfolk(J jt,A f,A g,A h){F2PREFIP;A p,q,x,y;AF f1=0,f2=0;B b;C c,fi,gi,hi;I fl
   switch(fi==CCAP?gi:hi){
   case CQUERY:  if((hi&~1)==CPOUND){f2=jtrollk; flag &=~(VJTFLGOK2);}  break;  // [: ? #  or  [: ? $
   case CQRYDOT: if((hi&~1)==CPOUND){f2=jtrollkx; flag &=~(VJTFLGOK2);} break;  // [: ?. #  or  [: ?. $ 
-  case CICAP:   if(fi==CCAP){if(hi==CNE)f1=jtnubind; else if(FIT0(CNE,hv)){f1=jtnubind0; flag &=~(VJTFLGOK1);}}else if(hi==CEBAR){f2=jtifbebar; flag&=~VJTFLGOK2;} break;
+  case CICAP:   if(fi==CCAP){if(hi==CNE)f1=jtnubind; else if(FIT0(CNE,hv)){f1=jtnubind0; flag &=~(VJTFLGOK1);}}else if(hi==CEBAR){f2=jtifbebar; flag&=~VJTFLGOK2;} break;  // I. ~:  or  [: I. E.
   case CSLASH:  c=ID(gv->fgh[0])+1; m=-1;m=BETWEENC(c,CPLUS+1,CSTARDOT+1)?c:m;  // set m to 4-6 if [: + +. *./  h  [or  f   + +. *. mod    h/, never used]
                 if(fi==CCAP&&FAV(gv->fgh[0])->flag&FAV(h)->flag&VISATOMIC2){f2=jtfslashatg;}  // [: f/ g when f and g are both atomic, treat as special
                 break;
@@ -156,7 +149,7 @@ A jtfolk(J jt,A f,A g,A h){F2PREFIP;A p,q,x,y;AF f1=0,f2=0;B b;C c,fi,gi,hi;I fl
     flag|=(7+(((IINTER-II0EPS)&0xf)<<3));  // flag it like -.
     // if tolerance given on second -., it is now in cct
    }
- }
+  }
 #endif
 
   // comparison combinations II0EPS-IIFBEPS.  If the comparison is e. these go through indexofsub, but first the ranks have to be tested in compsc
@@ -176,49 +169,42 @@ A jtfolk(J jt,A f,A g,A h){F2PREFIP;A p,q,x,y;AF f1=0,f2=0;B b;C c,fi,gi,hi;I fl
   if(fi==CCAP){f=g; g=h; h=0;}  // dehydrate capped fork
   // If this fork is not a special form, set the flags to indicate whether the f verb does not use an
   // argument.  In that case h can inplace the unused argument.
-  fline=(CTTZI(atoplr(f)|0x80)+1)&7;  // codes are none,[,],@[,@],noun
+  fline=atoplr(f);  // codes are none,[,],@[,@],noun in f
  }
- hcol=(CTTZI(atoplr(h)|0x80)+1)&7;
+ hcol=atoplr(h);  // codes are none,[,],@[,@] in h
 
- A z=fdef(flag2,CFORK,VERB, f1,f2, f,g,h, flag, RMAX,RMAX,RMAX);
- RZ(z);
+ // if we are using the default functions, pull them from the tables
+ if(!f1)f1=fork1tbl[(0x200110>>(fline<<2))&3][(0b00110>>hcol)&1];  // fline: 0/3/4->0,  1/2->1, 5->2   hcol: / 0/3/4->0,  1/2->1
+ if(!f2){
+  f2=fork2tbl[fline][hcol]; f2=(I)jtinplace&JTFOLKNOHFN?jtfolk2:f2;  // NOHFN means the caller is going to fool with the result fork, so the EP is unreliable
+ }else{hcol=-1;}   // select the value we will put into localuse: hcol=-1 means cct, other hcol=routine address of h or h@]
+
+ fdeffillall(z,flag2,CFORK,VERB, f1,f2, f,g,h, flag, RMAX,RMAX,RMAX,fffv->localuse.lu0.cachedloc=0,if(hcol<0)FAV(z)->localuse.lu1.cct=cct;else FAV(z)->localuse.lu1.fork2hfn=hcol<=2?hv->valencefns[1]:FAV(hv->fgh[0])->valencefns[0]);
  
  // set localuse: for intersect or comparison combination, cct; for echt fork, the h routine to call
- if(!f2){
-  // if using the default handler, set the entry point
-  AF hfn=fork2tbl[fline][hcol]; hfn=(I)jtinplace&JTFOLKNOHFN?jtfolk2:hfn;  // NOHFN means the caller is going to fool with the result fork, so the EP is unreliable
-  FAV(z)->valencefns[1]=hfn;
-  FAV(z)->localuse.lu1.fork2hfn=hcol<=2?hv->valencefns[1]:FAV(hv->fgh[0])->valencefns[0];
- }else{FAV(z)->localuse.lu1.cct=cct;
- }
- if(!f1){
-  fline=(0x200110>>(fline<<2))&3;  // 0/3/4->0,  1/2->1, 5->2
-  hcol=(0b00110>>hcol)&1;  // / 0/3/4->0,  1/2->1
-  FAV(z)->valencefns[0]=fork1tbl[fline][hcol];
- }
  R z;
 }
 
 // Handlers for trains
-static DF1(taAV){TDECL; A t; RZ(df1(t,w,fs)); R hook(t,gs,mark);}  // adv A A/V
-static DF2(tca){TDECL; A t; RZ(df2(t,a,w,fs)); R hook(t,gs,mark);}  // conj C A
-static DF1(tNVc){TDECL; A z; R df2(z,fs,w,gs);}  // adv  V C or N C
-static DF1(tac){TDECL; A t; RZ(df1(t,w,fs)); R hook(t,gs,w);}  // adv  A C  adverbial hook
-static DF1(tcNV){TDECL; A z; R df2(z,w,gs,fs);}  // adv  C V or C N
-static DF2(tcc){TDECL; A t, tt; RZ(df2(t,a,w,fs)); RZ(df2(tt,a,w,gs)); R hook(t,tt,mark);}  // conj C C
+static DF1(taAV){F1PREFIP;TDECL; A t; RZ(df1(t,w,fs)); R hook(t,gs,mark);}  // adv A A/V
+static DF2(tca){F2PREFIP;TDECL; A t; RZ(df2(t,a,w,fs)); R hook(t,gs,mark);}  // conj C A
+static DF1(tNVc){F1PREFIP;TDECL; A z; R df2(z,fs,w,gs);}  // adv  V C or N C
+static DF1(tac){F1PREFIP;TDECL; A t; RZ(df1(t,w,fs)); R hook(t,gs,w);}  // adv  A C  adverbial hook
+static DF1(tcNV){F1PREFIP;TDECL; A z; R df2(z,w,gs,fs);}  // adv  C V or C N
+static DF2(tcc){F2PREFIP;TDECL; A t, tt; RZ(df2(t,a,w,fs)); RZ(df2(tt,a,w,gs)); R hook(t,tt,mark);}  // conj C C
 
-static DF1(taaa){TDECL; A z,t; RZ(df1(t,w,fs)); ASSERT(AT(t)&NOUN+VERB,EVSYNTAX); RZ(df1(z,t,gs)); ASSERT(AT(z)&NOUN+VERB,EVSYNTAX); R df1(t,z,hs);}  // adv A A A
-static DF2(tvvc){TDECL; A z,t; RZ(df2(t,a,w,hs)); ASSERT(AT(t)&VERB+CONJ,EVSYNTAX); R hook(fs,gs,t);}  // conj V V C  - C may return another C
-static DF2(tcVCc){TDECL; A z,t, tt; RZ(df2(t,a,w,fs)); RZ(df2(tt,a,w,hs)); R hook(t,gs,tt);}  // conj C V/C C
-static DF2(taav){TDECL; A z,t, tt; RZ(df1(t,a,fs)); RZ(df1(tt,w,gs)); R hook(t,tt,hs);}  // conj A A V
-static DF2(tcaa){TDECL; A z,t; RZ(df2(t,a,w,fs)); ASSERT(AT(t)&NOUN+VERB,EVSYNTAX); RZ(df1(z,t,gs)); ASSERT(AT(z)&NOUN+VERB,EVSYNTAX); R df1(t,z,hs);}  // adv A A A
-static DF1(tNVca){TDECL; A z,t; RZ(df1(t,w,hs)); R hook(fs,gs,t);}  // adv N/V C A
-static DF2(tNVcc){TDECL; A z,t; RZ(df2(t,a,w,hs)); R hook(fs,gs,t);}  // conj N/V C C
-static DF1(taVCNV){TDECL; A z,t; RZ(df1(t,w,fs)); R hook(t,gs,hs);}  // adv A V/C N/V
-static DF2(taca){TDECL; A z,t, tt; RZ(df1(t,a,fs)); RZ(df1(tt,w,hs)); R hook(t,gs,tt);}  // conj A C A
-static DF2(tacc){TDECL; A z,t, tt; RZ(df1(t,a,fs)); RZ(df2(tt,a,w,hs)); R hook(t,gs,tt);}  // conj A C C
-static DF2(tcVCNV){TDECL; A z,t; RZ(df2(t,a,w,fs)); R hook(t,gs,hs);}  // conj C V/C N/V
-static DF2(tcca){TDECL; A z,t, tt; RZ(df2(t,a,w,fs)); RZ(df1(tt,w,hs)); R hook(t,gs,tt);}  // conj C C A
+static DF1(taaa){F1PREFIP;TDECL; A z,t; RZ(df1(t,w,fs)); ASSERT(AT(t)&NOUN+VERB,EVSYNTAX); RZ(df1(z,t,gs)); ASSERT(AT(z)&NOUN+VERB,EVSYNTAX); R df1(t,z,hs);}  // adv A A A
+static DF2(tvvc){F2PREFIP;TDECL; A z,t; RZ(df2(t,a,w,hs)); ASSERT(AT(t)&VERB+CONJ,EVSYNTAX); R hook(fs,gs,t);}  // conj V V C  - C may return another C
+static DF2(tcVCc){F2PREFIP;TDECL; A z,t, tt; RZ(df2(t,a,w,fs)); RZ(df2(tt,a,w,hs)); R hook(t,gs,tt);}  // conj C V/C C
+static DF2(taav){F2PREFIP;TDECL; A z,t, tt; RZ(df1(t,a,fs)); RZ(df1(tt,w,gs)); R hook(t,tt,hs);}  // conj A A V
+static DF2(tcaa){F1PREFIP;TDECL; A z,t; RZ(df2(t,a,w,fs)); ASSERT(AT(t)&NOUN+VERB,EVSYNTAX); RZ(df1(z,t,gs)); ASSERT(AT(z)&NOUN+VERB,EVSYNTAX); R df1(t,z,hs);}  // adv A A A
+static DF1(tNVca){F1PREFIP;TDECL; A z,t; RZ(df1(t,w,hs)); R hook(fs,gs,t);}  // adv N/V C A
+static DF2(tNVcc){F2PREFIP;TDECL; A z,t; RZ(df2(t,a,w,hs)); R hook(fs,gs,t);}  // conj N/V C C
+static DF1(taVCNV){F1PREFIP;TDECL; A z,t; RZ(df1(t,w,fs)); R hook(t,gs,hs);}  // adv A V/C N/V
+static DF2(taca){F2PREFIP;TDECL; A z,t, tt; RZ(df1(t,a,fs)); RZ(df1(tt,w,hs)); R hook(t,gs,tt);}  // conj A C A
+static DF2(tacc){F2PREFIP;TDECL; A z,t, tt; RZ(df1(t,a,fs)); RZ(df2(tt,a,w,hs)); R hook(t,gs,tt);}  // conj A C C
+static DF2(tcVCNV){F2PREFIP;TDECL; A z,t; RZ(df2(t,a,w,fs)); R hook(t,gs,hs);}  // conj C V/C N/V
+static DF2(tcca){F2PREFIP;TDECL; A z,t, tt; RZ(df2(t,a,w,fs)); RZ(df1(tt,w,hs)); R hook(t,gs,tt);}  // conj C C A
 
 
 
@@ -249,8 +235,32 @@ static DF1(jthkindexofmaxmin){
 static DF2(jthklvl2){
  F2RANK(0,RMAX,jthklvl2,self);
  I comparand; RE(comparand=i0(a));  // get value to compare against
- RETF(num(((VAV(self)->flag>>VFHKLVLGTX)&1)^levelle(w,comparand-(VAV(self)->flag&VFHKLVLDEC))));  // decrement for < or >:; complement for > >:
+ RETF(num(((VAV(self)->flag>>VFHKLVLGTX)&1)^levelle(jt,w,comparand-(VAV(self)->flag&VFHKLVLDEC))));  // decrement for < or >:; complement for > >:
 }
+
+// table of half-verbs for executing (compare |).  We back the address to the phantom start of the verb block.
+// each half-verb is valid ONLY for DD functions, and thepointers to those functions are next to each other in the block nominally for (=|)
+static exeV cmpabsblk[6] = {
+ {.lu1.uavandx[1]=(sizeof(VA)*VA2CEQABS+sizeof(VA2)*(VA2CEQABS-VA2CGTABS)),.lc=VA2CEQABS},  // =
+ {.lu1.uavandx[1]=(sizeof(VA)*VA2CEQABS+sizeof(VA2)*(VA2CNEABS-VA2CGTABS)),.lc=VA2CNEABS},  // ~:
+ {.lu1.uavandx[1]=(sizeof(VA)*VA2CEQABS+sizeof(VA2)*(VA2CLTABS-VA2CGTABS)),.lc=VA2CLTABS},  // <
+ {.lu1.uavandx[1]=(sizeof(VA)*VA2CEQABS+sizeof(VA2)*(VA2CLEABS-VA2CGTABS)),.lc=VA2CLEABS},  // <:
+ {.lu1.uavandx[1]=(sizeof(VA)*VA2CEQABS+sizeof(VA2)*(VA2CGEABS-VA2CGTABS)),.lc=VA2CGEABS},  // >:
+ {.lu1.uavandx[1]=(sizeof(VA)*VA2CEQABS+sizeof(VA2)*(VA2CGTABS-VA2CGTABS)),.lc=VA2CGTABS},  // >
+};
+
+
+// (compare |) dyadic, reverting if not float
+static DF2(jthkcmpabs){DECLFG;F2PREFIP;A z; if(unlikely(!(AT(a)&AT(w)&FL)))R jthook2cell(jtinplace,a,w,self);
+ z=jtatomic2(jtinplace,a,w,(A)((I)&cmpabsblk[FAV(self)->localuse.lu1.linkvb]-offsetof(V,localuse.lu1)-AKXR(0)));
+ RETF(z);
+}
+// (compare!.n |) dyadic, reverting if not float
+static DF2(jthkcmpfitabs){DECLFG;F2PREFIP;A z; if(unlikely(!(AT(a)&AT(w)&FL)))R jthook2cell(jtinplace,a,w,self);
+ PUSHCCT(FAV(FAV(self)->fgh[0])->localuse.lu1.cct) z=jtatomic2(jtinplace,a,w,(A)((I)&cmpabsblk[FAV(self)->localuse.lu1.linkvb]-offsetof(V,localuse.lu1)-AKXR(0)));
+ POPCCT RETF(z);
+}
+
 
 #define TYPETEST(t) ((((1LL<<(ADVX-ADVX))|(2LL<<(CONJX-ADVX))|(3LL<<(VERBX-ADVX)))>>(CTTZ((((t)&CONJ+ADV+VERB)|(1LL<<31))>>ADVX)))&3)  // type class: noun adv conj vecb
 #define TYPE3(t0,t1,t2) (TYPETEST(t0)+4*TYPETEST(t1)+16*TYPETEST(t2))
@@ -279,6 +289,7 @@ static struct {
 // This handles all bident/tridents except N/V V V forks.  If h is CAVN, we have a trident
 A jthook(J jt,A a,A w,A h){AF f1=0,f2=0;C c,d,e,id;I flag=VFLAGNONE,linktype=0;V*u,*v;
  ARGCHK3(a,w,h);
+ A z; fdefallo(z)
  if(likely(!(LOWESTBIT(AT(h))&NOUN+VERB+ADV+CONJ))){
   // bident.
   if(AT(a)&AT(w)&VERB){
@@ -287,15 +298,18 @@ A jthook(J jt,A a,A w,A h){AF f1=0,f2=0;C c,d,e,id;I flag=VFLAGNONE,linktype=0;V
    v=FAV(w); d=v->id; e=ID(v->fgh[0]);
    // Set flag to use: ASGSAFE if both operands are safe; and FLGOK init to OK as for hook, but change as needed to match f1,f2
    flag=((u->flag&v->flag)&VASGSAFE)+(VJTFLGOK1|VJTFLGOK2);  // start with in-place enabled, as befits hook1/hook2
-   if(d==CCOMMA)switch(c){   // all of this except for ($,) is handled by virtual blocks
-    case CDOLLAR: f2=jtreshape; flag+=VIRS2; break;  // ($,) is inplace
+   if(d==CCOMMA){   // all forms except for ($,) is handled by virtual blocks
+    if(c==CDOLLAR){f2=jtreshape; flag+=VIRS2;}  // ($,) is inplace
    }else if(d==CBOX){
-    if(c==CRAZE){f2=jtlink; linktype=ACINPLACE;  // (;<)
-    }else if(c==CCOMMA){f2=jtlink; linktype=ACINPLACE+1;  // (,<)
+    if(c==CRAZE){f2=jtjlink; linktype=ACINPLACE;  // (;<)
+    }else if(c==CCOMMA){f2=jtjlink; linktype=ACINPLACE+1;  // (,<)
     }
    }else if(d==CLDOT){   // (compare L.)
     I comptype=0; comptype=c==CLT?VFHKLVLGT:comptype; comptype=c==CGT?VFHKLVLDEC:comptype; comptype=c==CLE?VFHKLVLDEC+VFHKLVLGT:comptype; comptype=c==CGE?4:comptype;
     if(comptype){flag|=comptype; f2=jthklvl2; flag &=~VJTFLGOK2;}
+   }else if(d==CSTILE){   // (compare |) and (compare!.n |)
+    if(BETWEENC(c,CEQ,CGT)){f2=jthkcmpabs; linktype=c-CEQ; flag &=~VJTFLGOK2;}  // (compare |) - go to routine handling it; linktype is compare routine#
+    else if(u->valencefns[1]==jtfitcteq){f2=jthkcmpfitabs; linktype=FAV(u->fgh[0])->id-CEQ; flag &=~VJTFLGOK2;}  // (compare!.n |) - go 
    }else{
     switch(c){
     case CSLDOT:  if(COMPOSE(d)&&e==CIOTA&&CPOUND==ID(v->fgh[1])){  // (f/. i.@#)  or @: & &:
@@ -309,55 +323,52 @@ A jthook(J jt,A a,A w,A h){AF f1=0,f2=0;C c,d,e,id;I flag=VFLAGNONE,linktype=0;V
     case CFROM:   if(d==CGRADE){f2=jtordstati; flag &=~VJTFLGOK2;} else if(d==CTILDE&&e==CGRADE){f2=jtordstat; flag &=~VJTFLGOK2;}
     }
    }
+// scaf should inherit WILLOPEN/PROP from u and v
    // Return the derived verb
-   A z;RZ(z=fdef(0,CHOOK, VERB, f1,f2, a,w,0L, flag, RMAX,RMAX,RMAX));
-   FAV(z)->localuse.lu1.linkvb=linktype; R z;  // if it's a form of ;, install the form
+   fdeffillall(z,0,CHOOK, VERB, f1,f2, a,w,0L, flag, RMAX,RMAX,RMAX,fffv->localuse.lu0.cachedloc=0,FAV(z)->localuse.lu1.linkvb=linktype)
+   R z;
   // All other cases produce a modifier unless they are immediately executable (V N or N/V A)
-  }else{A z;
-#if 0  // obsolete
-I pos=ADV;A z;  // part of speech to generate
-   if(AT(w)&ADV){
-    if(AT(a)&ADV)f1=taAV;  // A A
-    else if(AT(a)&CONJ){f1=tca; pos=CONJ;}  // C A, producing conj
-    else if(AT(a)&NOUN+VERB)R df1(z,a,w);  // N/V A - execute it
-   }else if(AT(w)&CONJ){
-    if(AT(a)&NOUN+VERB){
-     f1=tvc; id=FAV(w)->id;
-     if(BOX&AT(a)&&(id==CATDOT||id==CGRAVE||id==CGRCO)&&gerexact(a))flag+=VGERL;  // detect gerund@.  gerund`  gerund `:   and mark the compound
-    }else if(AT(a)&ADV)f1=tac;   // A C, producing adv
-   }else if(AT(w)&NOUN+VERB&&AT(a)&CONJ){
-    f1=tcv; id=FAV(a)->id;
-    if(BOX&AT(w)&&(id==CGRAVE||id==CPOWOP&&1<AN(w))&&gerexact(w))flag+=VGERR;  // detect `gerund and ^:gerund  and mark the compound
-   }else if(AT(w)&VERB&&AT(a)&ADV)f1=taAV;  // A V
-   else if(AT(a)&VERB)R df1(z,w,a);  // must be V N - execute it
-   ASSERT(f1,EVSYNTAX);  // Check for legal combination Note: EDGE CAVN ASGN (always an error) passes through here
-   R fdef(0,CADVF, t, f1,f1, a,w,0L, flag, 0L,0L,0L);
-#else
+  }else{
   // we might enter here with an executable: V N or N/V A, as a result of executing an invisible modifier.  V V was handled above
   I rtnx=TYPE2(AT(a),AT(w));  // the combination being parsed
   AF rtn=bidents[rtnx].fn;  // action routine
   I t=bidents[rtnx].type;  // type: ADV/CONJ
-  ASSERT(t,EVSYNTAX);  // error if unimplemented combination
+  if(unlikely(t==0)){
+   // unexecutable bident.  Fail as a syntax error and call eformat as a pre-exec error with a holding an INT
+   // list of the parts of speech of the unexecutable fragment
+   jsignal(EVSYNTAX);
+   GAT0(z,INT,2,1); IAV1(z)[0]=rtnx&3; IAV1(z)[1]=rtnx>>2;  // install parts of speech in order
+   jteformat(jt,ds(CENQUEUE),z,zeroionei(1),0); R0;
+  }
   if(rtn==0)R df1(z,t==VERB?a:w,t==VERB?w:a);  // V N, N/V A: we must execute immediately rather than returning a modifier for the trident.  VERB means N/V A
   // special processing: for display purposes only, we flag the gerunds in gerund@. gerund` gerund`:   `gerund ^:gerund
   if(BOX&AT(a)&&AT(w)&CONJ&&(FAV(w)->id==CATDOT||FAV(w)->id==CGRAVE||FAV(w)->id==CGRCO)&&gerexact(a))flag+=VGERL;  // detect gerund@.  gerund`  gerund `:   and mark the compound
   if(BOX&AT(w)&&AT(a)&CONJ&&(FAV(a)->id==CGRAVE||FAV(a)->id==CPOWOP&&1<AN(w))&&gerexact(w))flag+=VGERR;  // detect `gerund and ^:gerund  and mark the compound
-  R fdef(0,CADVF, t, rtn,rtn, a,w,0, flag, 0L,0L,0L);  // only one of the rtns is ever used.  h=0 to indicate bident
-#endif
+  // if the unexecutable bident is all nouns or primitive ACVs, mark the derived modifier as NAMELESS.  This is aimed mostly at each and every
+  I flag2=VF2NAMELESS; A ta=a; ta=AT(a)&NOUN?ds(CPLUS):ta; flag2&=(FAV(ta)->flag2<<(VF2NAMELESSX-VF2PRIMX));  // CPLUS to make bouns look primitive
+                         ta=w; ta=AT(w)&NOUN?ds(CPLUS):ta; flag2&=(FAV(ta)->flag2<<(VF2NAMELESSX-VF2PRIMX));
+  fdeffill(z,flag2,CADVF, t, rtn,rtn, a,w,0, flag, 0L,0L,0L) R z;  // only one of the rtns is ever used.  h=0 to indicate bident
 
   }
- }else{A z;
+ }else{
   // trident.  we might enter here with an executable: N/V V V fork  or N/V C N/V  or N V N, as a result of executing an invisible modifier
   // here for all tridents except original forks.  forks resulting from execution of other trains are possible
   I rtnx=TYPE3(AT(a),AT(w),AT(h));  // the combination being parsed
   AF rtn=tridents[rtnx].fn;  // action routine
   I t=tridents[rtnx].type;  // type: ADV/CONJ
-  ASSERT(t,EVSYNTAX);  // error if unimplemented combination
+  if(unlikely(t==0)){
+   // unexecutable trident.  Fail as a syntax error and call eformat as a pre-exec error with a holding an INT
+   // list of the parts of speech of the unexecutable fragment
+   jsignal(EVSYNTAX);
+   GAT0(z,INT,2,1); IAV1(z)[0]=rtnx&3; IAV1(z)[1]=(rtnx>>2)&3; IAV1(z)[2]=rtnx>>4;  // install parts of speech in order
+   jteformat(jt,ds(CENQUEUE),z,zeroionei(1),0); R0;
+  }
   if(t==MARK)R folk(a,w,h);  // the one way to create a fork
   if(rtn==0)R df2(z,a,h,w);  // N V N, N/V C N/V: we must execute immediately rather than returning a modifier for the trident
- // obsolete   // special processing: gerund@. gerund` gerund`:   `gerund ^:gerund   must be flagged
- // obsolete   if(BOX&AT(a)&&AT(w)&CONJ&&(FAV(w)->id==CATDOT||FAV(w)->id==CGRAVE||FAV(w)->id==CGRCO)&&gerexact(a))flag+=VGERL;  // detect gerund@.  gerund`  gerund `:   and mark the compound
- // obsolete   if(BOX&AT(h)&&AT(w)&CONJ&&(FAV(w)->id==CGRAVE||FAV(w)->id==CPOWOP&&1<AN(h))&&gerexact(h))flag+=VGERR;  // detect `gerund and ^:gerund  and mark the compound
-  R fdef(0,CADVF, t, rtn,rtn, a,w,h, flag, 0L,0L,0L);  // only one of the rtns is ever used
+  // if the unexecutable trident is all nouns or primitive ACVs, mark the derived modifier as NAMELESS.
+  I flag2=VF2NAMELESS; A ta=a; ta=AT(a)&NOUN?ds(CPLUS):ta; flag2&=(FAV(ta)->flag2<<(VF2NAMELESSX-VF2PRIMX));  // CPLUS to make bouns look primitive
+                         ta=w; ta=AT(w)&NOUN?ds(CPLUS):ta; flag2&=(FAV(ta)->flag2<<(VF2NAMELESSX-VF2PRIMX));
+                         ta=h; ta=AT(h)&NOUN?ds(CPLUS):ta; flag2&=(FAV(ta)->flag2<<(VF2NAMELESSX-VF2PRIMX));
+  fdeffill(z,flag2,CADVF, t, rtn,rtn, a,w,h, flag, 0L,0L,0L) R z;  // only one of the rtns is ever used
  }
 }

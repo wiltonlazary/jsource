@@ -1,7 +1,7 @@
 18!:4 <'z'
 3 : 0 ''
 
-JLIB=: '9.03.03'
+JLIB=: '9.6.5'
 
 notdef=. 0: ~: 4!:0 @ <
 hostpathsep=: ('/\'{~6=9!:12'')&(I. @ (e.&'/\')@] })
@@ -29,7 +29,11 @@ end.
 if. notdef 'UNAME' do.
   if. IFUNIX do.
     if. -.IFIOS do.
-      UNAME=: (2!:0 'uname')-.10{a.
+      if. 'wasm'-:4{.9!:56 ::('Unknown'"_)'cpu' do.
+        UNAME=: 'Wasm'
+      else.
+        UNAME=: (2!:0 ::('Unknown'"_)'uname')-.10{a.
+      end.
     else.
       UNAME=: 'Darwin'
     end.
@@ -43,10 +47,12 @@ end.
 if. notdef 'FHS' do.
   FHS=: IFUNIX>'/'e.LIBFILE
 end.
+if. notdef 'RUNJSCRIPT' do.
+  RUNJSCRIPT=: 0
+end.
 if. notdef 'IFRASPI' do.
-  if. UNAME -: 'Linux' do.
-    cpu=. 2!:0 ::(''"_) 'cat /proc/cpuinfo'
-    IFRASPI=: (1 e. 'BCM2708' E. cpu) +. (1 e. 'BCM2709' E. cpu) +. (1 e. 'BCM2710' E. cpu) +. 1 e. 'BCM2711' E. cpu
+  if. ((<UNAME)e.'Linux';'OpenBSD';'FreeBSD') do.
+    IFRASPI=: (<9!:56'cpu') e. 'arm';'arm64'
   else.
     IFRASPI=: 0
   end.
@@ -55,7 +61,7 @@ if. IF64 +. IFIOS do.
   IFWOW64=: 0
 else.
   if. IFUNIX do.
-    IFWOW64=: '64'-:_2{.(2!:0 (UNAME-:'Android'){::'uname -m';'getprop ro.product.cpu.abi')-.10{a.
+    IFWOW64=: '64'-:_2{.(2!:0 ::(''"_)(UNAME-:'Android'){::'uname -m';'getprop ro.product.cpu.abi')-.10{a.
   else.
     IFWOW64=: 'AMD64'-:2!:5'PROCESSOR_ARCHITEW6432'
   end.
@@ -73,9 +79,10 @@ end.
 
 assert. IFQT *: IFJA
 )
-jcwdpath=: jpathsep@(1!:43@(0&$),])@((*@# # '/'"_),])
+jcwdpath=: jpathsep@(1!:43@(0&$) ,`(, }.)@.(('/' = {:)@:[ *. ('/' = {.)@:]) ])@((*@# # '/'"_) , ])
 jsystemdefs=: 3 : 0
 xuname=. UNAME
+xuname=. 'Linux'"_^:(xuname-:'Wasm') xuname
 if. 0=4!:0 <f=. y,'_',(tolower xuname),(IF64#'_64'),'_j_' do.
   0!:100 toHOST f~
 else.
@@ -103,8 +110,7 @@ end.
 if. (<'home') -.@e. {."1 SystemFolders do.
   if. 'Win'-:UNAME do. t=. 2!:5'USERPROFILE'
   elseif. 'Android'-:UNAME do. t=. '/sdcard'
-  elseif. 'Darwin'-:UNAME do. t=. (0-:t){::'';~t=. 2!:5'HOME'
-  elseif. 'Linux'-:UNAME do. t=. (0-:t){::'';~t=. 2!:5'HOME'
+  elseif. ((<UNAME)e.'Linux';'OpenBSD';'FreeBSD';'Darwin') do. t=. (0-:t){::'';~t=. 2!:5'HOME'
   elseif. do. t=. ''
   end.
   if. (''-:t)+.((,'/')-:t)+.('/root'-:t)+.('/usr/'-:5{.t) do.
@@ -117,8 +123,7 @@ end.
 if. (<'temp') -.@e. {."1 SystemFolders do.
   if. 'Win'-:UNAME do. 1!:5 ::] <t=. (2!:5'USERPROFILE'),'\Temp'
   elseif. 'Android'-:UNAME do. t=. '/sdcard'
-  elseif. 'Darwin'-:UNAME do. 1!:5 ::] <t=. '/tmp/',":2!:6''
-  elseif. 'Linux'-:UNAME do. 1!:5 ::] <t=. '/tmp/',":2!:6''
+  elseif. ((<UNAME)e.'Linux';'OpenBSD';'FreeBSD';'Darwin') do. 1!:5 ::] <t=. '/tmp/',":2!:6''
   elseif. do. t=. ''
   end.
   SystemFolders=: SystemFolders, 'temp';t
@@ -131,14 +136,35 @@ end.
 18!:4 <'z'
 18!:4 <'z'
 UNXLIB=: ([: <;._1 ' ',]);._2 (0 : 0)
-libc.so.6 libc.so libc.dylib libc.so
-libz.so.1 libz.so libz.dylib libz.so
-libsqlite3.so.0 libsqlite.so libsqlite3.dylib libsqlite3.so
-libxml2.so.2 libxml2.so libxml2.dylib libxml2.so
+libc.so.6 libc.so.7 libc.so.7 libc.so libc.dylib libc.so
+libz.so.1 libz.so.7 libz.so.6 libz.so libz.dylib libz.so
+libsqlite3.so.0 libsqlite3.so.0 libsqlite3.so.0 libsqlite.so libsqlite3.dylib libsqlite3.so
+libxml2.so.2 libxml2.so.18.0 libxml2.so.2 libxml2.so libxml2.dylib libxml2.so
+libpcre2-8.so.0 libpcre2-8.so.0.6 libpcre2-8.so.0 libpcre2-8.so libpcre2-8.dylib libpcre2-8.so
+)
+3 : 0^:((<UNAME)e.'Linux';'OpenBSD';'FreeBSD')''
+b=. (<UNAME)i.~'Linux';'OpenBSD';'FreeBSD'
+a=. 2!:0 ::(''"_) b{::'/sbin/ldconfig -p';'/sbin/ldconfig -r';'/sbin/ldconfig -r'
+if. #a1=. I. '/libc.so.' E. a do.
+  UNXLIB=: (<({.~i.&(10{a.))}.a}.~{.a1) (<0,b)}UNXLIB
+end.
+if. #a1=. I. '/libz.so.' E. a do.
+  UNXLIB=: (<({.~i.&(10{a.))}.a}.~{.a1) (<1,b)}UNXLIB
+end.
+if. #a1=. I. '/libsqlite3.so.' E. a do.
+  UNXLIB=: (<({.~i.&(10{a.))}.a}.~{.a1) (<2,b)}UNXLIB
+end.
+if. #a1=. I. '/libxml2.so.' E. a do.
+  UNXLIB=: (<({.~i.&(10{a.))}.a}.~{.a1) (<3,b)}UNXLIB
+end.
+if. #a1=. I. '/libpcre2-8.so.' E. a do.
+  UNXLIB=: (<({.~i.&(10{a.))}.a}.~{.a1) (<4,b)}UNXLIB
+end.
+''
 )
 unxlib=: 3 : 0
-r=. (;: 'c z sqlite3 libxml2') i. <,y
-c=. (;: 'Linux Android Darwin') i. <UNAME_z_
+r=. (;: 'c z sqlite3 libxml2 pcre2') i. <,y
+c=. (;: 'Linux OpenBSD FreeBSD Android Darwin') i. <UNAME_z_
 (<r,c) {:: UNXLIB_z_
 )
 18!:4 <'z'
@@ -214,17 +240,19 @@ if. 1 < #$y do. <"_1 y return. end.
 )
 datatype=: 3 : 0
 n=. 1 2 4 8 16 32 64 128 1024 2048 4096 8192 16384 32768 65536 131072 262144
+n=. n,5 6 7 9 10 11
 t=. '/boolean/literal/integer/floating/complex/boxed/extended/rational'
 t=. t,'/sparse boolean/sparse literal/sparse integer/sparse floating'
 t=. t,'/sparse complex/sparse boxed/symbol/unicode/unicode4'
+t=. t,'/integer1/integer2/integer4/floating2/floating4/floating16'
 (n i. 3!:0 y) pick <;._1 t
 )
 def=: :
 define=: : 0
 H=. '0123456789ABCDEF'
 h=. '0123456789abcdef'
-dfh=: 16 #. 16 | (H,h) i. ]
-hfd=: h {~ 16 #.^:_1 ]
+dfh=: (16 #. 16 | (H,h) i. ]) :.hfd
+hfd=: (h {~ 16 #.^:_1 ]) :.dfh
 4!:55 'H';'h'
 do=: ".
 drop=: }.
@@ -363,6 +391,14 @@ toupper=: 3 : 0`((((65+i.26){a.)(97+i.26)}a.) {~ a. i. ])@.(2 = 3!:0)
 x=. I. 26 > n=. ((97+i.26){a.) i. t=. ,y
 ($y) $ ((x{n) { (65+i.26){a.) x}t
 )
+
+3 : 0''
+try.
+  tolower=: 0&(3!:12)
+  toupper=: 1&(3!:12)
+catch. end.
+''
+)
 t=. <;._1 '/invalid name/not defined/noun/adverb/conjunction/verb/unknown'
 type=: {&t@(2&+)@(4!:0)&boxopen
 ucp=: 7&u:
@@ -494,8 +530,6 @@ memu=: '' 1 : 'try. 15!:15 m catch. a: { ] return. end. 15!:15'
 cdf=: 15!:5
 cder=: 15!:10
 cderx=: 15!:11
-gh=. 15!:8
-fh=. 15!:9
 symget=: 15!:6
 symset=: 15!:7
 symdat=: 15!:14
@@ -739,7 +773,7 @@ if. def e.~ <,':' do.
 end.
 min=. 0>.ln-before [ max=. (<:#def)<.ln+after
 ctx=. ((,.ln=range){' >'),"1 '[',"1 (":,.range) ,"1 ('] ') ,"1 >def{~range=. min + i. >:max-min
-> (<'@@ ', name, '[', (dyad#':'), (":ln) ,'] *', (nc{' acv'),' @@ ', src), def0, <"1 ctx
+; ,&LF&.> (<'@@ ', name, '[', (dyad#':'), (":ln) ,'] *', (nc{' acv'),' @@ ', src), def0, <@dtb "1 ctx
 )
 dbg=: 3 : 0
 if. -.IFQT do.
@@ -749,8 +783,8 @@ if. y do.
   if. _1 = 4!:0 <'jdb_open_jdebug_' do.
     0!:0 <jpath '~addons/ide/qt/debugs.ijs'
   end.
-  jdb_open_jdebug_''
-  13!:0 [ 1
+  jdb_open_jdebug_ y
+  13!:0 y
 else.
   jdb_close_jdebug_ :: ] ''
   13!:15 ''
@@ -1332,7 +1366,7 @@ require 'pacman'
 do_install_jpacman_ y
 )
 getqtbin=: 3 : 0
-if. (<UNAME) -.@e. 'Linux';'Darwin';'Win' do. return. end.
+if. (<UNAME) -.@e. 'Linux';'OpenBSD';'FreeBSD';'Darwin';'Win' do. return. end.
 if. IFQT do.
   smoutput 'must run from jconsole' return.
 end.
@@ -1352,9 +1386,18 @@ deb=: #~ (+. 1: |. (> </\))@(' '&~:)
 debc=: #~"1 [: (+. (1: |. (> </\))) ' '&(+./ .~:)
 delstring=: 4 : ';(x E.r) <@((#x)&}.) ;.1 r=. x,y'
 detab=: ' ' I.@(=&TAB@])} ]
-dlb=: }.~ =&' ' i. 0:
-dltb=: #~ [: (+./\ *. +./\.) ' '&~:
-dtb=: #~ [: +./\. ' '&~:
+3 : 0''
+try.
+  dlb=: 1&(128!:11)
+  dltb=: 2&(128!:11)
+  dtb=: 0&(128!:11)
+catch.
+  dlb=: }.~ =&' ' i. 0:
+  dltb=: #~ [: (+./\ *. +./\.) ' '&~:
+  dtb=: #~ [: +./\. ' '&~:
+end.
+''
+)
 joinstring=: ''&$: : (#@[ }. <@[ ;@,. ])
 ljust=: (|.~ +/@(*./\)@(' '&=))"1
 rjust=: (|.~ -@(+/)@(*./\.)@(' '&=))"1
@@ -1406,6 +1449,11 @@ d=. ~: /\ a #^:_1 c ~: }: 0, c
 }. (a >: d) # txt
 )
 dquote=: ('"'&,@(,&'"'))@ (#~ >:@(=&'"'))
+dquotex=: 3 : 0
+s=. y#~ >: m=. (=&'"') y
+p=. (i.#y)#~>: m
+('"'&,@(,&'"')) '\' (p i.(I.m))}s
+)
 dtbs=: 3 : 0
 CRLF dtbs y
 :
@@ -1417,6 +1465,7 @@ msk=. blk >: ndx e. b # ndx
 }: msk # txt
 )
 rplc=: stringreplace~
+rplci=: stringreplacei~
 fstringreplace=: 4 : 0
 nf=. 'no match found'
 y=. fboxname y
@@ -1500,6 +1549,73 @@ ind=. ; bgn + each hnx { cnt # i.each newlen
 rep=. ; hnx { cnt # new
 rep ind} exp # txt
 )
+stringreplacei=: 4 : 0
+
+txt=. ,y
+t=. _2 [\ ,x
+old=. {."1 t
+new=. {:"1 t
+oldlen=. # &> old
+newlen=. # &> new
+
+if. *./ 1 = oldlen do.
+
+  hit=. (;old) i.&tolower txt
+  ndx=. I. hit < #old
+
+  if. 0 e. $ndx do. txt return. end.
+
+  cnt=. 1
+  exp=. hit { newlen,1
+  hnx=. ndx { hit
+  bgn=. ndx + +/\ 0, (}: hnx) { newlen - 1
+
+else.
+
+  hit=. old (I. @ E.)&tolower each <txt
+  cnt=. # &> hit
+
+  if. 0 = +/ cnt do. txt return. end.
+
+  bgn=. set=. ''
+
+  pick=. > @ {
+  diff=. }. - }:
+
+  for_i. I. 0 < cnt do.
+    ln=. i pick oldlen
+    cx=. (i pick hit) -. set, ,bgn -/ i.ln
+    while. 0 e. b=. 1, <:/\ ln <: diff cx do. cx=. b#cx end.
+    hit=. (<cx) i} hit
+    bgn=. bgn, cx
+    set=. set, ,cx +/ i.ln
+  end.
+
+  cnt=. # &> hit
+  msk=. 0 < cnt
+  exp=. (#txt) $ 1
+  del=. newlen - oldlen
+
+  if. #add=. I. msk *. del > 0 do.
+    exp=. (>: (add{cnt) # add{del) (;add{hit) } exp
+  end.
+
+  if. #sub=. I. msk *. del < 0 do.
+    sbx=. ; (;sub{hit) + each (sub{cnt) # i. each sub{del
+    exp=. 0 sbx } exp
+  end.
+
+  hit=. ; hit
+  ind=. /: (#hit) $ 1 2 3
+  hnx=. (/: ind { hit) { ind
+  bgn=. (hnx { hit) + +/\ 0, }: hnx { cnt # del
+
+end.
+
+ind=. ; bgn + each hnx { cnt # i.each newlen
+rep=. ; hnx { cnt # new
+rep ind} exp # txt
+)
 undquote=: (#~ -.@('""'&E.))@}:@}.^:(('"' = {.) *. '"' = {:)
 cutpara=: 3 : 0
 txt=. topara y
@@ -1535,7 +1651,7 @@ b=. b > (1,}:b) +. }.c,0
 )
 18!:4 <'z'
 3 : 0''
-if. IFIOS do.
+if. IFIOS>IFQT do.
   r=. 'Engine: ',9!:14''
   r=. r,LF,'Library: ',JLIB
   r=. r,LF,'J/iOS Version: ',VERSION
@@ -1550,7 +1666,7 @@ NB.%break.ijs - break utilities
 NB.-This script defines break utilities and is included in the J standard library.
 NB.-Definitions are loaded into the z locale.
 NB.-
-NB.-`setbreak 'default'` is done by profile for Jqt. JHS and jconsole can use ctrl+c. 
+NB.-`setbreak 'default'` is done by profile for Jqt. JHS and jconsole can use ctrl+c.
 NB.-
 NB.-setbreak creates file `~break/Pid.Class` and writes 0 to the first byte.
 NB.-
@@ -1700,7 +1816,7 @@ if. 1 e. p e. CasePaths_j_ do. y else. tolower y end.
 )
 3 : 0''
 if. UNAME-:'Darwin' do.
-  filecase=: tolower
+  filecase=: tolower`]@.IFIOS
   isroot=: '/' = {.
 elseif. IFUNIX do.
   filecase=: ]
@@ -1810,7 +1926,32 @@ n=. I. m=. m +. u < x > 126
 s=. '\',.}.1 ": 8 (#.^:_1) 255,n{x
 s ((n+3*i.#n)+/i.4)} (>:3*m)#t
 )
-
+revinfo=: 3 : 0
+v=. 9!:14''
+if. '.' e. (v i. '/') {. v do.
+  res=. 8 {. <;._1 '/',v
+  a=. 0 pick res
+  ndx=. a i. '-'
+  beta=. {. 0 ". (ndx+5) }. a
+  vno=. 100 #. (0 ".&> <;._1 '.' 0} ndx {. a), beta
+  vno;res
+else.
+  res=. 9 {. <;._1 '/',v
+  'a b'=. 0 3 { res
+  res=. (<<<0 3) {res
+  res=. (('www.jsoftware.com' -: 3 pick res){'na';'GPL3') 2} res
+  'm n'=. ": each ver=. 0 100 #: 0 ". }. a
+  num=. _97 + a.i. {:b
+  if. 'r' = {. b do.
+    rev=. (num+1),0
+    vst=. 'j',m,'.',n,'.',":num+1
+  else.
+    rev=. 0,num
+    vst=. 'j',m,'.',n,'.0-beta',":num
+  end.
+  (100 #.ver,rev);vst;res
+end.
+)
 rmdir=: 3 : 0
 r=. 1;'not a directory: ',":y
 if. 0=#y do. r return. end.
@@ -1820,7 +1961,7 @@ if. 'd' ~: 4 { 4 pick {. d do. r return. end.
 if. IFWIN do.
   shell_jtask_ 'rmdir "',y,'" /S /Q'
 else.
-  hostcmd_j_ 'rm -rf ',((-.UNAME-:'Darwin')#'--preserve-root '),y
+  hostcmd_j_ 'rm -rf ',((UNAME-:'Linux')#'--preserve-root '),y
 end.
 (#1!:0 y);''
 )
@@ -1905,7 +2046,7 @@ end.
 if. IFJHS do.
   redirecturl_jijxm_=: file2url cmd
   EMPTY return.
-elseif. IFIOS do.
+elseif. IFIOS>IFQT do.
   jh '<a href="',(file2url cmd),'"</a>'
   EMPTY return.
 end.
@@ -1927,7 +2068,7 @@ case. do.
   if. 0 = #browser do.
     browser=. dfltbrowser''
   end.
-  browser=. dquote (browser;Browser_nox_j_){::~ nox=. (UNAME-:'Linux') *. (0;'') e.~ <2!:5 'DISPLAY'
+  browser=. dquote (browser;Browser_nox_j_){::~ nox=. ((<UNAME)e.'Linux';'OpenBSD';'FreeBSD') *. (0;'') e.~ <2!:5 'DISPLAY'
   cmd=. browser,' ',dquote cmd
   try.
     2!:1 cmd, (0=nox)#' >/dev/null 2>&1 &'
@@ -1979,7 +2120,7 @@ end.
 if. IFJHS do.
   redirecturl_jijxm_=: file2url cmd
   EMPTY return.
-elseif. IFIOS do.
+elseif. IFIOS>IFQT do.
   jh '<a href="',(file2url cmd),'"</a>'
   EMPTY return.
 end.
@@ -2024,12 +2165,12 @@ acroread
 )
 dfltpdfreader=: verb define
 select. UNAME
-case. 'Android' do. ''
 case. 'Win' do. ''
+case. 'Android' do. ''
 case. 'Darwin' do. 'open'
 case. do.
-  nox=. (UNAME-:'Linux') *. (0;'') e.~ <2!:5 'DISPLAY'
-  if. ((UNAME-:'Linux') > nox) *. ''-: te=. nox{::PDFReader_j_;PDFReader_nox_j_ do.
+  nox=. ((<UNAME)e.'Linux';'OpenBSD';'FreeBSD') *. (0;'') e.~ <2!:5 'DISPLAY'
+  if. (((<UNAME)e.'Linux';'OpenBSD';'FreeBSD') > nox) *. ''-: te=. nox{::PDFReader_j_;PDFReader_nox_j_ do.
     for_t. linux_pdfreader do.
       try. 2!:0'which ',(>t),' 2>/dev/null'
         te=. >t
@@ -2225,10 +2366,10 @@ if. UNAME-:'Android' do.
   end.
   EMPTY return.
 end.
-editor=. (Editor_j_;Editor_nox_j_){::~ nox=. (UNAME-:'Linux') *. (0;'') e.~ <2!:5 'DISPLAY'
+editor=. (Editor_j_;Editor_nox_j_){::~ nox=. ((<UNAME)e.'Linux';'OpenBSD';'FreeBSD') *. (0;'') e.~ <2!:5 'DISPLAY'
 if. 0=#editor do. EMPTY return. end.
-nox=. (UNAME-:'Linux') *. (0;'') e.~ <2!:5 'DISPLAY'
-if. (UNAME-:'Linux')>nox do.
+nox=. ((<UNAME)e.'Linux';'OpenBSD';'FreeBSD') *. (0;'') e.~ <2!:5 'DISPLAY'
+if. ((<UNAME)e.'Linux';'OpenBSD';'FreeBSD')>nox do.
   if. 1 e. r=. 'term' E. editor do.
     if. '-e ' -: 3{. editor=. dlb (}.~ i.&' ') ({.I.r)}.editor do.
       editor=. TermEmu, (('gnome-terminal'-:TermEmu){::' -e ';' -- '), dlb 3}.editor
@@ -2278,8 +2419,8 @@ st
 xterm
 )
 dflttermemu=: verb define
-nox=. (UNAME-:'Linux') *. (0;'') e.~ <2!:5 'DISPLAY'
-if. ((UNAME-:'Linux') > nox) *. ''-: te=. nox{::TermEmu_j_;TermEmu_nox_j_ do.
+nox=. ((<UNAME)e.'Linux';'OpenBSD';'FreeBSD') *. (0;'') e.~ <2!:5 'DISPLAY'
+if. (((<UNAME)e.'Linux';'OpenBSD';'FreeBSD') > nox) *. ''-: te=. nox{::TermEmu_j_;TermEmu_nox_j_ do.
   for_t. linux_terminal do.
     try. 2!:0'which ',(>t),' 2>/dev/null'
       te=. >t
@@ -2296,11 +2437,11 @@ end.
 if. IFJHS do.
   redirecturl_jijxm_=: file2url cmd
   EMPTY return.
-elseif. IFIOS do.
+elseif. IFIOS>IFQT do.
   jh '<a href="',(file2url cmd),'"</a>'
   EMPTY return.
 end.
-nox=. (UNAME-:'Linux') *. (0;'') e.~ <2!:5 'DISPLAY'
+nox=. ((<UNAME)e.'Linux';'OpenBSD';'FreeBSD') *. (0;'') e.~ <2!:5 'DISPLAY'
 ImageViewer=. nox{::ImageViewer_j_;ImageViewer_nox_j_
 select. UNAME
 case. 'Win' do.
@@ -2320,7 +2461,7 @@ case. do.
     if. 0 = #browser do.
       browser=. dfltbrowser''
     end.
-    browser=. dquote (browser;Browser_nox_j_){::~ nox=. (UNAME-:'Linux') *. (0;'') e.~ <2!:5 'DISPLAY'
+    browser=. dquote (browser;Browser_nox_j_){::~ nox=. ((<UNAME)e.'Linux';'OpenBSD';'FreeBSD') *. (0;'') e.~ <2!:5 'DISPLAY'
   else.
     browser=. dquote ImageViewer
   end.
@@ -2340,8 +2481,8 @@ EMPTY
 )
 dfltimageviewer=: verb define
 select. UNAME
-case. 'Android' do. ''
 case. 'Win' do. ''
+case. 'Android' do. ''
 case. 'Darwin' do. 'open'
 case. do.
   try.
@@ -2382,15 +2523,16 @@ if. (3!:0 y) e. 2 32 do. y=. cutopen y
 else. y=. (4!:1 y) -. (,'y');,'y.' end.
 wid=. {.wcsize''
 sub=. '.'&(I. @(e.&(9 10 12 13 127 254 255{a.))@]})
+den=: {{ try. 0 $.y [ 3 $. y catch. y end. }}
 j=. '((1<#$t)#(":$t),''$''),":,t'
-j=. 'if. L. t=. ".y do. 5!:5 <y return. end.';j
+j=. 'if. L. t=. den ".y do. 5!:5 <y return. end.';j
 j=. 'if. 0~:4!:0 <y do. 5!:5 <y return. end.';j
 a=. (,&'=: ',sub @ (3 : j)) each y
-; ((wid <. #&> a) {.each a) ,each LF
+}: ; ((wid <. #&> a) {.each a) ,each LF
 )
 xedit=: xedit_j_
 wcsize=: 3 : 0
-if. (-.IFQT+.IFJNET+.IFJHS+.IFIOS) *. UNAME-:'Linux' do.
+if. (IFQT+.IFJNET+.IFJHS+.IFIOS+.UNAME-:'Android') < IFUNIX do.
   |.@".@(-.&LF)@(2!:0) :: (Cwh_j_"_) '/bin/stty size 2>/dev/null'
 else.
   (Cwh_j_"_)`((0 ". wd) :: (Cwh_j_"_))@.IFQT 'sm get termcwh'
@@ -2567,92 +2709,4 @@ NY=: n }. NY
 compare_z_=: compare_jcompare_
 fcompare_z_=: fcompare_jcompare_
 fcompares_z_=: fcompares_jcompare_
-FoldZv_j_ =: 0 0  NB. isfold, iteration count
-NB. Fold.  Foldtype_j_ is set by caller
-Fold_j_ =: 2 : 0
-'init mult fwd rev' =. 2 2 2 2 #: Foldtype_j_
-4!:55 <'Foldtype_j_'
-fzv =. FoldZv_j_  NB. stack fold info
-FoldZv_j_ =. 0 0
-FoldThrow_j_ =: $0  NB. If nonempty, set to throw type
-if. fwd+rev do.  NB. if forward or reverse...
-  nitems =. init + #y  NB. total # items, including init if any
-  if. nitems<2 do.
-    emptycell =. 0 # (,:x) [^:init y  NB. fillcell: empty array of x or (item of y)
-    try. res =. v. u./ emptycell  NB. get the neutral for the empty cell, and try applying v to it
-    catcht. 13!:8 (3)  NB. Z: on empty is domain error
-NB. obsolete     catch. 13!:8 (3 3&, {~ 43 44&i.) 13!:11 '' [ FoldZv_j_ =. fzv  NB. if error, pass it through; if no results, error
-    end.
-    if. mult do. res =. 0 # ,: res end.  NB. Single result is neutral, Multiple result is empty array of them
-  else.  NB. at least 2 cells.  We will run the loop
-    if. init do. cellres =. x else. cellres =. (-rev) { y end.  NB. cellres=first cell, either 0 (fwd) or _1 (rev)
-    cellx =. -init  NB. 1 less than index of first cell for left side
-    res =. ''   NB. init list of results - to nonboxed empty
-    while. (({.FoldZv_j_)<:1) *. (cellx=.>:cellx) < #y do.
-      FoldZv_j_ =: FoldZv_j_ + 0 1  NB. increment number of times we started u (used by Z:)
-      try. vres =. v. cellres =. ((24 b.^:rev cellx) { y) u. cellres  NB. 1s-comp of cellx if rev
-      catcht.
-        FoldThrow_j_ =: $0 [ ft =. FoldThrow_j_  NB. save & clear signaling vbl
-        if. 43 -: ft do. break. end.  NB. abort iteration and end
-        if. 44 -: ft do. continue. end.  NB. abort iteration and continue
-        13!:8 (35) [ FoldZv_j_ =. fzv  NB. not an iteration control, pass the throw. along
-NB. obsolete       catch.
-NB. obsolete         if. 43 = 13!:11'' do. break. end.  NB. abort iteration and end
-NB. obsolete         if. 44 = 13!:11'' do. continue. end.  NB. abort iteration and continue
-NB. obsolete         13!:8 ] 13!:11 '' [ FoldZv_j_ =. fzv  NB. not an iteration control, fail with that error code
-      end.
-      NB. continuing iteration.  cellres is the u result, vres is the boxed v result
-      if. ({.FoldZv_j_) e. 0 2 do. res =. res ,^:mult <vres else. FoldZv_j_ =. FoldZv_j_ 18 b. 1 0 end.
-    end.
-    if. 32 ~: 3!:0 res do. 13!:8 (3) [ FoldZv_j_ =. fzv end.  NB. If nothing produced result, error
-    res =. > res
-  end.
-else.  NB. repeated iteration on y, not related to items
-  res =. '' [ cellres =. y   NB. no results, and 
-  while. (({.FoldZv_j_)<:1) do.
-    FoldZv_j_ =: FoldZv_j_ + 0 1  NB. increment number of times we started u (used by Z:)
-    try.
-      if. init do. cellres =. x u. cellres else. cellres =. u. cellres end.
-      vres =. v. cellres
-    catcht.
-      FoldThrow_j_ =: $0 [ ft =. FoldThrow_j_  NB. save & clear signaling vbl
-      if. 43 -: ft do. break. end.  NB. abort iteration and end
-      if. 44 -: ft do. continue. end.  NB. abort iteration and continue
-      13!:8 (35) [ FoldZv_j_ =. fzv  NB. not an iteration control, pass the throw. along
-NB. obsolete     catch.
-NB. obsolete       if. 43 = 13!:11'' do. break. end.  NB. abort iteration and end
-NB. obsolete       if. 44 = 13!:11'' do. continue. end.  NB. abort iteration and continue
-NB. obsolete       13!:8 ] 13!:11 '' [ FoldZv_j_ =. fzv  NB. not an iteration control, fail with that error code
-    end.
-    NB. continuing iteration.  cellres is the u result, vres is the boxed v result
-    if. ({.FoldZv_j_) e. 0 2 do. res =. res ,^:mult <vres else. FoldZv_j_ =. FoldZv_j_ 18 b. 1 0 end.
-  end.
-  if. 32 ~: 3!:0 res do. 13!:8 (3) [ FoldZv_j_ =. fzv end.  NB. no results is domain error
-  res =. >res
-end. 
-res [ FoldZv_j_ =. fzv
-)
-
-   
-FoldZ_j_ =: 4 : 0
-if. 0~:#@$ y do. 13!:8(3) end.
-if. 0~:#@$ x do. 13!:8(3) end.
-if. y do.
-  select. x
-  case. _3 do.
-    if. y <: 1 { FoldZv_j_ do. 13!:8 ] 36 end.
-  case. _2 do.
-    FoldThrow_j_ =: 43 throw.  NB. break
-  case. _1 do.
-    FoldThrow_j_ =: 44 throw.  NB. continue
-  case. 0 do.
-  FoldZv_j_ =: FoldZv_j_ 23 b. 1 0  NB. suppress output
-  case. 1 do.
-  FoldZv_j_ =: FoldZv_j_ 23 b. 2 0 NB. stop after this
-  end.
-end.
-$0
-)
-
-      
 cocurrent <'base'

@@ -1,11 +1,11 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g18x.ijs'
-NB. 18!:30 y ------------------------------------------------------------
+prolog './g18x.ijs'
+NB. 18!:_1 y ------------------------------------------------------------
 
 x=: i.12
 sum=: +/
 adv=: /
 
-t=: 18!:30 <'base'
+t=: 18!:_1 <'base'
 (,2) -: $t
 32 -: type t
 'x y' =: t
@@ -18,45 +18,47 @@ t=: 18!:30 <'base'
 1 3 0 -: (y i. ;:'adv sum x'){ {:"1 x
 
 4!:55 <'sum'
--. (<'sum') e. >1{18!:30 <'base'
+-. (<'sum') e. >1{18!:_1 <'base'
 
-'locale error' -: 18!:30 etx 100
-'domain error' -: 18!:30 etx 2.5
-'domain error' -: 18!:30 etx 2j5
-'domain error' -: 18!:30 etx 2r5
+'locale error' -: 18!:_1 etx 100
+'domain error' -: 18!:_1 etx 2.5
+'domain error' -: 18!:_1 etx 2j5
+'domain error' -: 18!:_1 etx 2r5
 
-'rank error'   -: 18!:30 etx ''
-'rank error'   -: 18!:30 etx ;:'z base'
+'rank error'   -: 18!:_1 etx ''
+'rank error'   -: 18!:_1 etx ;:'z base'
 
-'locale error' -: 18!:30 etx <'nonexistentlocale'
+'locale error' -: 18!:_1 etx <'nonexistentlocale'
 
 
-NB. 18!:31 y ------------------------------------------------------------
+NB. 18!:_2 y ------------------------------------------------------------
 
 pcheck=: 3 : 0
  if. 13!:17'' do. 1 return. end.   NB. parameters not applicable when dbr 1
  yy=: y
- assert. ((,3)-:$y) *. 32=type y
- 'p a s'=. y
+ assert. ((,4)-:$y) *. 32=type y
+ 'p a s f'=. y
  assert. 2=#$p
  assert. (2=#$p) *. 4 =type p                  NB. symbol pool
  assert. (1=#$a) *. 32=type a                  NB. object name
  assert. (1=#$s) *. 32=type s                  NB. locale name (or '**local**')
  assert. (#p) = (#a),#s
-NB. p has: index,type,flag,sn,next
+NB. p has: index,type,flag,sn,next,origin
 NB. Flag is changed,cachable,LINFO,PERM,WASABANDONED,hasname,hasvalue
 
  i=. i.#p
  NB. b=. 0 0 -:"1 ]2 5{"1 p      NB. flag=0 & no prev pointer: empty symbol, on free list
  b=. 0 = (64+32) 17 b. 2{"1 p      NB. flag=0 (no name or value): empty symbol, on free list
  orph=. 64 = (64+32) 17 b. 2{"1 p      NB. flag=64 (no name, value): cached orphan value
+NB. testing  scaforigin__   =: 5{"1 p
+NB. testing  scafnfree__   =: f
  assert. {.b  NB. first symbol always free
  assert. 0=2 3{"1 b#p
  assert. (4{"1 b#p) e. (# i.@#) b
  assert. 0 e. 4{"1 b#p
  m=. >:>.2^.#b
- x=. ~. /:~ ,{~^:(i.m) b*4{"1 p                NB. transitive closure
- assert. x -: I. b
+ x=. ~. /:~ ,{~^:(i.m) b*4{"1 p                NB. transitive closure - chase the free chain
+ assert. x *./@:e.  I. b  NB. was x -:  with multi chains, x is not all free eles
 
  oktypes =. <. 2 ^ 0 1 2 3 4 5 6 7 10 11 12 13 14 15 16 17 18 23 25 27 29   NB. Type 0 OK if permanent
  f =. 2{"1 p
@@ -74,39 +76,42 @@ NB. Flag is changed,cachable,LINFO,PERM,WASABANDONED,hasname,hasvalue
  NB. assert. b +. h +.             i = (prev*-.h){next,0
 
  assert. b +. orph +. li +. -. a e. a:
- assert. b +. orph +. li +. s e. '';'**local**';18!:1 i.2  NB. must allow no locale-name for local symbol tables
+ assert. b +. orph +. li +. s e. '';'**local**';18!:_3 i.2  NB. must allow no locale-name for local symbol tables; _3 includes zombie locales
  assert. (18!:1 i.2) e. s
  1
 )
 
-pcheck 18!:31 ''
+pcheck 18!:_2 ''
 
 k=: 18!:3 ''
 sum__k=: +/
 sam__k=: 'United States of America'
 junk_asdf_ =: 400$'foo'
 
-pcheck 18!:31 ''
+pcheck 18!:_2 ''
 
 18!:55 k,<'asdf'
 
 f=: 3 : 0
  a=. 12
  b=. o. y
- pcheck 18!:31 ''
+ pcheck 18!:_2 ''
 )
 
 f 1 2 3
 
 (<'asdf') -: 18!:3 <'asdf'
-pcheck 18!:31 ''
+pcheck 18!:_2 ''
 (<'asdf') -: 6 (18!:3) <'asdf'
-pcheck 18!:31 ''
+pcheck 18!:_2 ''
 (<'asdf') -: 5 (18!:3) <'asdf'
-pcheck 18!:31 ''
+pcheck 18!:_2 ''
 18!:55 <'asdf'
 
 
 4!:55 ;:'a adv b f h i k li m oktypes p pcheck perm s sum t x y yy'
 
+
+
+epilog''
 

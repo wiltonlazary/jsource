@@ -1,4 +1,4 @@
-/* Copyright 1990-2011, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Verbs: Atomic (Scalar) Dyadic                                           */
@@ -9,6 +9,7 @@
 
 // reduce/prefix/suffix routines
 // first word is the maximum valid precision bit index, followed by that many+1 routines for reduce, and then for prefix and suffix.
+// routines are in bit-index order
 // the last routine is always 0 to indicate invalid
 // if there are integer-overflow routine, they comes after the others, in the order rps
 VARPSA rpsnull = {0, {0}};
@@ -130,10 +131,10 @@ static VARPSA rpsminus = {RATX+1 , {
 {(VARPSF)minussfxB,VCVTIP+VI}, {0}, {(VARPSF)minussfxI,VCVTIP+VI}, {(VARPSF)minussfxD,VCVTIP+VD+VIPOKW}, {(VARPSF)minussfxZ,VCVTIP+VZ},  {0}, {0}, {0},
 {(VARPSF)minusinsO,VCVTIP+VD},{(VARPSF)minuspfxO,VCVTIP+VD},{(VARPSF)minussfxO,VCVTIP+VD},  // integer-overflow routines
 }};
-static VARPSA rpsplus = {RATX+1 , {
-{(VARPSF)plusinsB,VCVTIP+VI}, {0}, {(VARPSF)plusinsI,VCVTIP+VI}, {(VARPSF)plusinsD,VCVTIP+VD}, {(VARPSF)plusinsZ,VCVTIP+VZ},        {0}, {0}, {0},
-{(VARPSF)pluspfxB,VCVTIP+VI}, {0}, {(VARPSF)pluspfxI,VCVTIP+VI}, {(VARPSF)pluspfxD,VCVTIP+VD+VIPOKW}, {(VARPSF)pluspfxZ,VCVTIP+VZ}, {0}, {(VARPSF)pluspfxX,VCVTIP+VX}, {(VARPSF)pluspfxQ,VCVTIP+VQ},
-{(VARPSF)plussfxB,VCVTIP+VI}, {0}, {(VARPSF)plussfxI,VCVTIP+VI}, {(VARPSF)plussfxD,VCVTIP+VD+VIPOKW}, {(VARPSF)plussfxZ,VCVTIP+VZ}, {0}, {(VARPSF)plussfxX,VCVTIP+VX}, {(VARPSF)plussfxQ,VCVTIP+VQ},
+static VARPSA rpsplus = {QPX+1 , {
+{(VARPSF)plusinsB,VCVTIP+VI}, {0}, {(VARPSF)plusinsI,VCVTIP+VI}, {(VARPSF)plusinsD,VCVTIP+VD}, {(VARPSF)plusinsZ,VCVTIP+VZ},        {0}, {0}, {0}, {0}, {(VARPSF)plusinsI2,VCVTIP+VI}, {(VARPSF)plusinsI4,VCVTIP+VI}, {0}, {0}, {SY_64?(VARPSF)plusinsE:0,VCVTIP+VUNCH},
+{(VARPSF)pluspfxB,VCVTIP+VI}, {0}, {(VARPSF)pluspfxI,VCVTIP+VI}, {(VARPSF)pluspfxD,VCVTIP+VD+VIPOKW}, {(VARPSF)pluspfxZ,VCVTIP+VZ}, {0}, {(VARPSF)pluspfxX,VCVTIP+VX}, {(VARPSF)pluspfxQ,VCVTIP+VQ}, {0}, {(VARPSF)pluspfxI2,VCVTIP+VI}, {(VARPSF)pluspfxI4,VCVTIP+VI}, {0}, {0}, {0},
+{(VARPSF)plussfxB,VCVTIP+VI}, {0}, {(VARPSF)plussfxI,VCVTIP+VI}, {(VARPSF)plussfxD,VCVTIP+VD+VIPOKW}, {(VARPSF)plussfxZ,VCVTIP+VZ}, {0}, {(VARPSF)plussfxX,VCVTIP+VX}, {(VARPSF)plussfxQ,VCVTIP+VQ}, {0}, {(VARPSF)plussfxI2,VCVTIP+VI}, {(VARPSF)plussfxI4,VCVTIP+VI}, {0}, {0}, {0},
 {(VARPSF)plusinsO,VCVTIP+VD},{(VARPSF)pluspfxO,VCVTIP+VD},{(VARPSF)plussfxO,VCVTIP+VD},  // integer-overflow routines
 }};
 static VARPSA rpstymes = {RATX+1 , {
@@ -160,154 +161,155 @@ VA va[]={
  {{0,0}, {0,0}, {0,0},                                /* BB BI BD              */
   {0,0}, {0,0}, {0,0},                                /* IB II ID              */
   {0,0}, {0,0}, {0,0},                                /* DB DI DD              */
-  {0,0}, {0,0}, {0,0}, {0,0}},                        /* ZZ XX QQ Symb         */
+  {0,0}, {0,0}, {0,0}, {0,0}, {0,0}, {0,0}},                        /* ZZ XX QQ Symb DS E I2 I4         */
   &rpsnull},
 
 /* 10    */ {
  {{(VF)bw0000II,VCVTIP+VI+VII+VIP}, {(VF)bw0000II,VCVTIP+VI+VII+VIP}, {(VF)bw0000II,VCVTIP+VI+VII+VIP}, 
   {(VF)bw0000II,VCVTIP+VI+VII+VIP}, {(VF)bw0000II,VCVTIP+VI+VIP},     {(VF)bw0000II,VCVTIP+VI+VII+VIP},
   {(VF)bw0000II,VCVTIP+VI+VII+VIP}, {(VF)bw0000II,VCVTIP+VI+VII+VIP}, {(VF)bw0000II,VCVTIP+VI+VII+VIP},
-  {(VF)bw0000II,VCVTIP+VI+VII+VIP}, {(VF)bw0000II,VCVTIP+VI+VII+VIP}, {(VF)bw0000II,VCVTIP+VI+VII+VIP}, {0,0}}, 
+  {(VF)bw0000II,VCVTIP+VI+VII+VIP}, {(VF)bw0000II,VCVTIP+VI+VII+VIP}, {(VF)bw0000II,VCVTIP+VI+VII+VIP}, {0,0}, {(VF)bw0000II,VCVTIP+VI+VII+VIP}, {(VF)bw0000II,VCVTIP+VI+VII+VIP}, {(VF)bw0000I2I2,VCVTIP+VUNCH+VIP}, {(VF)bw0000I4I4,VCVTIP+VUNCH+VIP}}, 
   &rpsbw0000},
 
 /* 11    */ {
  {{(VF)bw0001II,VCVTIP+VI+VII+VIP}, {(VF)bw0001II,VCVTIP+VI+VII+VIP}, {(VF)bw0001II,VCVTIP+VI+VII+VIP}, 
   {(VF)bw0001II,VCVTIP+VI+VII+VIP}, {(VF)bw0001II,VCVTIP+VI+VIP},     {(VF)bw0001II,VCVTIP+VI+VII+VIP},
   {(VF)bw0001II,VCVTIP+VI+VII+VIP}, {(VF)bw0001II,VCVTIP+VI+VII+VIP}, {(VF)bw0001II,VCVTIP+VI+VII+VIP},
-  {(VF)bw0001II,VCVTIP+VI+VII+VIP}, {(VF)bw0001II,VCVTIP+VI+VII+VIP}, {(VF)bw0001II,VCVTIP+VI+VII+VIP}, {0,0}}, 
+  {(VF)bw0001II,VCVTIP+VI+VII+VIP}, {(VF)bw0001II,VCVTIP+VI+VII+VIP}, {(VF)bw0001II,VCVTIP+VI+VII+VIP}, {0,0}, {(VF)bw0001II,VCVTIP+VI+VII+VIP}, {(VF)bw0001II,VCVTIP+VI+VII+VIP}, {(VF)bw0001I2I2,VCVTIP+VUNCH+VIP}, {(VF)bw0001I4I4,VCVTIP+VUNCH+VIP}}, 
   &rpsbw0001},
 
 /* 12    */ {
  {{(VF)bw0010II,VCVTIP+VI+VII+VIP}, {(VF)bw0010II,VCVTIP+VI+VII+VIP}, {(VF)bw0010II,VCVTIP+VI+VII+VIP}, 
   {(VF)bw0010II,VCVTIP+VI+VII+VIP}, {(VF)bw0010II,VCVTIP+VI+VIP},     {(VF)bw0010II,VCVTIP+VI+VII+VIP},
   {(VF)bw0010II,VCVTIP+VI+VII+VIP}, {(VF)bw0010II,VCVTIP+VI+VII+VIP}, {(VF)bw0010II,VCVTIP+VI+VII+VIP},
-  {(VF)bw0010II,VCVTIP+VI+VII+VIP}, {(VF)bw0010II,VCVTIP+VI+VII+VIP}, {(VF)bw0010II,VCVTIP+VI+VII+VIP}, {0,0}}, 
+  {(VF)bw0010II,VCVTIP+VI+VII+VIP}, {(VF)bw0010II,VCVTIP+VI+VII+VIP}, {(VF)bw0010II,VCVTIP+VI+VII+VIP}, {0,0}, {(VF)bw0010II,VCVTIP+VI+VII+VIP}, {(VF)bw0010II,VCVTIP+VI+VII+VIP}, {(VF)bw0010I2I2,VCVTIP+VUNCH+VIP}, {(VF)bw0010I4I4,VCVTIP+VUNCH+VIP}}, 
   &rpsbw0010},
 
 /* 13    */ {
  {{(VF)bw0011II,VCVTIP+VI+VII+VIP}, {(VF)bw0011II,VCVTIP+VI+VII+VIP}, {(VF)bw0011II,VCVTIP+VI+VII+VIP}, 
   {(VF)bw0011II,VCVTIP+VI+VII+VIP}, {(VF)bw0011II,VCVTIP+VI+VIP},     {(VF)bw0011II,VCVTIP+VI+VII+VIP},
   {(VF)bw0011II,VCVTIP+VI+VII+VIP}, {(VF)bw0011II,VCVTIP+VI+VII+VIP}, {(VF)bw0011II,VCVTIP+VI+VII+VIP},
-  {(VF)bw0011II,VCVTIP+VI+VII+VIP}, {(VF)bw0011II,VCVTIP+VI+VII+VIP}, {(VF)bw0011II,VCVTIP+VI+VII+VIP}, {0,0}}, 
+  {(VF)bw0011II,VCVTIP+VI+VII+VIP}, {(VF)bw0011II,VCVTIP+VI+VII+VIP}, {(VF)bw0011II,VCVTIP+VI+VII+VIP}, {0,0}, {(VF)bw0011II,VCVTIP+VI+VII+VIP}, {(VF)bw0011II,VCVTIP+VI+VII+VIP}, {(VF)bw0011I2I2,VCVTIP+VUNCH+VIP}, {(VF)bw0011I4I4,VCVTIP+VUNCH+VIP}}, 
   &rpsbw0011},
 
 /* 14    */ {
  {{(VF)bw0100II,VCVTIP+VI+VII+VIP}, {(VF)bw0100II,VCVTIP+VI+VII+VIP}, {(VF)bw0100II,VCVTIP+VI+VII+VIP}, 
   {(VF)bw0100II,VCVTIP+VI+VII+VIP}, {(VF)bw0100II,VCVTIP+VI+VIP},     {(VF)bw0100II,VCVTIP+VI+VII+VIP},
   {(VF)bw0100II,VCVTIP+VI+VII+VIP}, {(VF)bw0100II,VCVTIP+VI+VII+VIP}, {(VF)bw0100II,VCVTIP+VI+VII+VIP},
-  {(VF)bw0100II,VCVTIP+VI+VII+VIP}, {(VF)bw0100II,VCVTIP+VI+VII+VIP}, {(VF)bw0100II,VCVTIP+VI+VII+VIP}, {0,0}}, 
+  {(VF)bw0100II,VCVTIP+VI+VII+VIP}, {(VF)bw0100II,VCVTIP+VI+VII+VIP}, {(VF)bw0100II,VCVTIP+VI+VII+VIP}, {0,0}, {(VF)bw0100II,VCVTIP+VI+VII+VIP}, {(VF)bw0100II,VCVTIP+VI+VII+VIP}, {(VF)bw0100I2I2,VCVTIP+VUNCH+VIP}, {(VF)bw0100I4I4,VCVTIP+VUNCH+VIP}}, 
   &rpsbw0100},
 
 /* 15    */ {
  {{(VF)bw0101II,VCVTIP+VI+VII+VIP}, {(VF)bw0101II,VCVTIP+VI+VII+VIP}, {(VF)bw0101II,VCVTIP+VI+VII+VIP}, 
   {(VF)bw0101II,VCVTIP+VI+VII+VIP}, {(VF)bw0101II,VCVTIP+VI+VIP},     {(VF)bw0101II,VCVTIP+VI+VII+VIP},
   {(VF)bw0101II,VCVTIP+VI+VII+VIP}, {(VF)bw0101II,VCVTIP+VI+VII+VIP}, {(VF)bw0101II,VCVTIP+VI+VII+VIP},
-  {(VF)bw0101II,VCVTIP+VI+VII+VIP}, {(VF)bw0101II,VCVTIP+VI+VII+VIP}, {(VF)bw0101II,VCVTIP+VI+VII+VIP}, {0,0}}, 
+  {(VF)bw0101II,VCVTIP+VI+VII+VIP}, {(VF)bw0101II,VCVTIP+VI+VII+VIP}, {(VF)bw0101II,VCVTIP+VI+VII+VIP}, {0,0}, {(VF)bw0101II,VCVTIP+VI+VII+VIP}, {(VF)bw0101II,VCVTIP+VI+VII+VIP}, {(VF)bw0101I2I2,VCVTIP+VUNCH+VIP}, {(VF)bw0101I4I4,VCVTIP+VUNCH+VIP}}, 
   &rpsbw0101},
 
 /* 16    */ {
  {{(VF)bw0110II,VCVTIP+VI+VII+VIP}, {(VF)bw0110II,VCVTIP+VI+VII+VIP}, {(VF)bw0110II,VCVTIP+VI+VII+VIP}, 
   {(VF)bw0110II,VCVTIP+VI+VII+VIP}, {(VF)bw0110II,VCVTIP+VI+VIP},     {(VF)bw0110II,VCVTIP+VI+VII+VIP},
   {(VF)bw0110II,VCVTIP+VI+VII+VIP}, {(VF)bw0110II,VCVTIP+VI+VII+VIP}, {(VF)bw0110II,VCVTIP+VI+VII+VIP},
-  {(VF)bw0110II,VCVTIP+VI+VII+VIP}, {(VF)bw0110II,VCVTIP+VI+VII+VIP}, {(VF)bw0110II,VCVTIP+VI+VII+VIP}, {0,0}}, 
+  {(VF)bw0110II,VCVTIP+VI+VII+VIP}, {(VF)bw0110II,VCVTIP+VI+VII+VIP}, {(VF)bw0110II,VCVTIP+VI+VII+VIP}, {0,0}, {(VF)bw0110II,VCVTIP+VI+VII+VIP}, {(VF)bw0110II,VCVTIP+VI+VII+VIP}, {(VF)bw0110I2I2,VCVTIP+VUNCH+VIP}, {(VF)bw0110I4I4,VCVTIP+VUNCH+VIP}}, 
   &rpsbw0110},
 
 /* 17    */ {
  {{(VF)bw0111II,VCVTIP+VI+VII+VIP}, {(VF)bw0111II,VCVTIP+VI+VII+VIP}, {(VF)bw0111II,VCVTIP+VI+VII+VIP}, 
   {(VF)bw0111II,VCVTIP+VI+VII+VIP}, {(VF)bw0111II,VCVTIP+VI+VIP},     {(VF)bw0111II,VCVTIP+VI+VII+VIP},
   {(VF)bw0111II,VCVTIP+VI+VII+VIP}, {(VF)bw0111II,VCVTIP+VI+VII+VIP}, {(VF)bw0111II,VCVTIP+VI+VII+VIP},
-  {(VF)bw0111II,VCVTIP+VI+VII+VIP}, {(VF)bw0111II,VCVTIP+VI+VII+VIP}, {(VF)bw0111II,VCVTIP+VI+VII+VIP}, {0,0}}, 
+  {(VF)bw0111II,VCVTIP+VI+VII+VIP}, {(VF)bw0111II,VCVTIP+VI+VII+VIP}, {(VF)bw0111II,VCVTIP+VI+VII+VIP}, {0,0}, {(VF)bw0111II,VCVTIP+VI+VII+VIP}, {(VF)bw0111II,VCVTIP+VI+VII+VIP}, {(VF)bw0111I2I2,VCVTIP+VUNCH+VIP}, {(VF)bw0111I4I4,VCVTIP+VUNCH+VIP}}, 
   &rpsbw0111},
 
 /* 18    */ {
  {{(VF)bw1000II,VCVTIP+VI+VII+VIP}, {(VF)bw1000II,VCVTIP+VI+VII+VIP}, {(VF)bw1000II,VCVTIP+VI+VII+VIP}, 
   {(VF)bw1000II,VCVTIP+VI+VII+VIP}, {(VF)bw1000II,VCVTIP+VI+VIP},     {(VF)bw1000II,VCVTIP+VI+VII+VIP},
   {(VF)bw1000II,VCVTIP+VI+VII+VIP}, {(VF)bw1000II,VCVTIP+VI+VII+VIP}, {(VF)bw1000II,VCVTIP+VI+VII+VIP},
-  {(VF)bw1000II,VCVTIP+VI+VII+VIP}, {(VF)bw1000II,VCVTIP+VI+VII+VIP}, {(VF)bw1000II,VCVTIP+VI+VII+VIP}, {0,0}}, 
+  {(VF)bw1000II,VCVTIP+VI+VII+VIP}, {(VF)bw1000II,VCVTIP+VI+VII+VIP}, {(VF)bw1000II,VCVTIP+VI+VII+VIP}, {0,0}, {(VF)bw1000II,VCVTIP+VI+VII+VIP}, {(VF)bw1000II,VCVTIP+VI+VII+VIP}, {(VF)bw1000I2I2,VCVTIP+VUNCH+VIP}, {(VF)bw1000I4I4,VCVTIP+VUNCH+VIP}}, 
   &rpsbw1000},
 
 /* 19    */ {
  {{(VF)bw1001II,VCVTIP+VI+VII+VIP}, {(VF)bw1001II,VCVTIP+VI+VII+VIP}, {(VF)bw1001II,VCVTIP+VI+VII+VIP}, 
   {(VF)bw1001II,VCVTIP+VI+VII+VIP}, {(VF)bw1001II,VCVTIP+VI+VIP},     {(VF)bw1001II,VCVTIP+VI+VII+VIP},
   {(VF)bw1001II,VCVTIP+VI+VII+VIP}, {(VF)bw1001II,VCVTIP+VI+VII+VIP}, {(VF)bw1001II,VCVTIP+VI+VII+VIP},
-  {(VF)bw1001II,VCVTIP+VI+VII+VIP}, {(VF)bw1001II,VCVTIP+VI+VII+VIP}, {(VF)bw1001II,VCVTIP+VI+VII+VIP}, {0,0}}, 
+  {(VF)bw1001II,VCVTIP+VI+VII+VIP}, {(VF)bw1001II,VCVTIP+VI+VII+VIP}, {(VF)bw1001II,VCVTIP+VI+VII+VIP}, {0,0}, {(VF)bw1001II,VCVTIP+VI+VII+VIP}, {(VF)bw1001II,VCVTIP+VI+VII+VIP}, {(VF)bw1001I2I2,VCVTIP+VUNCH+VIP}, {(VF)bw1001I4I4,VCVTIP+VUNCH+VIP}}, 
   &rpsbw1001},
 
 /* 1a    */ {
  {{(VF)bw1010II,VCVTIP+VI+VII+VIP}, {(VF)bw1010II,VCVTIP+VI+VII+VIP}, {(VF)bw1010II,VCVTIP+VI+VII+VIP}, 
   {(VF)bw1010II,VCVTIP+VI+VII+VIP}, {(VF)bw1010II,VCVTIP+VI+VIP},     {(VF)bw1010II,VCVTIP+VI+VII+VIP},
   {(VF)bw1010II,VCVTIP+VI+VII+VIP}, {(VF)bw1010II,VCVTIP+VI+VII+VIP}, {(VF)bw1010II,VCVTIP+VI+VII+VIP},
-  {(VF)bw1010II,VCVTIP+VI+VII+VIP}, {(VF)bw1010II,VCVTIP+VI+VII+VIP}, {(VF)bw1010II,VCVTIP+VI+VII+VIP}, {0,0}}, 
+  {(VF)bw1010II,VCVTIP+VI+VII+VIP}, {(VF)bw1010II,VCVTIP+VI+VII+VIP}, {(VF)bw1010II,VCVTIP+VI+VII+VIP}, {0,0}, {(VF)bw1010II,VCVTIP+VI+VII+VIP}, {(VF)bw1010II,VCVTIP+VI+VII+VIP}, {(VF)bw1010I2I2,VCVTIP+VUNCH+VIP}, {(VF)bw1010I4I4,VCVTIP+VUNCH+VIP}}, 
   &rpsbw1010},
 
 /* 1b    */ {
  {{(VF)bw1011II,VCVTIP+VI+VII+VIP}, {(VF)bw1011II,VCVTIP+VI+VII+VIP}, {(VF)bw1011II,VCVTIP+VI+VII+VIP}, 
   {(VF)bw1011II,VCVTIP+VI+VII+VIP}, {(VF)bw1011II,VCVTIP+VI+VIP},     {(VF)bw1011II,VCVTIP+VI+VII+VIP},
   {(VF)bw1011II,VCVTIP+VI+VII+VIP}, {(VF)bw1011II,VCVTIP+VI+VII+VIP}, {(VF)bw1011II,VCVTIP+VI+VII+VIP},
-  {(VF)bw1011II,VCVTIP+VI+VII+VIP}, {(VF)bw1011II,VCVTIP+VI+VII+VIP}, {(VF)bw1011II,VCVTIP+VI+VII+VIP}, {0,0}}, 
+  {(VF)bw1011II,VCVTIP+VI+VII+VIP}, {(VF)bw1011II,VCVTIP+VI+VII+VIP}, {(VF)bw1011II,VCVTIP+VI+VII+VIP}, {0,0}, {(VF)bw1011II,VCVTIP+VI+VII+VIP}, {(VF)bw1011II,VCVTIP+VI+VII+VIP}, {(VF)bw1011I2I2,VCVTIP+VUNCH+VIP}, {(VF)bw1011I4I4,VCVTIP+VUNCH+VIP}}, 
   &rpsbw1011},
 
 /* 1c    */ {
  {{(VF)bw1100II,VCVTIP+VI+VII+VIP}, {(VF)bw1100II,VCVTIP+VI+VII+VIP}, {(VF)bw1100II,VCVTIP+VI+VII+VIP}, 
   {(VF)bw1100II,VCVTIP+VI+VII+VIP}, {(VF)bw1100II,VCVTIP+VI+VIP},     {(VF)bw1100II,VCVTIP+VI+VII+VIP},
   {(VF)bw1100II,VCVTIP+VI+VII+VIP}, {(VF)bw1100II,VCVTIP+VI+VII+VIP}, {(VF)bw1100II,VCVTIP+VI+VII+VIP},
-  {(VF)bw1100II,VCVTIP+VI+VII+VIP}, {(VF)bw1100II,VCVTIP+VI+VII+VIP}, {(VF)bw1100II,VCVTIP+VI+VII+VIP}, {0,0}}, 
+  {(VF)bw1100II,VCVTIP+VI+VII+VIP}, {(VF)bw1100II,VCVTIP+VI+VII+VIP}, {(VF)bw1100II,VCVTIP+VI+VII+VIP}, {0,0}, {(VF)bw1100II,VCVTIP+VI+VII+VIP}, {(VF)bw1100II,VCVTIP+VI+VII+VIP}, {(VF)bw1100I2I2,VCVTIP+VUNCH+VIP}, {(VF)bw1100I4I4,VCVTIP+VUNCH+VIP}}, 
   &rpsbw1100},
 
 /* 1d    */ {
  {{(VF)bw1101II,VCVTIP+VI+VII+VIP}, {(VF)bw1101II,VCVTIP+VI+VII+VIP}, {(VF)bw1101II,VCVTIP+VI+VII+VIP}, 
   {(VF)bw1101II,VCVTIP+VI+VII+VIP}, {(VF)bw1101II,VCVTIP+VI+VIP},     {(VF)bw1101II,VCVTIP+VI+VII+VIP},
   {(VF)bw1101II,VCVTIP+VI+VII+VIP}, {(VF)bw1101II,VCVTIP+VI+VII+VIP}, {(VF)bw1101II,VCVTIP+VI+VII+VIP},
-  {(VF)bw1101II,VCVTIP+VI+VII+VIP}, {(VF)bw1101II,VCVTIP+VI+VII+VIP}, {(VF)bw1101II,VCVTIP+VI+VII+VIP}, {0,0}}, 
+  {(VF)bw1101II,VCVTIP+VI+VII+VIP}, {(VF)bw1101II,VCVTIP+VI+VII+VIP}, {(VF)bw1101II,VCVTIP+VI+VII+VIP}, {0,0}, {(VF)bw1101II,VCVTIP+VI+VII+VIP}, {(VF)bw1101II,VCVTIP+VI+VII+VIP}, {(VF)bw1101I2I2,VCVTIP+VUNCH+VIP}, {(VF)bw1101I4I4,VCVTIP+VUNCH+VIP}}, 
   &rpsbw1101},
 
 /* 1e    */ {
  {{(VF)bw1110II,VCVTIP+VI+VII+VIP}, {(VF)bw1110II,VCVTIP+VI+VII+VIP}, {(VF)bw1110II,VCVTIP+VI+VII+VIP}, 
   {(VF)bw1110II,VCVTIP+VI+VII+VIP}, {(VF)bw1110II,VCVTIP+VI+VIP},     {(VF)bw1110II,VCVTIP+VI+VII+VIP},
   {(VF)bw1110II,VCVTIP+VI+VII+VIP}, {(VF)bw1110II,VCVTIP+VI+VII+VIP}, {(VF)bw1110II,VCVTIP+VI+VII+VIP},
-  {(VF)bw1110II,VCVTIP+VI+VII+VIP}, {(VF)bw1110II,VCVTIP+VI+VII+VIP}, {(VF)bw1110II,VCVTIP+VI+VII+VIP}, {0,0}}, 
+  {(VF)bw1110II,VCVTIP+VI+VII+VIP}, {(VF)bw1110II,VCVTIP+VI+VII+VIP}, {(VF)bw1110II,VCVTIP+VI+VII+VIP}, {0,0}, {(VF)bw1110II,VCVTIP+VI+VII+VIP}, {(VF)bw1110II,VCVTIP+VI+VII+VIP}, {(VF)bw1110I2I2,VCVTIP+VUNCH+VIP}, {(VF)bw1110I4I4,VCVTIP+VUNCH+VIP}}, 
   &rpsbw1110},
 
 /* 1f    */ {
  {{(VF)bw1111II,VCVTIP+VI+VII+VIP}, {(VF)bw1111II,VCVTIP+VI+VII+VIP}, {(VF)bw1111II,VCVTIP+VI+VII+VIP}, 
   {(VF)bw1111II,VCVTIP+VI+VII+VIP}, {(VF)bw1111II,VCVTIP+VI+VIP},     {(VF)bw1111II,VCVTIP+VI+VII+VIP},
   {(VF)bw1111II,VCVTIP+VI+VII+VIP}, {(VF)bw1111II,VCVTIP+VI+VII+VIP}, {(VF)bw1111II,VCVTIP+VI+VII+VIP},
-  {(VF)bw1111II,VCVTIP+VI+VII+VIP}, {(VF)bw1111II,VCVTIP+VI+VII+VIP}, {(VF)bw1111II,VCVTIP+VI+VII+VIP}, {0,0}}, 
+  {(VF)bw1111II,VCVTIP+VI+VII+VIP}, {(VF)bw1111II,VCVTIP+VI+VII+VIP}, {(VF)bw1111II,VCVTIP+VI+VII+VIP}, {0,0}, {(VF)bw1111II,VCVTIP+VI+VII+VIP}, {(VF)bw1111II,VCVTIP+VI+VII+VIP}, {(VF)bw1111I2I2,VCVTIP+VUNCH+VIP}, {(VF)bw1111I4I4,VCVTIP+VUNCH+VIP}}, 
   &rpsbw1111},
 
+   // For Booleans, VIP means 'inplace if rank not specified and there is no frame'
 /* 95 ~: */ {
  {{(VF)neBB,VCVTIP+VB+VIP}, {(VF)neBI,VCVTIP+VB+VIPOKA}, {(VF)neBD,VCVTIP+VB+VIPOKA},
   {(VF)neIB,VCVTIP+VB+VIPOKW}, {(VF)neII,VCVTIP+VB}, {(VF)neID,VCVTIP+VB},
   {(VF)neDB,VCVTIP+VB+VIPOKW}, {(VF)neDI,VCVTIP+VB}, {(VF)neDD,VCVTIP+VB}, 
-  {(VF)neZZ,VCVTIP+VB+VZZ}, {(VF)neXX,VCVTIP+VB+VXEQ}, {(VF)neQQ,VCVTIP+VB+VQQ}, {0,0}},
+  {(VF)neZZ,VCVTIP+VB+VZZ}, {(VF)neXX,VCVTIP+VB+VXEQ}, {(VF)neQQ,VCVTIP+VB+VQQ}, {0,0}, {(VF)0,VCVTIP+VB}, {(VF)neEE,VCVTIP+VB}, {(VF)neI2I2,VCVTIP+VB}, {(VF)neI4I4,VCVTIP+VB}},
   &rpsne},
 
 /* 25 %  */ {
  {{(VF)divBB,VCVTIP+VD}, {(VF)divBI,VCVTIP+VD+VIP0I}, {(VF)divBD,VCVTIP+VD+VIPOKW},
   {(VF)divIB,VCVTIP+VD+VIPI0}, {(VF)divII,VCVTIP+VD+VIPI0+VIP0I}, {(VF)divID,VCVTIP+VD+VIPID},
   {(VF)divDB,VCVTIP+VD+VIPOKA}, {(VF)divDI,VCVTIP+VD+VIPDI}, {(VF)divDD,VCVTIP+VD+VIP+VCANHALT}, 
-  {(VF)divZZ,VCVTIP+VZ+VZZ+VIP}, {(VF)divXX,VCVTIP+VX+VXX}, {(VF)divQQ,VCVTIP+VQ+VQQ}, {0,0}},
+  {(VF)divZZ,VCVTIP+VZ+VZZ+VIP}, {(VF)divXX,VCVTIP+VX+VXX}, {(VF)divQQ,VCVTIP+VQ+VQQ}, {0,0}, {(VF)0,VCVTIP+VIP+VCANHALT}, {(VF)divEE,VCVTIP+VIP+VCANHALT}, {(VF)divII,VCVTIP+VII+VD+VIPI0+VIP0I}, {(VF)divII,VCVTIP+VII+VD+VIPI0+VIP0I}},
   &rpsdiv},
 
 /* 89 +: */ {
  {{(VF)norBB,VCVTIP+VB+VIP    }, {(VF)norBB,VCVTIP+VB+VBB+VIP}, {(VF)norBB,VCVTIP+VB+VBB+VIP},
   {(VF)norBB,VCVTIP+VB+VBB+VIP}, {(VF)norBB,VCVTIP+VB+VBB+VIP}, {(VF)norBB,VCVTIP+VB+VBB+VIP},
   {(VF)norBB,VCVTIP+VB+VBB+VIP}, {(VF)norBB,VCVTIP+VB+VBB+VIP}, {(VF)norBB,VCVTIP+VB+VBB+VIP}, 
-  {(VF)norBB,VCVTIP+VB+VBB+VIP}, {(VF)norBB,VCVTIP+VB+VBB+VIP}, {(VF)norBB,VCVTIP+VB+VBB+VIP}, {0,0}},
+  {(VF)norBB,VCVTIP+VB+VBB+VIP}, {(VF)norBB,VCVTIP+VB+VBB+VIP}, {(VF)norBB,VCVTIP+VB+VBB+VIP}, {0,0}, {(VF)norBB,VCVTIP+VB+VBB+VIP}, {(VF)norBB,VCVTIP+VB+VBB+VIP}, {(VF)norBB,VCVTIP+VB+VBB+VIP}, {(VF)norBB,VCVTIP+VB+VBB+VIP}},
   &rpsnor},
 
 /* 88 +. */ {
  {{(VF)orBB,VCVTIP+VB+VIP     }, {(VF)gcdII,VCVTIP+VI+VII}, {(VF)gcdDD,VCVTIP+VD+VDD+VIP},
-  {(VF)gcdII,VCVTIP+VI+VII}, {(VF)gcdII,VCVTIP+VI    }, {(VF)gcdDD,VCVTIP+VD+VDD+VIP},
+  {(VF)gcdII,VCVTIP+VI+VII}, {(VF)gcdII,VCVTIP+VI}, {(VF)gcdDD,VCVTIP+VD+VDD+VIP},
   {(VF)gcdDD,VCVTIP+VD+VDD+VIP}, {(VF)gcdDD,VCVTIP+VD+VDD+VIP}, {(VF)gcdDD,VCVTIP+VD+VIP+VCANHALT}, 
-  {(VF)gcdZZ,VCVTIP+VZ+VZZ}, {(VF)gcdXX,VCVTIP+VX+VXX}, {(VF)gcdQQ,VCVTIP+VQ+VQQ}, {0,0}},
+  {(VF)gcdZZ,VCVTIP+VZ+VZZ}, {(VF)gcdXX,VCVTIP+VX+VXX}, {(VF)gcdQQ,VCVTIP+VQ+VQQ}, {0,0}, {(VF)gcdDD,VCVTIP+VD+VDD+VIP+VCANHALT}, {(VF)gcdDD,VCVTIP+VD+VDD+VIP+VCANHALT}, {(VF)gcdII,VCVTIP+VII+VI}, {(VF)gcdII,VCVTIP+VII+VI}},
   &rpsor},
 
 /* 2d -  */ {
  {{(VF)minusBB,VCVTIP+VI    }, {(VF)minusBI,VCVTIP+VI+VIPOKW}, {(VF)minusBD,VCVTIP+VD+VIPOKW}, 
   {(VF)minusIB,VCVTIP+VI+VIPOKA}, {(VF)minusII,VCVTIP+VI+VIP}, {(VF)minusID,VCVTIP+VD+VIPID},
   {(VF)minusDB,VCVTIP+VD+VIPOKA    }, {(VF)minusDI,VCVTIP+VD+VIPDI    }, {(VF)minusDD,VCVTIP+VD+VIP+VCANHALT}, 
-  {(VF)minusZZ,VCVTIP+VZ+VZZ+VIP}, {(VF)minusXX,VCVTIP+VX+VXX}, {(VF)minusQQ,VCVTIP+VQ+VQQ}, {0,0}},
+  {(VF)minusZZ,VCVTIP+VZ+VZZ+VIP}, {(VF)minusXX,VCVTIP+VX+VXX}, {(VF)minusQQ,VCVTIP+VQ+VQQ}, {0,0}, {(VF)0,VCVTIP+VIP+VCANHALT}, {(VF)minusEE,VCVTIP+VIP+VCANHALT}, {(VF)minusI2I2,VCVTIP+VUNCH+VIP}, {(VF)minusI4I4,VCVTIP+VUNCH+VIP}},
   &rpsminus},
 
    // For Booleans, VIP means 'inplace if rank not specified and there is no frame'
@@ -315,106 +317,116 @@ VA va[]={
  {{(VF)ltBB,VCVTIP+VB+VIP}, {(VF)ltBI,VCVTIP+VB+VIPOKA}, {(VF)ltBD,VCVTIP+VB+VIPOKA},
   {(VF)ltIB,VCVTIP+VB+VIPOKW}, {(VF)ltII,VCVTIP+VB}, {(VF)ltID,VCVTIP+VB},
   {(VF)ltDB,VCVTIP+VB+VIPOKW}, {(VF)ltDI,VCVTIP+VB}, {(VF)ltDD,VCVTIP+VB}, 
-  {(VF)ltDD,VCVTIP+VB+VDD+VIP}, {(VF)ltXX,VCVTIP+VB+VXFC}, {(VF)ltQQ,VCVTIP+VB+VQQ}, {(VF)ltSS,VCVTIP+VB}},
+  {(VF)ltDD,VCVTIP+VB+VDD+VIP}, {(VF)ltXX,VCVTIP+VB+VXFC}, {(VF)ltQQ,VCVTIP+VB+VQQ}, {(VF)ltSS,VCVTIP+VB}, {(VF)0,VCVTIP+VB}, {(VF)ltEE,VCVTIP+VB}, {(VF)ltI2I2,VCVTIP+VB}, {(VF)ltI4I4,VCVTIP+VB}},
   &rpslt},
 
 /* 3d =  */ {
  {{(VF)eqBB,VCVTIP+VB+VIP}, {(VF)eqBI,VCVTIP+VB+VIPOKA}, {(VF)eqBD,VCVTIP+VB+VIPOKA},
   {(VF)eqIB,VCVTIP+VB+VIPOKW}, {(VF)eqII,VCVTIP+VB}, {(VF)eqID,VCVTIP+VB},
   {(VF)eqDB,VCVTIP+VB+VIPOKW}, {(VF)eqDI,VCVTIP+VB}, {(VF)eqDD,VCVTIP+VB}, 
-  {(VF)eqZZ,VCVTIP+VB+VZZ}, {(VF)eqXX,VCVTIP+VB+VXEQ}, {(VF)eqQQ,VCVTIP+VB+VQQ}, {(VF)eqII,VCVTIP+VB}},
+  {(VF)eqZZ,VCVTIP+VB+VZZ}, {(VF)eqXX,VCVTIP+VB+VXEQ}, {(VF)eqQQ,VCVTIP+VB+VQQ}, {(VF)eqII,VCVTIP+VB}, {(VF)0,VCVTIP+VB}, {(VF)eqEE,VCVTIP+VB}, {(VF)eqI2I2,VCVTIP+VB}, {(VF)eqI4I4,VCVTIP+VB}},
   &rpseq},
 
 /* 3e >  */ {
  {{(VF)gtBB,VCVTIP+VB+VIP}, {(VF)gtBI,VCVTIP+VB+VIPOKA}, {(VF)gtBD,VCVTIP+VB+VIPOKA},
   {(VF)gtIB,VCVTIP+VB+VIPOKW}, {(VF)gtII,VCVTIP+VB}, {(VF)gtID,VCVTIP+VB},
   {(VF)gtDB,VCVTIP+VB+VIPOKW}, {(VF)gtDI,VCVTIP+VB}, {(VF)gtDD,VCVTIP+VB}, 
-  {(VF)gtDD,VCVTIP+VB+VDD+VIP}, {(VF)gtXX,VCVTIP+VB+VXCF}, {(VF)gtQQ,VCVTIP+VB+VQQ}, {(VF)gtSS,VCVTIP+VB}},
+  {(VF)gtDD,VCVTIP+VB+VDD+VIP}, {(VF)gtXX,VCVTIP+VB+VXCF}, {(VF)gtQQ,VCVTIP+VB+VQQ}, {(VF)gtSS,VCVTIP+VB}, {(VF)0,VCVTIP+VB}, {(VF)gtEE,VCVTIP+VB}, {(VF)gtI2I2,VCVTIP+VB}, {(VF)gtI4I4,VCVTIP+VB}},
   &rpsgt},
 
 /* 8a *. */ {
  {{(VF)andBB,VCVTIP+VB+VIP    }, {(VF)lcmII,VCVTIP+VI+VII}, {(VF)lcmDD,VCVTIP+VD+VDD+VIP},
   {(VF)lcmII,VCVTIP+VI+VII}, {(VF)lcmII,VCVTIP+VI    }, {(VF)lcmDD,VCVTIP+VD+VDD+VIP},
   {(VF)lcmDD,VCVTIP+VD+VDD+VIP}, {(VF)lcmDD,VCVTIP+VD+VDD+VIP}, {(VF)lcmDD,VCVTIP+VD+VIP+VCANHALT}, 
-  {(VF)lcmZZ,VCVTIP+VZ+VZZ}, {(VF)lcmXX,VCVTIP+VX+VXX}, {(VF)lcmQQ,VCVTIP+VQ+VQQ}, {0,0}},
+  {(VF)lcmZZ,VCVTIP+VZ+VZZ}, {(VF)lcmXX,VCVTIP+VX+VXX}, {(VF)lcmQQ,VCVTIP+VQ+VQQ}, {0,0}, {(VF)0,VCVTIP+VD+VDD+VIP+VCANHALT}, {(VF)lcmDD,VCVTIP+VD+VDD+VIP+VCANHALT}, {(VF)lcmII,VCVTIP+VII+VI}, {(VF)lcmII,VCVTIP+VII+VI}},
   &rpsand},
 
 /* 8b *: */ {
  {{(VF)nandBB,VCVTIP+VB+VIP},     {(VF)nandBB,VCVTIP+VB+VBB+VIP}, {(VF)nandBB,VCVTIP+VB+VBB+VIP},
   {(VF)nandBB,VCVTIP+VB+VBB+VIP}, {(VF)nandBB,VCVTIP+VB+VBB+VIP}, {(VF)nandBB,VCVTIP+VB+VBB+VIP},
   {(VF)nandBB,VCVTIP+VB+VBB+VIP}, {(VF)nandBB,VCVTIP+VB+VBB+VIP}, {(VF)nandBB,VCVTIP+VB+VBB+VIP}, 
-  {(VF)nandBB,VCVTIP+VB+VBB+VIP}, {(VF)nandBB,VCVTIP+VB+VBB+VIP}, {(VF)nandBB,VCVTIP+VB+VBB+VIP}, {0,0}},
+  {(VF)nandBB,VCVTIP+VB+VBB+VIP}, {(VF)nandBB,VCVTIP+VB+VBB+VIP}, {(VF)nandBB,VCVTIP+VB+VBB+VIP}, {0,0}, {(VF)nandBB,VCVTIP+VB+VBB+VIP}, {(VF)nandBB,VCVTIP+VB+VBB+VIP}, {(VF)nandBB,VCVTIP+VB+VBB+VIP}, {(VF)nandBB,VCVTIP+VB+VBB+VIP}},
   &rpsnand},
 
 /* 85 >: */ {
  {{(VF)geBB,VCVTIP+VB+VIP}, {(VF)geBI,VCVTIP+VB+VIPOKA}, {(VF)geBD,VCVTIP+VB+VIPOKA},
   {(VF)geIB,VCVTIP+VB+VIPOKW}, {(VF)geII,VCVTIP+VB}, {(VF)geID,VCVTIP+VB},
   {(VF)geDB,VCVTIP+VB+VIPOKW}, {(VF)geDI,VCVTIP+VB}, {(VF)geDD,VCVTIP+VB}, 
-  {(VF)geDD,VCVTIP+VB+VDD+VIP}, {(VF)geXX,VCVTIP+VB+VXFC}, {(VF)geQQ,VCVTIP+VB+VQQ}, {(VF)geSS,VCVTIP+VB}},
+  {(VF)geDD,VCVTIP+VB+VDD+VIP}, {(VF)geXX,VCVTIP+VB+VXFC}, {(VF)geQQ,VCVTIP+VB+VQQ}, {(VF)geSS,VCVTIP+VB}, {(VF)0,VCVTIP+VB}, {(VF)geEE,VCVTIP+VB}, {(VF)geI2I2,VCVTIP+VB}, {(VF)geI4I4,VCVTIP+VB}},
   &rpsge},
 
 /* 83 <: */ {
  {{(VF)leBB,VCVTIP+VB+VIP}, {(VF)leBI,VCVTIP+VB+VIPOKA}, {(VF)leBD,VCVTIP+VB+VIPOKA},
   {(VF)leIB,VCVTIP+VB+VIPOKW}, {(VF)leII,VCVTIP+VB}, {(VF)leID,VCVTIP+VB},
   {(VF)leDB,VCVTIP+VB+VIPOKW}, {(VF)leDI,VCVTIP+VB}, {(VF)leDD,VCVTIP+VB}, 
-  {(VF)leDD,VCVTIP+VB+VDD+VIP}, {(VF)leXX,VCVTIP+VB+VXCF}, {(VF)leQQ,VCVTIP+VB+VQQ}, {(VF)leSS,VCVTIP+VB}},
+  {(VF)leDD,VCVTIP+VB+VDD+VIP}, {(VF)leXX,VCVTIP+VB+VXCF}, {(VF)leQQ,VCVTIP+VB+VQQ}, {(VF)leSS,VCVTIP+VB}, {(VF)0,VCVTIP+VB}, {(VF)leEE,VCVTIP+VB}, {(VF)leI2I2,VCVTIP+VB}, {(VF)leI4I4,VCVTIP+VB}},
   &rpsle},
 
 /* 82 <. */ {
  {{(VF)andBB,VCVTIP+VB+VIP}, {(VF)minBI,VCVTIP+VI+VIPOKW}, {(VF)minBD,VCVTIP+VD+VIPOKW},
   {(VF)minIB,VCVTIP+VI+VIPOKA}, {(VF)minII,VCVTIP+VI+VIP}, {(VF)minID,VCVTIP+VD+VIPID},
   {(VF)minDB,VCVTIP+VD+VIPOKA}, {(VF)minDI,VCVTIP+VD+VIPDI}, {(VF)minDD,VCVTIP+VD+VIP}, 
-  {(VF)minDD,VCVTIP+VD+VDD+VIP}, {(VF)minXX,VCVTIP+VX+VXX}, {(VF)minQQ,VCVTIP+VQ+VQQ}, {(VF)minSS,VCVTIP+VSB}},  // always VIP a forced conversion
+  {(VF)minDD,VCVTIP+VD+VDD+VIP}, {(VF)minXX,VCVTIP+VX+VXX}, {(VF)minQQ,VCVTIP+VQ+VQQ}, {(VF)minSS,VCVTIP+VSB}, {(VF)0,VCVTIP+VIP}, {(VF)minEE,VCVTIP+VIP}, {(VF)minI2I2,VCVTIP+VUNCH+VIP}, {(VF)minI4I4,VCVTIP+VUNCH+VIP}},  // always VIP a forced conversion
   &rpsmin},
 
 /* 84 >. */ {
  {{(VF)orBB,VCVTIP+VB+VIP}, {(VF)maxBI,VCVTIP+VI+VIPOKW}, {(VF)maxBD,VCVTIP+VD+VIPOKW},
   {(VF)maxIB,VCVTIP+VI+VIPOKA}, {(VF)maxII,VCVTIP+VI+VIP}, {(VF)maxID,VCVTIP+VD+VIPID},
   {(VF)maxDB,VCVTIP+VD+VIPOKA}, {(VF)maxDI,VCVTIP+VD+VIPDI}, {(VF)maxDD,VCVTIP+VD+VIP}, 
-  {(VF)maxDD,VCVTIP+VD+VDD+VIP}, {(VF)maxXX,VCVTIP+VX+VXX}, {(VF)maxQQ,VCVTIP+VQ+VQQ}, {(VF)maxSS,VCVTIP+VSB}},
+  {(VF)maxDD,VCVTIP+VD+VDD+VIP}, {(VF)maxXX,VCVTIP+VX+VXX}, {(VF)maxQQ,VCVTIP+VQ+VQQ}, {(VF)maxSS,VCVTIP+VSB}, {(VF)0,VCVTIP+VIP}, {(VF)maxEE,VCVTIP+VIP}, {(VF)maxI2I2,VCVTIP+VUNCH+VIP}, {(VF)maxI4I4,VCVTIP+VUNCH+VIP}},
   &rpsmax},
 
 /* 2b +  */ {
  {{(VF)plusBB,VCVTIP+VI    }, {(VF)plusBI,VCVTIP+VI+VIPOKW}, {(VF)plusBD,VCVTIP+VD+VIPOKW}, 
   {(VF)plusIB,VCVTIP+VI+VIPOKA}, {(VF)plusII,VCVTIP+VI+VIP}, {(VF)plusID,VCVTIP+VD+VIPID}, 
   {(VF)plusDB,VCVTIP+VD+VIPOKA    }, {(VF)plusDI,VCVTIP+VD+VIPDI    }, {(VF)plusDD,VCVTIP+VD+VIP+VCANHALT}, 
-  {(VF)plusZZ,VCVTIP+VZ+VZZ+VIP}, {(VF)plusXX,VCVTIP+VX+VXX}, {(VF)plusQQ,VCVTIP+VQ+VQQ}, {0,0}},
+  {(VF)plusZZ,VCVTIP+VZ+VZZ+VIP}, {(VF)plusXX,VCVTIP+VX+VXX}, {(VF)plusQQ,VCVTIP+VQ+VQQ}, {0,0}, {(VF)0,VCVTIP+VIP+VCANHALT}, {(VF)plusEE,VCVTIP+VIP+VCANHALT}, {(VF)plusI2I2,VCVTIP+VUNCH+VIP}, {(VF)plusI4I4,VCVTIP+VUNCH+VIP}},
   &rpsplus},
 
 /* 2a *  */ {
  {{(VF)andBB,VCVTIP+VB+VIP}, {(VF)tymesBI,VCVTIP+VI+VIPOKW}, {(VF)tymesBD,VCVTIP+VD+VIPOKW},
   {(VF)tymesIB,VCVTIP+VI+VIPOKA}, {(VF)tymesII,VCVTIP+VI+VIP}, {(VF)tymesID,VCVTIP+VD+VIPID},
   {(VF)tymesDB,VCVTIP+VD+VIPOKA}, {(VF)tymesDI,VCVTIP+VD+VIPDI}, {(VF)tymesDD,VCVTIP+VD+VIP}, 
-  {(VF)tymesZZ,VCVTIP+VZ+VZZ+VIP}, {(VF)tymesXX,VCVTIP+VX+VXX}, {(VF)tymesQQ,VCVTIP+VQ+VQQ}, {0,0}},
+  {(VF)tymesZZ,VCVTIP+VZ+VZZ+VIP}, {(VF)tymesXX,VCVTIP+VX+VXX}, {(VF)tymesQQ,VCVTIP+VQ+VQQ}, {0,0}, {(VF)0,VCVTIP+VIP}, {(VF)tymesEE,VCVTIP+VIP}, {(VF)tymesI2I2,VCVTIP+VUNCH+VIP}, {(VF)tymesI4I4,VCVTIP+VUNCH+VIP}},
   &rpstymes},
 
 /* 5e ^  */ {   // may produce complex numbers
  {{(VF)geBB,VCVTIP+VB+VIP}, {(VF)powBI,VCVTIP+VD}, {(VF)powBD,VCVTIP+VD},
   {(VF)powIB,VCVTIP+VI}, {(VF)powII,VCVTIP+VD}, {(VF)powID,VCVTIP+VD+VCANHALT},
   {(VF)powDB,VCVTIP+VD}, {(VF)powDI,VCVTIP+VD}, {(VF)powDD,VCVTIP+VD+VCANHALT}, 
-  {(VF)powZZ,VCVTIP+VZ+VZZ}, {(VF)powXX,VCVTIP+VX+VXX}, {(VF)powQQ,VCVTIP+VQ+VQQ}, {0,0}},
+  {(VF)powZZ,VCVTIP+VZ+VZZ}, {(VF)powXX,VCVTIP+VX+VXX}, {(VF)powQQ,VCVTIP+VQ+VQQ}, {0,0}, {(VF)0,VCVTIP+VD+VDD+VCANHALT}, {(VF)powEE,VCVTIP+VCANHALT}, {(VF)powDD,VCVTIP+VD+VCANHALT}, {(VF)powDD,VCVTIP+VD+VCANHALT}},
   &rpsge},
 
 /* 7c |  */ {
  {{(VF)ltBB,VCVTIP+VB+VIP    }, {(VF)remII,VCVTIP+VI+VII+VIP}, {(VF)remDD,VCVTIP+VD+VDD+VIP},
-  {(VF)remII,VCVTIP+VI+VII+VIP}, {(VF)remII,VCVTIP+VI+VIP    }, {(VF)remID,VCVTIP+VI+VCANHALT    },   // remID can 'overflow' if result is nonintegral
+  {(VF)remII,VCVTIP+VI+VII+VIP}, {(VF)remII,VCVTIP+VI+VIP}, {(VF)remID,VCVTIP+VI+VCANHALT    },   // remID can 'overflow' if result is nonintegral
   {(VF)remDD,VCVTIP+VD+VDD+VIP}, {(VF)remDD,VCVTIP+VD+VDD+VIP}, {(VF)remDD,VCVTIP+VD+VIP+VCANHALT}, 
-  {(VF)remZZ,VCVTIP+VZ+VZZ}, {(VF)remXX,VCVTIP+VX+VXX}, {(VF)remQQ,VCVTIP+VQ+VQQ}, {0,0}},
+  {(VF)remZZ,VCVTIP+VZ+VZZ}, {(VF)remXX,VCVTIP+VX+VXX}, {(VF)remQQ,VCVTIP+VQ+VQQ}, {0,0}, {(VF)0,VCVTIP+VD+VDD+VIP+VCANHALT}, {(VF)remDD,VCVTIP+VD+VDD+VIP+VCANHALT}, {(VF)remI2I2,VCVTIP+VUNCH+VIP}, {(VF)remI4I4,VCVTIP+VUNCH+VIP}},
   &rpslt},
 
 /* 21 !  */ {
  {{(VF)leBB,VCVTIP+VB+VIP            }, {(VF)binDD,VCVTIP+VD+VDD+VRI+VIP}, {(VF)binDD,VCVTIP+VD+VDD+VIP}, 
   {(VF)binDD,VCVTIP+VD+VDD+VRI+VIP}, {(VF)binDD,VCVTIP+VD+VDD+VRI+VIP}, {(VF)binDD,VCVTIP+VD+VDD+VIP}, 
-  {(VF)binDD,VCVTIP+VD+VDD+VIP    }, {(VF)binDD,VCVTIP+VD+VDD+VIP    }, {(VF)binDD,VCVTIP+VD+VIP    }, 
-  {(VF)binZZ,VCVTIP+VZ+VZZ}, {(VF)binXX,VCVTIP+VX+VXX}, {(VF)binQQ,VCVTIP+VX+VQQ}, {0,0}}, 
+  {(VF)binDD,VCVTIP+VD+VDD+VIP    }, {(VF)binDD,VCVTIP+VD+VDD+VIP    }, {(VF)binDD,VCVTIP+VD+VIP}, 
+  {(VF)binZZ,VCVTIP+VZ+VZZ}, {(VF)binXX,VCVTIP+VX+VXX}, {(VF)binQQ,VCVTIP+VX+VQQ}, {0,0}, {(VF)0,VCVTIP+VD+VDD+VIP}, {(VF)binDD,VCVTIP+VD+VDD+VIP}, {(VF)binDD,VCVTIP+VD+VDD+VIP}, {(VF)binDD,VCVTIP+VD+VDD+VIP}}, 
   &rpsle},
 
 /* d1 o. */ {
  {{(VF)cirDD,VCVTIP+VD+VDD}, {(VF)cirDD,VCVTIP+VD+VDD}, {(VF)cirBD,VCVTIP+VD},
   {(VF)cirDD,VCVTIP+VD+VDD}, {(VF)cirDD,VCVTIP+VD+VDD}, {(VF)cirID,VCVTIP+VD},
   {(VF)cirDD,VCVTIP+VD+VDD}, {(VF)cirDD,VCVTIP+VD+VDD}, {(VF)cirDD,VCVTIP+VD}, 
-  {(VF)cirZZ,VCVTIP+VZ+VZZ+VRD}, {(VF)cirDD,VCVTIP+VD+VDD}, {(VF)cirDD,VCVTIP+VD+VDD}, {0,0}},
+  {(VF)cirZZ,VCVTIP+VZ+VZZ+VRD}, {(VF)cirDD,VCVTIP+VD+VDD}, {(VF)cirDD,VCVTIP+VD+VDD}, {0,0}, {0,0}, {(VF)cirEE,VCVTIP+VCANHALT}, {(VF)cirDD,VCVTIP+VDD+VD}, {(VF)cirDD,VCVTIP+VDD+VD}},
   &rpsnull},
+
+
+/* -- (compare |) */ {
+// these routines are used only for floating-point types (DD), so they overlap
+ {{0,0}, {0,0}, {0,0},
+  {(VF)eqabsDD,VCVTIP+VB}, {(VF)neabsDD,VCVTIP+VB}, {(VF)ltabsDD,VCVTIP+VB},
+  {(VF)leabsDD,VCVTIP+VB}, {(VF)geabsDD,VCVTIP+VB}, {(VF)gtabsDD,VCVTIP+VB}, 
+  {0,0}, {0,0}, {0,0}, {0,0}},
+  &rpsnull},
+
 
 };
 
@@ -432,14 +444,6 @@ A jtcvz(J jt,I cv,A w){I t;
  R w;
 }    /* convert result */
 
-
-// Table converting operand types to slot numbers in a va[] entry
-// Employed when one arg is known to be CMPX/XNUM/RAT.  Indexed by
-// bitmask of RAT,CMPX,FL.  Entry 9=CMPX; otherwise entry 8=some FL, otherwise
-// entry 10 for XNUM, 11 for some RAT 
-// static UC xnumpri[] = {10 ,8 ,9 ,9 ,11 ,8 ,9 ,9};
-#define xnumpri 0x998B998AU   // we use shift to select 4-bit sections
-
 #if 0 // for debug, to display info about a sparse block
 if(ISSPARSE(AT(a))){
 printf("va2a: shape="); A spt=a; DO(AR(spt), printf(" %d",AS(spt)[i]);) printf("\n");
@@ -450,48 +454,22 @@ printf("va2a: indexes="); spt=SPA(PAV(a),i); DO(AN(spt), printf(" %d",IAV(spt)[i
 // repair routines for integer overflow, possibly in place
 static VF repairip[4] = {plusBIO, plusIIO, minusBIO, minusIIO};
 
-#if 0
-      // choose the non-in-place argument
-      adocv.f=(VF)plusIIO; nipw = z!=w; break; // if w not repeated, select it for not-in-place
-     case EWOVIPPLUSBI:
-      adocv.f=(VF)plusBIO; nipw = 0; break;   // Leave the Boolean argument as a
-     case EWOVIPPLUSIB:
-      adocv.f=(VF)plusBIO; nipw = 1; break;  // Use w as not-in-place
-     case EWOVIPMINUSII:
-      adocv.f=(VF)minusIIO; nipw = z!=w; break; // if w not repeated, select it for not-in-place
-     case EWOVIPMINUSBI:
-      adocv.f=(VF)minusBIO; nipw = 0; break;   // Leave the Boolean argument as a
-     case EWOVIPMINUSIB:
-      adocv.f=(VF)minusBIO; nipw = 1; break;  // Use w as not-in-place
-#endif
-
 // All dyadic arithmetic verbs f enter here, and also f"n.  a and w are the arguments, id
 // is the pseudocharacter indicating what operation is to be performed.  self is the block for this primitive,
-#if 1 // obsolete SY_64
 // allranks is (ranks of a and w),(verb ranks)
 static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,UI allranks){  // allranks is argranks/ranks
-#else
-// ranks are the ranks of the verb, argranks are the ranks of a and w combined into 1 field
-static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ranks,UI argranks){
-#endif
  A z;I m,mf,n,nf,zn;VA2 adocv,*aadocv;UI fr;  // fr will eventually be frame/rank  nf (and mf) change roles during execution  fr/shortr use all bits and shift
-#if 0  // obsolete  !SY_64
-   I scellf=0;  // 0 for no rank
-#endif
  I aawwzk[5];  // a outer/only, a inner, w outer/only, w inner, z
  F2PREFIP;
  {I at=AT(a);
   I wt=AT(w);
-  if(likely(!(((I)jtinplace&(JTRETRY|JTEMPTY))+((at|wt)&((SPARSE|NOUN)&~(B01|INT|FL)))))){  // no error, bool/int/fl nonsparse args, no empties
-   // Here for the fast and important case, where the arguments are both B01/INT/FL
+  if(likely(!(((I)jtinplace&JTRETRY)+((at|wt)&((SPARSE|NOUN)&~(B01|INT|FL)))))){  // no error, bool/int/fl nonsparse args
+   // Here for the fast and important case, where the arguments are both dense B01/INT/FL
    VA *vainfo=((VA*)((I)va+FAV(self)->localuse.lu1.uavandx[1]));  // extract table line from the primitive
    // The index into va is atype*3 + wtype, calculated sneakily.  We test here to avoid the call overhead
    aadocv=&vainfo->p2[(at>>(INTX-1))+((at+wt)>>INTX)];
   }else{
 
-   // If an operand is empty, turn it to Boolean, and if the OTHER operand is non-numeric, turn that to Boolean too (leaving
-   //  rank and shape untouched).  This change to the other operand is notional only - we won't actually convert
-   // when there is an empty - but it guarantees that execution on an empty never fails.
    // If we switch a sparse nonnumeric matrix to boolean, that may be a space problem; but we don't
    // support nonnumeric sparse now
    // if an operand is sparse, replace its type with the corresponding non-sparse type, for purposes of testing operand precisions
@@ -499,12 +477,20 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
     at&=~SPARSE; wt&=~SPARSE;
     jtinplace=0;  // We use jtinplace==0 as a flag meaning 'sparse'
    }
+   // Get the result type and routine
+   adocv=var(self,at,wt);
+   if(unlikely(adocv.f==0)){
+    // There is no routine for these argument types.  That's an error unless an argument is empty
+    // If an operand is empty, turn it to Boolean, and if the OTHER operand is non-numeric, turn that to Boolean too (leaving
+    //  rank and shape untouched).  This change to the other operand is notional only - we won't actually convert
+    // when there is an empty - but it guarantees that execution on an empty never fails.
+    at=((-AN(a)&(-AN(w)|-(at&NUMERIC)))>=0)?B01:at;
+    wt=((-AN(w)&(-AN(a)|-(wt&NUMERIC)))>=0)?B01:wt;
+    adocv=var(self,at,wt);   // rerun the decode with safer types
+   }
+   aadocv=&adocv;  // we save the address of the struct
    // We could allocate the result block here & avoid the test after the allocation later.  But we would have to check for agreement etc
-   if(AN(a)==0){at=B01;if(!(wt&NUMERIC))wt=B01;}  // switch empty arg to Boolean & ensure compatibility with other arg
-   if(AN(w)==0){wt=B01;if(!(at&NUMERIC))at=B01;}
-
-   // Figure out the result type.  Don't signal the error from it yet, because domain has lower priority than agreement
-   adocv=var(self,at,wt); aadocv=&adocv;
+   // Don't signal domain error on the types yet, because domain has lower priority than agreement
   }
  }
 
@@ -517,13 +503,8 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
  // Analyze the rank and calculate cell shapes, counts, and sizes.
  // We detect agreement error before domain error
  {//I *as = AS(a); I *ws = AS(w);
-#if 1 // obsolete SY_64
   if(likely((allranks&RANK2TMSK)==0)){ // rank 0 0 means no outer frames, sets up faster
    fr=allranks>>(3*RANKTX); UI shortr=(allranks>>(2*RANKTX))&RANKTMSK;  // fr,shortr = ar,wr to begin with.  Changes later
-#else
-  fr=argranks>>RANKTX; UI shortr=argranks&RANKTMSK;  // fr,shortr = ar,wr to begin with.  Changes later
-  if(ranks==0){ // rank 0 0 means no outer frames, sets up faster
-#endif
    // No rank specified.  Since all these verbs have rank 0, that simplifies quite a bit.  ak/wk/zk are not needed and are garbage
    // n is not needed for sparse, but we start it early to get it finished
    if(likely(jtinplace!=0)){
@@ -554,7 +535,6 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
    }
   }else{I ak,wk;UI acr,wcr;  // fr, shortr are left/right verb rank here
    // Here, a rank was specified.  That means there must be a frame, according to the IRS rules
-#if 1 // obsolete SY_64
    {I af,wf;
     // Heavy register pressure here.  Seemingly trivial changes to allranks cause early spill of a in next-to-last PRODRNK
     // When this was written with 6 names it barely fit in registers, so I rewrote it with 4 names.  Compiler's ideas about handling allranks fill spare register
@@ -566,18 +546,9 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
     acr>>=RANKTX; acr|=af;  // acr = afr/acr    final value
     // allranks is noun 0/0/anr/wnr
    }
-#else
-   I af,wf;
-   acr=ranks>>RANKTX; acr=fr<acr?fr:acr; af=fr-acr;  // acr=effective rank, af=left frame
-   wcr=(RANKT)ranks; wcr=shortr<wcr?shortr:wcr; wf=shortr-wcr; // r=right rank of verb, wcr=effective rank, wf=right frame  fr/shortr free
-#endif
    if(likely(jtinplace!=0)){  // If not sparse... This block isn't needed for sparse arguments, and may fail on them.
     jtinplace = (J)((I)jtinplace&3);  // remove all but the inplacing bits
     jtinplace = (J)((I)jtinplace+aadocv->cv);  // insert flag bits for routine (always has bits 0-3=0xc); set bits 2-3 (converted inplacing bits) aadocv free
-#if 1 // obsolete SY_64
-// obsolete     jtinplace = (J)((I)jtinplace+((acr+((I)1<<(2*RANKTX))-wcr)&(VIPWFLONG|VIPWCRLONG)));  // set flag for 'w has longer cell-rank' and 'w has longer frame (wrt verb)'.  The 1 is a carry blocker
-// obsolete     jtinplace = (J)((I)jtinplace+((RANKT)wcr>(RANKT)acr?VIPWCRLONG:0));  // set flag for 'w has longer cell-rank'
-// obsolete     jtinplace = (J)((I)jtinplace+((wcr&~RANKTMSK)>acr?VIPWFLONG:0));  // set flag for 'w has longer frame (wrt verb)'
 
     jtinplace = (J)((I)jtinplace+(((wcr+(acr^(((1LL<<(RANKTX-1))-1)*((1LL<<(RANKTX))+1))))&(((1LL<<(RANKTX-1)))+((1LL<<(2*RANKTX-1)))))<<(VIPWCRLONGX-(RANKTX-1))));  // set flag for 'w has longer cell-rank' and 'w has longer frame (wrt verb)'
     wcr+=acr<<2*RANKTX;  // afr/acr/wfr/wcr
@@ -585,12 +556,6 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
 
     PRODRNK(ak,acr, AS(a)+(wcr>>(3*RANKTX))); PRODRNK(wk,wcr,AS(w)+((wcr>>RANKTX)&RANKTMSK));   // left/right #atoms/cell  length is assigned first
        // note: the prod above can never fail, because it gives the actual # cells of an existing noun  acr free
-#else
-    jtinplace = (J)((I)jtinplace+((af-wf)&VIPWFLONG));  // set flag for 'w has longer frame (wrt verb)'
-    jtinplace = (J)((I)jtinplace+((acr-wcr)&VIPWCRLONG));  // set flag for 'w has longer cell-rank'
-    acr+=af<<RANKTX; wcr+=wf<<RANKTX; //  acr/wcr now have frame/cellrank  bits above 15 are ignored in length  wf free
-    PRODRNK(ak,acr, AS(a)+af); PRODRNK(wk,wcr,AS(w)+(wcr>>RANKTX));   // left/right #atoms/cell  length is assigned first af free
-#endif
     // m=#atoms in cell with shorter rank; n=#times shorter-rank cells must be repeated; r=larger of cell-ranks
     // fr has the longer cell-rank
     // if looping required, calculate the strides for input & output.  Needed only if mf or nf>1, but not worth testing, since presumably one will, else why use rank?
@@ -600,26 +565,15 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
      // jtinplace VIPWFLONG set if wf>af, bit VIPWCRLONG set if wcr>acr
     zn=(I)jtinplace&VIPWCRLONG?wk:ak;    // zn=#atoms in cell with larger rank
     m=(I)jtinplace&VIPWCRLONG?ak:wk;  // m=#atoms in common inner cell, i. e. the smaller
-    aawwzk[4]=zn<<bplg(rtype((I)jtinplace));  // calc result-cell size and move it out of registers
-    ak<<=bplg(AT(a)); wk<<=bplg(AT(w));  // convert cell sizes to bytes
+    I wt=AT(w); I cvt=rtype((I)jtinplace);  // if rtype=0, we use the arg type
+    aawwzk[4]=zn<<bplg(cvt==0?wt:cvt);  // calc result-cell size and move it out of registers
+    ak<<=bplg(AT(a)); wk<<=bplg(wt);  // convert cell sizes to bytes
     aawwzk[0]=ak; aawwzk[2]=wk; ak=((I)jtinplace&VIPWFLONG)?0:ak; wk=((I)jtinplace&VIPWFLONG)?wk:0; aawwzk[1]=ak; aawwzk[3]=wk;  // set inner cell size for last followed by non-last.  Last is 0 for a repeated cell ak/wk free
-// obsolete     I shortr=(I)jtinplace&VIPWCRLONG?acr:wcr; fr=(I)jtinplace&VIPWCRLONG?wcr:acr; // shortr=frame(short cell)/cellrank(short cell)  fr=frame(long cell)/cellrank(long cell)
-    I shortr=wcr>>(((I)jtinplace&VIPWCRLONG)>>(VIPWCRLONGX-LGRANK2TX)); fr=wcr>>((((I)jtinplace&VIPWCRLONG)>>(VIPWCRLONGX-LGRANK2TX))^RANK2TX); // shortr=frame(short cell)/cellrank(short cell)  fr=frame(long cell)/cellrank(long cell)
+    I shortr=wcr>>(((I)jtinplace>>(VIPWCRLONGX-LGRANK2TX))&(VIPWCRLONG>>(VIPWCRLONGX-LGRANK2TX))); fr=wcr>>((((I)jtinplace>>(VIPWCRLONGX-LGRANK2TX))&(VIPWCRLONG>>(VIPWCRLONGX-LGRANK2TX)))^RANK2TX); // shortr=frame(short cell)/cellrank(short cell)  fr=frame(long cell)/cellrank(long cell)
     shortr&=RANKTMSK; fr&=RANK2TMSK; // cellrank(short cell)
-#if 1 // obsolete SY_64
-// obsolete     shortr*=0x20000ffff;   //   cellrank(short cell)/cellrank(short cell)/-cellrank(short cell)  200000000+10000+ffffffffffffffff
     shortr*=((I)1<<2*RANKTX)+((I)1<<RANKTX)-1;   //   cellrank(short cell)/cellrank(short cell)/-cellrank(short cell)  100000000+10000+ffffffffffffffff
     shortr+=fr;  // cellrank(short cell)/frame(long cell)+cellrank(short cell)/cellrank(long cell)-cellrank(short cell)
                  //  length for agreement / offset to excess frame, for calc n  / length for calc n,(# intracell repeats) - final value
-// obsolete     acr>>=RANKTX; wcr>>=RANKTX;  // NOW ACR/WCR HAVE BEEN REPURPOSED TO MEAN AF/WF; acr/wcr gone
-#else
-    // upper component of shortr must be saved in savshortr
-    UI savshortr = shortr+(fr>>RANKTX); shortr*=0xffff;
-    shortr+=fr&RANKTMSK;  // frame(long cell)+cellrank(short cell)/cellrank(short cell)/cellrank(long cell)-cellrank(short cell)
-                 //  offset to excess frame, for calc n  / length for agreement / length for calc n,(# intracell repeats) - final value
-    acr>>=RANKTX; wcr>>=RANKTX;  // NOW ACR/WCR HAVE BEEN REPURPOSED TO MEAN AF/WF; acr/wcr gone
-    // on 32-bit systems, the top 2 fields have to go into names scellf and f
-#endif
     // fr is now frame/rank of long cell
     // fr will be (frame(long cell))  /  (shorter frame len)   /  (longer frame len)                      /   (longer frame len+longer celllen)
     //  (offset to store cellshape to)  / for #outer cells mf  / length of frame to copy, also to calc nf / ranks that = this have no repeats, can inplace (also used to figure cellen for shape copy)
@@ -631,50 +585,21 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
     f+=f<<2*RANKTX;   //  aframe/wframe/aframe/wframe
     f>>=((I)jtinplace&VIPWFLONG)>>(VIPWFLONGX-LGRANKTX);  // shift by 0/8 (8 if w has long frame) to give x/x/longframe/shortframe
     f&=RANKTMSK*(1+(1LL<<RANKTX)); f=(f<<2*RANKTX)+(f>>RANKTX);  // longframe/shortframe/0/longframe
-// obsolete     UI f=(wcr>>3*RANKTX); f|=f<<(2*RANKTX); f|=wcr&(RANKTMSK<<RANKTX);   // f=0/aframe/wframe/aframe
-// obsolete     f>>=((I)jtinplace&VIPWFLONG?2*RANKTX:RANKTX);  // shift by 8/16 (16 if w has long frame) to give longframe/shortframe/x/0
-// obsolete     f|=f>>3*RANKTX; f&=~(RANKTMSK<<RANKTX);  // f=long frame/short frame/0/long frame
-// obsolete     UI f=((wcr&(RANKTMSK<<RANKTX))*((1LL<<RANKTX)+(1LL<<3*RANKTX)+(1LL<<6*RANKTX))) + (wcr>>3*RANKTX)*(1+(1LL<<3*RANKTX)+(1LL<<6*RANKTX));  // frames: w/a/0/w/a/w/0/a
-// obsolete     f>>=(((I)jtinplace&VIPWFLONG)>>(VIPWFLONGX-(LGRANKTX+2)));  // /long frame/short frame/0/long frame
 #if SY_64
     f+=wcr<<4*RANKTX;  // afr/acr/wfr/wcr/long frame/short frame/0/long frame   wcr free
 #define acrwcr (fr>>4*RANKTX)  // put frames into fr to save a register
 #else
 #define acrwcr wcr
 #endif
-// obsolete     I f=((I)jtinplace&VIPWFLONG)?wcr:acr;    // f=aframe/wframe/short frame/long frame/long frame
-#if 1 // obsolete SY_64
-// obsolete     fr*=0x8001; fr&=(0xffff000000007fffU);  // encode start of cell-shape in the argument where the longer cell-shape resides  frame(long cell)/0/0/cellrank(long cell)
-// obsolete     f*=0xffffffff00010001; fr+=f; f=(acr+wcr)<<(2*RANKTX); fr+=f;  // cry/-longframe/longframe/longframe   frame(long cell)+cry/-longframe/longframe/longframe+cellrank(long cell) 0 + ffffffff00000000 + 10000 + 1
-// obsolete     fr*=(1LL<<(2*RANKTX))+1; fr&=(RMAX<<3*RANKTX)+RMAX;  // encode start of cell-shape in the argument where the longer cell-shape resides  frame(long cell)/0/0/cellrank(long cell)  scaf extract
-// obsolete     f*=-((I)1<<2*RANKTX)+((I)1<<RANKTX)+1; fr+=f; f=(acr+wcr)<<(2*RANKTX); fr+=f;  // cry/-longframe/longframe/longframe   frame(long cell)+cry/-longframe/longframe/longframe+cellrank(long cell) 0 + ffffffff00000000 + 10000 + 1
     fr+=f;    //   fr=afr/acr/wfr/wcr/longframe/shortframe/frame(long cell)/longframe+cellrank(long cell)
-// obsolete     // register pressure is excruciating here.  Only one register allowed, and no 64-bit immediates
-// obsolete     f=fr&RANKTMSK; f^=RANKTMSK; allranks>>=2*RANKTX; allranks^=f; f<<=RANKTX; allranks^= f;  // now allranks has 2 bytes, with 00 indicating OK to inplace  i. e. argrank^f+fr  f free
-// obsolete     allranks+=(VIPOKRNKA-1)-((1LL<<(2*RANKTX))-1)+(1LL<<RANKTX); // 0x00010000  set VIPOKRNKA  (by carry into 0) if a byte of allranks is 00
-// obsolete     allranks&=~((VIPOKRNKW<<1)-(1LL<<RANKTX)); allranks+=(VIPOKRNKW-(1LL<<RANKTX))+1;  // 0x3fff0001  set VIPOKRNKW (by carry into 0) if w byte of allranks is 00
-// obsolete     allranks>>=(VIPOKRNKAX-VIPOKAX); allranks&=~VIPOKW; allranks+=VIPOKW>>1; allranks|=~(VIPOKA+VIPOKW); jtinplace=(J)((I)jtinplace&allranks);  // close up gap betw RNKA and RNKW  allranks free  scaf use decode inst
     f=fr&RANKTMSK; allranks|=(1LL<<(RANKTX-1))+(1LL<<(2*RANKTX-1)); allranks-=f; f<<=RANKTX; allranks-=f;  // set sign bit of rank if = long frame + long cell (can't be any bigger) f free
     ASSERTAGREE(AS(a)+(acrwcr>>3*RANKTX), AS(w)+(((RANK2T)acrwcr>>RANKTX)), (shortr>>2*RANKTX))  // offset to each cellshape, and cellrank(short cell) acr wcr free but were actually spilled earlier
     PRODRNK(n,shortr,AS((I)jtinplace&VIPWCRLONG?w:a)+((RANK2T)shortr>>RANKTX));  // n is #atoms in excess frame of inner cells, length assigned first shortr free
-#else
-    // fr will be (frame(long cell))  /  (shorter frame len)   /  (longer frame len)                      /   (longer frame len+longer celllen)
-    scellf=(fr>>RANKTX);  // offset is long shape of start of inner cell    frame(long cell)
-    fr&=RANKTMSK;  // longer celllen
-    fr += f<<RANKTX;  // longer frame/longer cellen
-    fr+=f;   // longer frame/longer frame+longer cellen
-    f=acr+wcr-f;  // switch f to #shorter frame  short frame  for much later
-    jtinplace=(J)((I)jtinplace&(((((argranks>>RANKTX)^fr)&RANKTMSK)-1)|~VIPOKA));  // disable inplace a if a rank has either repeat, i. e. argrank!=f+fr
-    jtinplace=(J)((I)jtinplace&((((argranks^fr)&RANKTMSK)-1)|~VIPOKW));  // disable inplace w if w rank has either repeat, i. e. argrank!=f+fr
-    ASSERTAGREE(AS(a)+acr, AS(w)+wcr, (shortr>>RANKTX)&RANKTMSK)   // shortr free  af/wf free
-    PRODRNK(n,shortr,AS((I)jtinplace&VIPWCRLONG?w:a)+savshortr);  // n is #atoms in excess frame of inner cells, length assigned first shortr free
-#endif
     // if the cell-shapes don't match, that's an agreement error UNLESS the frame contains 0; in that case it counts as
     // 'error executing on the cell of fills' and produces a scalar 0 as the result for that cell, which we handle by changing the result-cell rank to 0
     // Nonce: continue giving the error even when frame contains 0 - remove 1|| in the next line to conform to fill-cell rules
 // this shows the fix   if(ICMP(as+af,ws+wf,MIN(acr,wcr))){if(1||zn)ASSERT(0,EVLENGTH)else r = 0;}
-    n^=REPSGN((1-n)&SGNIF((I)jtinplace,VIPWCRLONGX));  // encode 'w has long frame, so a is repeated' as complementary n; but if n<2, leave it alone
-// obsolete     nf=((I)jtinplace>>VIPOKWX)&3;  // extract inplaceability from operation and ranks   scaf extract
+    n^=REPSGN((1-n)&SGNIF(jtinplace,VIPWCRLONGX));  // encode 'w has long frame, so a is repeated' as complementary n; but if n<2, leave it alone
 #ifdef PEXT
     nf=((I)jtinplace>>VIPOKWX)&PEXT(allranks,(1LL<<(RANKTX-1))+(1LL<<(2*RANKTX-1)));  // extract inplaceability from ranks   allranks free
 #else
@@ -683,16 +608,10 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
     nf=a==w?0:nf;  // not inplaceable if args identical
     nf+=4*nf-16;  // make 2 copies of the 2 bits protect high bits of jtinplace.  This is a long dependency chain through nf but it will overlap the PRODs coming up
     jtinplace = (J)((I)jtinplace&nf);  // bit 2-3=routine/rank/arg inplaceable, 0-1=routine/rank/arg/input inplaceable   nf free
-#if 1 // obsolete SY_64
     f=fr>>(2*RANKTX); f&=RANKTMSK;  // recover (shorter frame len) from upper fr
     PRODRNK(nf,((fr>>3*RANKTX)-f),f+AS(((I)jtinplace&VIPWFLONG)?w:a));    // nf=#times shorter-frame cell must be repeated;  offset is (shorter frame len), i. e. loc of excess frame
          // length is (longer frame len)-(shorter frame len)  i. e. length of excess frame
     PRODRNK(mf,f,AS(w));  //  mf=#cells in common frame [either arg ok]   f is (shorter frame len)      f free now
-#else
-    PRODRNK(nf,((fr>>RANKTX)-f),f+AS(((I)jtinplace&VIPWFLONG)?w:a));    // nf=#times shorter-frame cell must be repeated;  offset is (shorter frame len), i. e. loc of excess frame
-         // length is (longer frame len)-(shorter frame len)  i. e. length of excess frame
-    PRODRNK(mf,f,AS(a));  //  mf=#cells in common frame [either arg ok]   f is (shorter frame len)      f free now
-#endif
     
     // Now nf=outer repeated frame  mf=outer common frame  n=inner repeated frame  m=inner common frame
     //    leading axes --------------------------------------------------------------> trailing axes
@@ -713,9 +632,7 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
      DPMULDE(zn,mf,zn)  // total # atoms in result
     }
    }else{
-#if 1 // obsolete SY_64
     I af=acr>>(RANKTX), wf=wcr>>(RANKTX); acr&=RANKTMSK; wcr&=RANKTMSK;   // separate cr and f for sparse
-#endif
     fr=acr<wcr?wcr:acr; I f=(af<wf)?wf:af; fr+=(f<<RANKTX)+f; aawwzk[0]=acr; aawwzk[1]=wcr; mf=af; nf=wf;
    }
    // For sparse, repurpose ak/wk/mf/nf to hold acr/wcr/af/wf, which we will pass into vasp.  This allows acr/wcr/af/wf to be block-local
@@ -723,7 +640,7 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
   }
  }
 
- RESETRANK;  // Ranks are required for xnum/rat/sparse, which call IRS-enabled routines internally.  We could suppress this for mainline types, perhaps in var().  Anyone who sets this must set it back,
+ RESETRANK;  // Ranks are required for sparse, which calls IRS-enabled routines internally.  We could suppress this for mainline types, perhaps in var().  Anyone who sets this must set it back,
              // so it's OK that we don't clear it if we have error
 
  // Signal domain error if appropriate. Must do this after agreement tests
@@ -736,12 +653,13 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
    // might fail because the type in t is incompatible with the actual type in a.  t is rare.
    //
    // Because of the priority of errors we mustn't check the type until we have verified agreement above
-   if(unlikely(((I)jtinplace&VARGMSK)!=0))if(likely(zn>0)){I t=atype((I)jtinplace);  // input conversion required (rare), and the result is not empty
+   if(unlikely(((I)jtinplace&VARGMSK)!=0))if(likely(zn>0)){  // input conversion required (rare), and the result is not empty
+    I at=AT(a), wt=AT(w), t=atype((I)jtinplace); t=(I)jtinplace&VCOPYA?at:t; t=(I)jtinplace&VCOPYW?wt:t;  // get shared input type, which might be from one of the inputs
     // Conversions to XNUM use a routine that pushes/sets/pops jt->mode, which controls the
     // type of conversion to XNUM in use.  Any result of the conversion is automatically inplaceable.  If type changes, change the cell-size too, possibly larger or smaller
     // bits 2-3 of jtinplace indicate whether inplaceability is allowed by the op, the ranks, and the addresses
-    if(TYPESNE(t,AT(a))){aawwzk[0]=(aawwzk[0]>>bplg(AT(a)))<<bplg(t); aawwzk[1]=(aawwzk[1]>>bplg(AT(a)))<<bplg(t); RZ(a=cvt(t|((I)jtinplace&VARGCVTMSKF),a)); jtinplace = (J)(intptr_t)((I)jtinplace | (((I)jtinplace>>2)&JTINPLACEA));}
-    if(TYPESNE(t,AT(w))){aawwzk[2]=(aawwzk[2]>>bplg(AT(w)))<<bplg(t); aawwzk[3]=(aawwzk[3]>>bplg(AT(w)))<<bplg(t); RZ(w=cvt(t|((I)jtinplace&VARGCVTMSKF),w)); jtinplace = (J)(intptr_t)((I)jtinplace | (((I)jtinplace>>2)&JTINPLACEW));}
+    if(TYPESNE(t,at)){aawwzk[0]=(aawwzk[0]>>bplg(at))<<bplg(t); aawwzk[1]=(aawwzk[1]>>bplg(AT(a)))<<bplg(t); RZ(a=cvt(t|((I)jtinplace&XCVTXNUMORIDEMSK),a)); jtinplace = (J)(intptr_t)((I)jtinplace | (((I)jtinplace>>2)&JTINPLACEA));}
+    if(TYPESNE(t,wt)){aawwzk[2]=(aawwzk[2]>>bplg(wt))<<bplg(t); aawwzk[3]=(aawwzk[3]>>bplg(AT(w)))<<bplg(t); RZ(w=cvt(t|((I)jtinplace&XCVTXNUMORIDEMSK),w)); jtinplace = (J)(intptr_t)((I)jtinplace | (((I)jtinplace>>2)&JTINPLACEW));}
    }  // It might be better to do the conversion earlier, and defer the error
       // until here.  We will have to look at the generated code when we can use all the registers
 
@@ -770,18 +688,16 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
    // Establish the result area z; if we're reusing an argument, make sure the type is updated to the result type
    // If the operation is one that can fail partway through, don't allow it to overwrite a zombie input unless so enabled by the user
   // The ordering here assumes that jtinplace will usually be set
-// alternative  if(((I)jtinplace&1) && (AC(w)<ACUC1 || AC(w)==ACUC1&&jt->asginfo.assignsym&&jt->asginfo.assignsym->val==w&&!(adocv.cv&VCANHALT && JT(jt,asgzomblevel)<2))){z=w; if(TYPESNE(AT(w),zt))MODBLOCKTYPE(z,zt)  //  Uses JTINPLACEW==1
-// alternative  }else if(((I)jtinplace&2) && (AC(a)<ACUC1 || AC(a)==ACUC1&&jt->asginfo.assignsym&&jt->asginfo.assignsym->val==a&&!(adocv.cv&VCANHALT && JT(jt,asgzomblevel)<2))){z=a; if(TYPESNE(AT(a),zt))MODBLOCKTYPE(z,zt)  //  Uses JTINPLACEA==2
-  if(ASGNINPLACESGN(SGNIF(jtinplace,JTINPLACEWX),w)){z=w; I zt=rtype((I)jtinplace); if(unlikely(TYPESNE(AT(w),zt)))MODBLOCKTYPE(z,zt)  //  Uses JTINPLACEW==1
-  }else if(ASGNINPLACESGN(SGNIF(jtinplace,JTINPLACEAX),a)){z=a; I zt=rtype((I)jtinplace); if(unlikely(TYPESNE(AT(a),zt)))MODBLOCKTYPE(z,zt)  //  Uses JTINPLACEA==2
-#if 1 // obsolete SY_64
+  if(ASGNINPLACESGN(SGNIF(jtinplace,JTINPLACEWX),w)){z=w; I wt=AT(w), zt=rtype((I)jtinplace); zt=zt?zt:wt; if(unlikely(TYPESNE(wt,zt)))MODBLOCKTYPE(z,zt)  //  Uses JTINPLACEW==1
+  }else if(ASGNINPLACESGN(SGNIF(jtinplace,JTINPLACEAX),a)){z=a; I at=AT(a), zt=rtype((I)jtinplace); zt=zt?zt:at; if(unlikely(TYPESNE(at,zt)))MODBLOCKTYPE(z,zt)  //  Uses JTINPLACEA==2
 #define scell AS((I)jtinplace&VIPWCRLONG?w:a)+((RANK2T)fr>>RANKTX)  // address of start of cell shape     shape of long cell+frame(long cell)
-#else
-#define scell AS((I)jtinplace&VIPWCRLONG?w:a)+scellf  // address of start of cell shape
-#endif
     // fr is (frame(long cell))  /  (shorter frame len)   /  (longer frame len)                      /   (longer frame len+longer celllen)
-  }else{GA00(z,rtype((I)jtinplace),zn,(RANKT)fr); MCISH(AS(z),AS(((I)jtinplace&VIPWFLONG)?w:a),(RANK4T)fr>>3*RANKTX); MCISH(AS(z)+((RANK4T)fr>>3*RANKTX),scell,(fr&RANKTMSK)-((RANK4T)fr>>3*RANKTX));} 
-//                                                 frame loc     shape of long frame             len of long frame           cellshape loc              cellshape     longer cellen 
+  }else{
+   I wt=AT(w), zt=rtype((I)jtinplace); zt=zt?zt:wt; GA00(z,zt,zn,(RANKT)fr);   // get type and allocate result area
+   MCISH(AS(z),AS(((I)jtinplace&VIPWFLONG)?w:a),(RANK4T)fr>>3*RANKTX); MCISH(AS(z)+((RANK4T)fr>>3*RANKTX),scell,(fr&RANKTMSK)-((RANK4T)fr>>3*RANKTX));  // copy shape
+   if(unlikely(zt&CMPX+QP))AK(z)=(AK(z)+SZD)&~SZD;  // move 16-byte values to 16-byte bdy
+  } 
+//                                     frame loc     shape of long frame             len of long frame  cellshape       longer cellen 
   // fr free
   if(unlikely(zn==0)){RETF(z);}  // If the result is empty, the allocated area says it all
   // zn  NOT USED FROM HERE ON
@@ -799,7 +715,7 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
      // m is the number of outer loops the caller will run
      // n is the number of times the inner-loop atom is repeated for each outer loop: n=1 means no inner loop needed; n>1 means each atom of y is repeated n times; n<0 means each atom of x is repeated ~n times.  n*m cannot=0. 
     I i=mf; I jj=nf;
-    lp000: {I lrc=((AHDR2FN*)aadocv->f)(n,m,av,wv,zv,jt);    // run one section
+    lp000: {I lrc=((AHDR2FN*)aadocv->f)(n,m,av,wv,zv,jt);    // run one section.  Result of 0 means error
      if(unlikely(lrc!=EVOK)){
       // section did not complete normally.
       if(unlikely(lrc<0)){mulofloloc=(mf-i)*m*(n^REPSGN(n))+~lrc; rc=EWOVIP+EWOVIPMULII; goto lp000e;}  // integer multiply overflow.  ~lrc is index of failing location; create global failure index.  Abort the computation to retry
@@ -813,9 +729,11 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
    }
 
    // The work has been done.  If there was no error, check for optional conversion-if-possible or -if-necessary
-   if(likely(rc==EVOK)){if(unlikely((I)jtinplace&VRI+VRD))z=cvz((I)jtinplace,z); RETF(z);  // normal return is here.  The rest is error recovery
+   if(likely(rc&(EVOK|EVNOCONV))){if(unlikely((I)jtinplace&VRI+VRD&&rc!=EVNOCONV))z=cvz((I)jtinplace,z); RETF(z);  // normal return is here.  The rest is error recovery
+   
 
    // ********* error recovery starts here **********
+   }else if(unlikely(rc==EVNOCONV)){RETF(z);  // If conversion suppressed, just keep the unconverted block
    }else if(rc-EWOVIP>=0){A zz;C *zzv;I zzk;
     // Here for overflow that can be corrected in place
 // not yet    if(rc==EVOKCLEANUP){jt->mulofloloc=0; RETF(z);}  // if multiply that did not overflow, clear the oflo position for next time, and return
@@ -830,19 +748,11 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
      DQ(mulofloloc, *zzvd++=(D)*zvi++;);  // convert the multiply results to float.  mulofloloc is known negative, and must be complemented
      // Now repeat the processing.  Unlike with add/subtract overflow, we have to match up all the argument atoms
      {C *av=CAV(a); C *wv=CAV(w);
-#if 0
-     adocv.f=(VF)tymesIIO;  // multiply-repair routine
-      I wkm,wkn,akm,akn;
-      wkm=awzk[1], akn=awzk[0]; wkn=REPSGN(nf); nf^=wkn;   // wkn=111..111 iff wk increments with n (and therefore ak with m).  Make nf positive
-      akm=akn&wkn; wkn&=wkm; wkm^=wkn; akn^=akm;  // if c, akm=ak/wkn=wk; else akn=ak/wkm=wk.  The other incr is 0
-      I im=mf; do{I in=nf; do{((AHDR2FN*)adocv.f)(n,m,av,wv,zzv,jt); zzv+=zzk; av+=akn; wv +=wkn;}while(--in); if(!--im)break; av+=akm; wv +=wkm;}while(1);
-#else
       I i=mf; I jj=nf; 
       while(1){
        tymesIIO(n,m,(I*)av,(I*)wv,(D*)zzv,mulofloloc); if(!--i)break;
        mulofloloc-=m*(n^REPSGN(n)); zzv+=zzk; I jj1=--jj; jj=jj<0?nf:jj; av+=aawwzk[1+REPSGN(jj1)]; wv+=aawwzk[3+REPSGN(jj1)];  // jj1 is -1 on the last inner iter, where we use outer incr
       }
-#endif
      }
     } else {   // not multiply repair, but something else to do inplace
      adocv.f = repairip[(rc-EWOVIP)&3];   // fetch ep from table
@@ -879,7 +789,6 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
 // LIT is set in it if it is OK to use 2x2 operations (viz a has no inner frame & w has no outer frame)
 #define SUMATLOOP2(ti,to,oneprod2,oneprod1) \
   {ti * RESTRICT av=avp,* RESTRICT wv=wvp; to * RESTRICT zv=zvp; \
-   _mm256_zeroupperx(VOIDARG) \
    __m256i endmask = _mm256_loadu_si256((__m256i*)(validitymask+((-dplen)&(NPAR-1))));  /* mask for 00=1111, 01=1000, 10=1100, 11=1110 */ \
    __m256d acc000; __m256d acc010; __m256d acc100; __m256d acc110; \
    __m256d acc001; __m256d acc011; __m256d acc101; __m256d acc111; \
@@ -891,10 +800,10 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
         ti * RESTRICT wv1=wv+dplen; wv1=j==1?wv:wv1; \
         oneprod2  \
         if(j>1){--j; _mm_storeu_pd(zv,_mm256_castpd256_pd128 (acc000)); _mm_storeu_pd(zv+ndpi,_mm256_castpd256_pd128 (acc100)); wv+=dplen; zv +=2;} \
-        else{*(I*)zv=_mm256_extract_epi64(_mm256_castpd_si256(acc000),0x0); *(I*)(zv+ndpi)=_mm256_extract_epi64(_mm256_castpd_si256(acc100),0x0);  zv+=1;} \
+        else{*(I*)zv=_mm256_extract_epi64(_mm256_castpd_si256(acc000),0x0); *(I*)(zv+ndpi)=_mm256_extract_epi64(_mm256_castpd_si256(acc100),0x0); /* AVX2 *zv=_mm256_cvtsd_f64(acc000); *(zv+ndpi)=_mm256_cvtsd_f64(acc100); */  zv+=1;} \
        }else{ \
         oneprod1  \
-        *(I*)zv=_mm256_extract_epi64(_mm256_castpd_si256(acc000),0x0); \
+        *(I*)zv=_mm256_extract_epi64(_mm256_castpd_si256(acc000),0x0); /* AVX2 *zv=_mm256_cvtsd_f64(acc000); */ \
         zv+=1; \
        } \
        if(!--j)break; \
@@ -902,12 +811,11 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
       } \
       if(it&LIT&&jj>1){--i; av+=dplen; zv+=ndpi;} \
      ) \
-     if((jj-=(((it&LIT)>>1)+1))<=0)break; \
+     if((jj-=(((it>>LITX)&(LIT>>LITX))+1))<=0)break; \
      if(it&BOX)av=ov0;else wv=ov0; \
     } \
    ) \
   }
-// obsolete         else{_mm_storel_pd(zv,_mm256_castpd256_pd128 (acc000)); _mm_storel_pd(zv+ndpi,_mm256_castpd256_pd128 (acc100));  zv+=1;}
 
 #define SUMATLOOP(ti,to,oneprod) \
   {ti * RESTRICT av=avp,* RESTRICT wv=wvp; to * RESTRICT zv=zvp; \
@@ -921,7 +829,7 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
    ) \
   }
 
-#if (C_AVX&&SY_64) || EMU_AVX
+#if C_AVX2 || EMU_AVX2
 
 // Do one 2x2 product of length dplen.  Leave results in accxx0.  dplen must be >0
 // av, wv, wv1 are set up.  Special branch for case of len<=4
@@ -943,8 +851,8 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
    } \
    acc000=_mm256_add_pd(acc000,acc001); acc010=_mm256_add_pd(acc010,acc011); acc100=_mm256_add_pd(acc100,acc101); acc110=_mm256_add_pd(acc110,acc111);  \
    label##9: last2x2  \
-   acc000=_mm256_add_pd(acc000,_mm256_permute2f128_pd(acc000,acc000,0x01)); acc010=_mm256_add_pd(acc010,_mm256_permute2f128_pd(acc010,acc010,0x01)); \
-    acc100=_mm256_add_pd(acc100,_mm256_permute2f128_pd(acc100,acc100,0x01)); acc110=_mm256_add_pd(acc110,_mm256_permute2f128_pd(acc110,acc110,0x01)); \
+   acc000=_mm256_add_pd(acc000,_mm256_permute4x64_pd(acc000,0b11111110)); acc010=_mm256_add_pd(acc010,_mm256_permute4x64_pd(acc010,0b11111110)); \
+    acc100=_mm256_add_pd(acc100,_mm256_permute4x64_pd(acc100,0b11111110)); acc110=_mm256_add_pd(acc110,_mm256_permute4x64_pd(acc110,0b11111110)); \
    acc000=_mm256_add_pd(acc000,_mm256_permute_pd (acc000,0xf)); acc010=_mm256_add_pd(acc010,_mm256_permute_pd (acc010,0x0));  \
     acc100=_mm256_add_pd(acc100,_mm256_permute_pd (acc100,0xf)); acc110=_mm256_add_pd(acc110,_mm256_permute_pd (acc110,0x0)); \
    acc000=_mm256_blend_pd(acc000,acc010,0xa); acc100=_mm256_blend_pd(acc100,acc110,0xa); \
@@ -988,7 +896,7 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
    acc000=_mm256_add_pd(acc000,acc010); acc100=_mm256_add_pd(acc100,acc110); \
    acc000=_mm256_add_pd(acc000,acc100);  \
    label##9: last1x1  \
-   acc000=_mm256_add_pd(acc000,_mm256_permute2f128_pd(acc000,acc000,0x01)); \
+   acc000=_mm256_add_pd(acc000,_mm256_permute4x64_pd(acc000,0b11111110)); \
    acc000=_mm256_add_pd(acc000,_mm256_permute_pd(acc000,0xf)); \
    av+=((dplen-1)&(NPAR-1))+1;  wv+=((dplen-1)&(NPAR-1))+1; \
    }
@@ -1004,7 +912,6 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
 
 #define ONEPRODD \
  __m256i endmask; /* length mask for the last word */ \
- _mm256_zeroupperx(VOIDARG) \
  /* +/ vectors */ \
  __m256d idreg=_mm256_setzero_pd(); \
  endmask = _mm256_loadu_si256((__m256i*)(validitymask+((-dplen)&(NPAR-1))));  /* mask for 00=1111, 01=1000, 10=1100, 11=1110 */ \
@@ -1029,9 +936,8 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
  } \
  acc3=MUL_ACC(acc3,_mm256_maskload_pd(av,endmask),_mm256_maskload_pd(wv,endmask)); av+=((dplen-1)&(NPAR-1))+1;  wv+=((dplen-1)&(NPAR-1))+1; \
  acc0=_mm256_add_pd(acc0,acc1); acc2=_mm256_add_pd(acc2,acc3); acc0=_mm256_add_pd(acc0,acc2); /* combine accumulators vertically */ \
- acc0=_mm256_add_pd(acc0,_mm256_permute2f128_pd(acc0,acc0,0x01)); acc0=_mm256_add_pd(acc0,_mm256_permute_pd(acc0,0xf));   /* combine accumulators horizontally  01+=23, 0+=1 */ \
- *(I*)zv=_mm256_extract_epi64(_mm256_castpd_si256(acc0),0x0); ++zv;
-// obsolete  _mm_storel_pd(zv++,_mm256_castpd256_pd128 (acc0));/* store the single result */
+ acc0=_mm256_add_pd(acc0,_mm256_permute4x64_pd(acc0,0b11111110)); acc0=_mm256_add_pd(acc0,_mm256_permute_pd(acc0,0xf));   /* combine accumulators horizontally  01+=23, 0+=1 */ \
+ *(I*)zv=_mm256_extract_epi64(_mm256_castpd_si256(acc0),0x0); /* AVX2 *zv=_mm256_cvtsd_f64(acc0); */ ++zv;
 #else
 #define ONEPRODD D total0=0.0; D total1=0.0; if(dplen&1)total1=(D)*av++*(D)*wv++; DQ(dplen>>1, total0+=(D)*av++*(D)*wv++; total1+=(D)*av++*(D)*wv++;); *zv++=total0+total1;
 #endif
@@ -1049,7 +955,7 @@ static A jtva2(J jt,AD * RESTRICT a,AD * RESTRICT w,AD * RESTRICT self,RANK2T ra
 I jtsumattymesprods(J jt,I it,void *avp, void *wvp,I dplen,I nfro,I nfri,I ndpo,I ndpi,void *zvp){
  if(it&FL){
   NAN0;
-#if C_AVX || EMU_AVX
+#if C_AVX2 || EMU_AVX2
   SUMATLOOP2(D,D,ONEPRODAVXD2(D2,CELL2X2M,CELL2X2L),ONEPRODAVXD1(D1,CELL1X1M,CELL1X1L));
 #else
   SUMATLOOP(D,D,ONEPRODD)
@@ -1071,9 +977,42 @@ I jtsumattymesprods(J jt,I it,void *avp, void *wvp,I dplen,I nfro,I nfri,I ndpo,
  R 1;
 }
 
+#if (C_AVX2 || EMU_AVX2) & HASFMA
+// +/@:*"1 for QP, with IRS by hand
+static DF2(jtsumattymes1E){
+ if(unlikely((I)((1-AR(a))|(1-AR(w)))<0)){I lr=MIN((RANKT)jt->ranks,AR(a)); I rr=MIN(jt->ranks>>RANKTX,AR(w)); R rank2ex(a,w,(A)self,1,1,lr,rr,jtsumattymes1E);}  // if multiple results needed, do rank loop
+ I i; I n=AS(a)[AR(a)-1]; ASSERT(AS(w)[AR(w)-1]==n,EVLENGTH);  // length of vector; verify agreement
+ E *x=EAV(a)+n, *y=EAV(w)+n;  // input pointers, advanced past end
+ __m256d sgnbit=_mm256_broadcast_sd((D*)&Iimin); __m256d mantmask=_mm256_broadcast_sd((D*)&(I){0x000fffffffffffff});  /* needed masks: sign, mantissa */
+ /* we will read twice, masking.  We may read the first half twice to avoid overfetch */
+ __m256i rdmask=_mm256_castps_si256(_mm256_permutevar_ps(_mm256_castpd_ps(_mm256_broadcast_sd((D*)&maskec4123[n&(NPAR-1)])),_mm256_loadu_si256((__m256i*)&validitymask[2]))); /* masks for the 2 reads */
+ I rematom;  /* # atoms to accumulate */
+ __m256d in0,in1,x0,x1,y0,y1,z0,z1;
+ x -= ((n-1)&(NPAR-1))+1;  /* back up to beginning of last NPAR-atom section */
+ in0=_mm256_maskload_pd((D*)(x),rdmask);
+ in1=_mm256_maskload_pd((D*)(x+((n-1)&(NPAR/2))),_mm256_slli_epi64(rdmask,1));
+ SHUFIN(0,in0,in1,x0,x1);
+ y -= ((n-1)&(NPAR-1))+1; in0=_mm256_maskload_pd((D*)(y),rdmask); in1=_mm256_maskload_pd((D*)(y+((n-1)&(NPAR/2))),_mm256_slli_epi64(rdmask,1)); SHUFIN(0,in0,in1,y0,y1);
+ MULTEE(x0,x1,y0,y1,z0,z1)
+ for(rematom=(n-1)&-NPAR;rematom;rematom-=NPAR){  /* for each full batch */
+  x-=NPAR; in0=_mm256_loadu_pd((D*)x); in1=_mm256_loadu_pd((D*)(x+NPAR/2)); SHUFIN(0,in0,in1,x0,x1);  /* read 4 values, put into lanes */ 
+  y-=NPAR; in0=_mm256_loadu_pd((D*)y); in1=_mm256_loadu_pd((D*)(y+NPAR/2)); SHUFIN(0,in0,in1,y0,y1);  /* read 4 values, put into lanes */ 
+  MULTEE(x0,x1,y0,y1,x0,x1)
+  PLUSEE(x0,x1,z0,z1,z0,z1);  /* add to total */
+ }
+ y0=_mm256_permute_pd(z0,0b1111); y1=_mm256_permute_pd(z1,0b1111);  /* atoms 0+1, 2+3 */
+ PLUSEE(y0,y1,z0,z1,z0,z1);
+ y0=_mm256_permute4x64_pd(z0,0b10101010); y1=_mm256_permute4x64_pd(z1,0b10101010);  /* atoms 0+2 */
+ PLUSEE(y0,y1,z0,z1,z0,z1);
+ CANONE(z0,z1)
+ A zz; GAT0(zz,QP,1,0); E *z=EAV(zz);  // result area
+ *(I*)&z->hi=_mm256_extract_epi64(_mm256_castpd_si256(z0),0x0); *(I*)&z->lo=_mm256_extract_epi64(_mm256_castpd_si256(z1),0x0);
+ RETF(zz);
+}
+#endif
 
 
-// +/@:*"1 with IRS, also +/@:*"1!.0 on float args
+// +/@:*"1 with IRS, also +/@:*"1!.0 on float args and +/@:*"1!.1 producing a float extended-precision result, a length-2 list per product
 DF2(jtsumattymes1){
  ARGCHK2(a,w);
  I ar=AR(a); I wr=AR(w); I acr=jt->ranks>>RANKTX; I wcr=jt->ranks&RMAX;
@@ -1083,68 +1022,82 @@ DF2(jtsumattymes1){
      // note: the prod above can never fail, because it gives the actual # cells of an existing noun
    // Now that we have used the rank info, clear jt->ranks.  All verbs start with jt->ranks=RMAXX unless they have "n applied
    // we do this before we generate failures
- RESETRANK;  // This is required if we go to slower code
- // if an argument is empty, sparse, has cell-rank 0, or not a fast arithmetic type, revert to the code for f/@:g atomic
- if(((-((AT(a)|AT(w))&((NOUN|SPARSE)&~(B01|INT|FL))))|(AN(a)-1)|(AN(w)-1)|(acr-1)|(wcr-1))<0) { // test for all unusual cases
-  if(FAV(self)->id==CFIT)self=FAV(self)->fgh[0];  // lose the !.0 if we revert
+
+ I fit=0; if(unlikely(FAV(self)->id==CFIT))fit=1+FAV(self)->localuse.lu1.fittype;  // fit 0=normal, 1=!.0, 2=!.1
+
+ // if an argument is empty, sparse, or not a fast arithmetic type, or only one arg has rank 0, revert to the code for f/@:g atomic
+ if(((-((AT(a)|AT(w))&((NOUN|SPARSE)&~(B01|INT|FL))))|(AN(a)-1)|(AN(w)-1)|((acr-1)^(wcr-1)))<0) { // test for all unusual cases
+  ASSERT(fit!=2,EVNONCE)  // user expected 2 atoms per result, but we don't support that for repeated atomic arg
+#if (C_AVX2 || EMU_AVX2) & HASFMA   // high-perf QP only on 64-bit
+  if(ISDENSETYPE(AT(a)|AT(w),QP)&&((AN(a)-1)|(AN(w)-1)|(acr-1)|(wcr-1))>=0){
+   // QP dot-product.  Transfer to that code with rank still set
+   if(unlikely(!(AT(a)&QP)))RZ(a=cvt(QP,a)) else if(unlikely(!(AT(w)&QP)))RZ(w=cvt(QP,w))  // convert lower arg to qp
+   RETF(jtsumattymes1E(jt,a,w,self));
+  }
+#endif
+  if(fit!=0)self=FAV(self)->fgh[0];  // lose the !.[01] if we revert
+  RESETRANK;  // This is required if we go to slower code
   R rank2ex(a,w,FAV(self)->fgh[0],MIN(acr,1),MIN(wcr,1),acr,wcr,jtfslashatg);
  }
- // We can handle it here, and both ranks are at least 1.
+ // We can handle it here, and both ranks are at least 1 or both are rank 0.
+
+ I *as=AS(a), *ws=AS(w);
+ if(acr==0){A t;
+  // cell-ranks are 0: append a length-1 trailing axis to the shape and add to the rank
+  ++ar; RZ(t=vec(INT,ar,as)); as=IAV(t); as[ar-1]=1; acr=1;  // ,"0 a
+  ++wr; RZ(t=vec(INT,wr,ws)); ws=IAV(t); ws[wr-1]=1; wcr=1;  // ,"0 w
+ }
 
  // If there is no additional rank (i. e. highest cell-rank is 1), ignore the given rank (which must be 1 1) and use the argument rank
  // This promotes the outer loops to inner loops
  {I rankgiven = (acr|wcr)-1; acr=rankgiven?acr:ar; wcr=rankgiven?wcr:wr;}
 
  // Exchange if needed to make the cell-rank of a no greater than that of w.  That way we know that w will never repeat in the inner loop
- if(acr>wcr){A t=w; I tr=wr; I tcr=wcr; w=a; wr=ar; wcr=acr; a=t; ar=tr; acr=tcr;}
+ if(acr>wcr){A t=w; w=a; a=t; I tr=wr; wr=ar; ar=tr; I tcr=wcr; wcr=acr; acr=tcr; I *ts=as; as=ws; ws=ts;}
 
  // Convert arguments as required
- I it=MAX(AT(a),AT(w)); it=FAV(self)->id==CFIT?FL:it;   // if input types are dissimilar, convert to the larger.  For +/@:*"1!.0, convert everything to float
+ I it=MAX(AT(a),AT(w)); it=fit!=0?FL:it;   // if input types are dissimilar, convert to the larger.  For +/@:*"1!.[01], convert everything to float
  if(unlikely(it!=(AT(w)|AT(a)))){
   if(TYPESNE(it,AT(a))){RZ(a=cvt(it,a));}  // convert to common input type
   if(TYPESNE(it,AT(w))){RZ(w=cvt(it,w));}
  }
 
  // Verify inner frames match
- ASSERTAGREE(AS(a)+ar-acr, AS(w)+wr-wcr, acr-1) ASSERT(AS(a)[ar-1]==AS(w)[wr-1],EVLENGTH);  // agreement error if not prefix match
+ ASSERTAGREE(as+ar-acr, ws+wr-wcr, acr-1) ASSERT(as[ar-1]==ws[wr-1],EVLENGTH);  // agreement error if not prefix match
 
  // calculate inner repeat amounts and result shape
- I dplen = AS(a)[ar-1];  // number of atoms in 1 dot-product
- I ndpo; PROD(ndpo,acr-1,AS(w)+wr-wcr);  // number of cells of a = # 2d-level loops
- I ndpi; PROD(ndpi,wcr-acr,AS(w)+wr-wcr+acr-1);  // number of times each cell of a must be repeated (= excess frame of w)
+ I dplen = as[ar-1];  // number of atoms in 1 dot-product
+ I ndpo; PROD(ndpo,acr-1,ws+wr-wcr);  // number of cells of a = # 2d-level loops
+ I ndpi; PROD(ndpi,wcr-acr,ws+wr-wcr+acr-1);  // number of times each cell of a must be repeated (= excess frame of w)
 
  A z; 
  // if there is frame, create the outer loop values
  I nfro,nfri;  // outer loop counts, and which arg is repeated
- if(likely(((ar-acr)|(wr-wcr))==0)){  // normal case
+ if(likely(((ar-acr)|(wr-wcr))==0)){  // normal case of no frame
   nfro=nfri=1;  // no outer loops, repeata immaterial
-  GA(z,FL>>(it&B01),ndpo*ndpi,wcr-1,AS(w));  // type is INT if inputs booleans, otherwise FL
+  GA(z,FL>>(it&B01),(ndpo*ndpi)<<(fit>>1),wcr-1+(fit>>1),ws);  // type is INT if inputs booleans, otherwise FL
  }else{
   // There is frame, analyze and check it
-  I af=ar-acr; I wf=wr-wcr; I commonf=wf; I *as=AS(a), *ws=AS(w); I *longs=as;
+  I af=ar-acr; I wf=wr-wcr; I commonf=wf; I *longs=as;
   it|=(ndpo==1)>wf?LIT:0;  // if there is no inner frame for a, and no outer frame for w, signal OK to use 2x2 multiplies.  Mainly this is +/@:*"1/
   commonf=wf>=af?af:commonf; longs=wf>=af?ws:longs; it|=wf>=af?BOX:0;  // repeat flag, length of common frame, pointer to long shape
   af+=wf; af-=2*commonf;  // repurpose af to be length of surplus frame
   ASSERTAGREE(as,ws,commonf)  // verify common frame
   PROD(nfri,af,longs+commonf); PROD(nfro,commonf,longs);   // number of outer loops, number of repeats
   I zn = ndpo*ndpi*nfro; DPMULDE(zn,nfri,zn);  // no error possible till we extend the shape
-  GA00(z,FL>>(it&B01),zn,af+commonf+wcr-1); I *zs=AS(z);  // type is INT if inputs booleans, otherwise FL
+  GA00(z,FL>>(it&B01),zn<<(fit>>1),af+commonf+wcr-1+(fit>>1)); I *zs=AS(z);  // type is INT if inputs booleans, otherwise FL
   // install the shape
   MCISH(zs,longs,af+commonf); MCISH(zs+af+commonf,ws+wr-wcr,wcr-1);
  }
+ if(unlikely(fit==2))AS(z)[AR(z)-1]=2;  // if +/@:*"1!.1, we store two atoms per sum
 
- if(likely(FAV(self)->id!=CFIT)){RZ(jtsumattymesprods(jt,it,voidAV(a),voidAV(w),dplen,nfro,nfri,ndpo,ndpi,voidAV(z)));  // eval standard dot-product, check for error
+ if(likely(fit==0)){RZ(jtsumattymesprods(jt,it,voidAV(a),voidAV(w),dplen,nfro,nfri,ndpo,ndpi,voidAV(z)));  // eval standard dot-product, check for error
  }else{
-  // here for +/@:*"1!.0, double-precision dot product  https://www-pequan.lip6.fr/~graillat/papers/IC2012.pdf
+  // here for +/@:*"1!.[01], double-precision dot product  https://www-pequan.lip6.fr/~graillat/papers/IC2012.pdf
   NAN0;
-#if (C_AVX2&&SY_64) || EMU_AVX2
-#if 1  // higher precision.  Required when a large product is added to a small total.  Dependeny loop for acc is 4 clocks; for c is 4 clocks.  Total 12 insts, so unrolled 2 would do
+#if C_AVX2 || (EMU_AVX2 && !defined(__x86_64__))  // emulation bug
 #define OGITA(in0,in1,n) TWOPROD(in0,in1,h,y) TWOSUM(acc##n,h,acc##n,q) c##n=_mm256_add_pd(_mm256_add_pd(q,y),c##n);
-#else
-#define OGITA(in0,in1,n) TWOPROD(in0,in1,h,y) c##n=_mm256_add_pd(y,c##n); KAHAN(h,n)
-#endif
   __m256i endmask; /* length mask for the last word */
-  _mm256_zeroupperx(VOIDARG)
   __m256d idreg=_mm256_setzero_pd();
   __m256d sgnbit=_mm256_broadcast_sd((D*)&Iimin);
   endmask = _mm256_loadu_si256((__m256i*)(validitymask+((-dplen)&(NPAR-1))));  /* mask for 00=1111, 01=1000, 10=1100, 11=1110 */
@@ -1174,28 +1127,25 @@ DF2(jtsumattymes1){
        }
       }
       OGITA(_mm256_maskload_pd(av,endmask),_mm256_maskload_pd(wv,endmask),0) av+=((dplen-1)&(NPAR-1))+1; wv+=((dplen-1)&(NPAR-1))+1;  // the remnant at the end
-#if 1  // higher precision
       c0=_mm256_add_pd(c0,c1); c2=_mm256_add_pd(c2,c3); c0=_mm256_add_pd(c0,c2);   // add all the low parts together - the low bits of the low will not make it through to the result
       TWOSUM(acc0,acc1,acc0,c1) TWOSUM(acc2,acc3,acc2,c2) c2=_mm256_add_pd(c1,c2); c0=_mm256_add_pd(c0,c2);   // add 0+1, 2+3
       TWOSUM(acc0,acc2,acc0,c1) c0=_mm256_add_pd(c0,c1);  // 0+2
-     // acc0/c0 survive.  Combine horizontally
-      c0=_mm256_add_pd(c0,_mm256_permute2f128_pd(c0,c0,0x01)); acc1=_mm256_permute2f128_pd(acc0,acc0,0x01);  // c0: 01+=23, acc1<-23
-      TWOSUM(acc0,acc1,acc0,c1); c0=_mm256_add_pd(c0,c1); // combine p=01+23
-      c0=_mm256_add_pd(c0,_mm256_permute_pd(c0,0xf)); acc1=_mm256_permute_pd(acc0,0xf);   // combine c0+c1, acc1<-1
-      TWOSUM(acc0,acc1,acc0,c1); c0=_mm256_add_pd(c0,c1);    // combine 0123, combine all low parts
-      acc0=_mm256_add_pd(acc0,c0);  // add low parts back into high in case there is overlap
-#else
-      c0=_mm256_add_pd(c0,c1); c2=_mm256_add_pd(c2,c3); c0=_mm256_add_pd(c0,c2);   // add all the low parts together - the low bits of the low will not make it through to the result
-      acc0=_mm256_add_pd(acc0,acc1); acc2=_mm256_add_pd(acc2,acc3); acc0=_mm256_add_pd(acc0,acc2);   // add all the high parts
-     // acc0/c0 survive.  Combine horizontally
-      c0=_mm256_add_pd(c0,_mm256_permute2f128_pd(c0,c0,0x01));  // 02, 13
-      acc0=_mm256_add_pd(acc0,_mm256_permute2f128_pd(acc0,acc0,0x01));
-      c0=_mm256_add_pd(c0,_mm256_permute_pd(c0,0xf));   // 0123
-      acc0=_mm256_add_pd(acc0,_mm256_permute_pd(acc0,0xf));
-      acc0=_mm256_add_pd(acc0,c0);  // add low parts back into high in case there is overlap
-#endif
-// obsolete       _mm_storel_pd(zv++,_mm256_castpd256_pd128(acc0)); // store the single result
-      *(I*)zv=_mm256_extract_epi64(_mm256_castpd_si256(acc0),0x0); ++zv;
+      // acc0/c0 survive.  Combine horizontally.  Anything the high part touches must be extended precision; the low in one float.  We guarantee extended precision from
+      // the largest intermediate total encountered; sometimes we get a little more.
+      c0=_mm256_add_pd(c0,_mm256_permute4x64_pd(c0,0b11111110)); acc1=_mm256_permute4x64_pd(acc0,0b11111110);  // c0: lo01+=lo23, acc1<-hi23
+      TWOSUM(acc0,acc1,acc0,c1); c0=_mm256_add_pd(c0,c1); // combine acc0 = hi0+2/1+3, c0 accumulates lo0+lo2+extension0, lo1+lo3+extension1 
+      c0=_mm256_add_pd(c0,_mm256_permute_pd(c0,0xf)); acc1=_mm256_permute_pd(acc0,0xf);   // c0[0] has total of all low parts, acc1=hi1+hi3
+      TWOSUM(acc0,acc1,acc0,c1); c0=_mm256_add_pd(c0,c1);    // acc0 has sum of all hi parts, c1 sum of all low parts+extensions
+      if(fit==1){
+       // normal result.  Just add the extensions into the hi part
+       acc0=_mm256_add_pd(acc0,c0);  // add low parts back into high in case there is overlap
+      }else{
+       // extended result.  We must preserve the extension bits in the total and write them out
+       TWOSUM(acc0,c0,acc0,c1);  // extended total
+       ((I*)zv)[1]=_mm256_extract_epi64(_mm256_castpd_si256(c1),0x0); /* AVX2 zv[1]=_mm256_cvtsd_f64(c1); */  // store it out
+
+      }
+      ((I*)zv)[0]=_mm256_extract_epi64(_mm256_castpd_si256(acc0),0x0);  /*  AVX2 *zv=_mm256_cvtsd_f64(acc0); */ zv+=fit;  // store out high (perhaps only) part
       if(!--j)break; av=av0;  // repeat a if needed
      }
     }
@@ -1213,11 +1163,7 @@ DF2(jtsumattymes1){
      while(1){
       // do one dot-product, av*wv, length dplen;
       D p=0.0, s=0.0;
-#if 1  // higher precision
-      DQ(dplen, D h; D r; D q; D t; D i00; D i01; D i10; D i11; TWOPROD(*av,*wv,h,r) TWOSUM(p,h,p,q) s=q+r+s; ++av; ++wv;)
-#else
-      DQ(dplen, D h; D r; D q; D t; D i00; D i01; D i10; D i11; TWOPROD(*av,*wv,h,r) DPADD(p,s,h,r,p,s)  ++av; ++wv;)
-#endif
+      DQ(dplen, D h; D r; D q; D t; D i00; D i01; D i10; D i11; TWOPROD1(*av,*wv,h,r) TWOSUM1(p,h,p,q) s=q+r+s; ++av; ++wv;)
       *zv++=p+s; // store the single result
       if(!--j)break; av=av0;  // repeat a if needed
      }
@@ -1227,7 +1173,7 @@ DF2(jtsumattymes1){
    }
   }
  #endif
-  NAN1;
+  if(unlikely(NANTEST)){ASSERT(fit=1,EVNAN) RETF(jtsumattymes1(jt,a,w,FAV(self)->fgh[0]))}  // !.1 cannot recover from NaN (which can come from infinities).  Revert !.0 to uncompensated case
  } 
  RETF(z);
 }
@@ -1253,8 +1199,8 @@ DF2(jtfslashatg){A fs,gs,y,z;B b;C*av,*wv;I ak,an,ar,*as,at,m,
  if(((JTINPLACEA*((r==ar)&SGNTO0(AC(a)))+((r==wr)&SGNTO0(AC(w))))&(I)jtinplace&(adocv.cv>>VIPOKWX)))R jtupon2cell(jtinplace,a,w,self);  // if inplaceable, revert
  if(unlikely(!TYPESEQ(yt,zt)))R jtupon2cell(jtinplace,a,w,self);  // if the result of f (which feeds through f/) isn't the same type as the result of g, revert
  if(t){  // convert args if needed
-  if(TYPESNE(t,at))RZ(a=cvt(t|(adocv.cv&VARGCVTMSKF),a));
-  if(TYPESNE(t,wt))RZ(w=cvt(t|(adocv.cv&VARGCVTMSKF),w));
+  if(TYPESNE(t,at))RZ(a=cvt(t|(adocv.cv&XCVTXNUMORIDEMSK),a));
+  if(TYPESNE(t,wt))RZ(w=cvt(t|(adocv.cv&XCVTXNUMORIDEMSK),w));
  }
  ak=b?m:zn; wk=b?zn:m; ak=an<nn?0:ak; wk=wn<nn?0:wk; ak<<=bplg(AT(a));wk<<=bplg(AT(w));
  GA10(y,yt,zn);  // allocate one item for result of g
@@ -1306,7 +1252,7 @@ DF2(jtatomic2){A z;
   // singleton.  we need the rank of the result
   ar-=af; wr-=wf; ar=ar>wr?ar:wr; af=af>wf?af:wf; af+=ar;   // set af to max len of frame, ar to max cell rank; then af=max framelen + max rank = resultrank
 forcess:;  // branch point for rank-0 singletons from above, always with atomic result
-  z=jtssingleton(jt,a,w,af+((I)FAV(self)->lc<<RANKTX)+(((I)jtinplace&3)<<24)+((3*(at>>INTX)+(wt>>INTX))<<26));  // create portmanteau parm reg
+  z=jtssingleton(jt,a,w,af|((I)FAV(self)->lc<<RANKTX)|(((I)jtinplace&3)<<24)|((3*(at>>INTX)+(wt>>INTX))<<26));  // create portmanteau parm reg
   if(likely(z!=0)){RETF(z);}  // normal case is good return; the rest is retry for singletons
   if(unlikely(jt->jerr<=NEVM)){RETF(z);}   // if error is unrecoverable, don't retry
   // if retryable error, fall through.  The retry will not be through the singleton code
@@ -1325,25 +1271,21 @@ forcess:;  // branch point for rank-0 singletons from above, always with atomic 
    self=realself?realself:self;  // if this is a rank block, move to the primitive to get to the function pointers.  u b. or any atomic primitive has f clear
    selfranks=jtranks==R2MAX?selfranks:jtranks;
   }
-  // af, awm1, self, awr, and selfranks are needed in the retry
+  // self, awr, and selfranks are needed in the retry
  } 
  
- // while it's convenient, check for empty result
- jtinplace=(J)((I)jtinplace+(((SGNTO0(awm1)))<<JTEMPTYX));
  ASSERTAGREE(AS(a),AS(w),af);  // outermost (or only) agreement check
- // Run the full dyad, retrying if a retryable error is returned
-#if 1 // obsolete SY_64
- z=jtva2(jtinplace,a,w,self,(awr<<RANK2TX)+selfranks);  // execute the verb
-#else
- z=jtva2(jtinplace,a,w,self,selfranks,(RANK2T)awr);  // execute the verb
-#endif
- if(likely(z!=0)){RETF(z);}  // normal case is good return
- if(unlikely(jt->jerr<=NEVM)){RETF(z);}   // if error is unrecoverable, don't retry
-#if 1 // obsolete SY_64
- R z=jtva2((J)((I)jtinplace|JTRETRY),a,w,self,(awr<<RANK2TX)+selfranks);  // execute the verb
-#else
- R z=jtva2((J)((I)jtinplace|JTRETRY),a,w,self,selfranks,(RANK2T)awr);  // execute the verb
-#endif
+ NOUNROLL while(1){
+  // Run the full dyad, retrying if a retryable error is returned
+  z=jtva2(jtinplace,a,w,self,(awr<<RANK2TX)+selfranks);  // execute the verb
+  if(likely(z!=0)){RETF(z);}  // normal case is good return
+  if(unlikely(jt->jerr<=NEVM))break;  // if nonretryable error, exit
+  jtinplace=(J)((I)jtinplace|JTRETRY);  // indicate that we are retrying the operation
+ }
+ // We hit an error.  We will format it now because we have the IRS ranks that were used in selfranks.  It might be possible to get the ranks from the self?
+ // convert 0 rank back to R2MAX to avoid "0 0 in msg
+ jt->ranks=selfranks?selfranks:R2MAX; jteformat(jt,self,a,w,0); RESETRANK;
+ RETF(z);
 }
 
 DF2(jtexpn2  ){F2PREFIP; ARGCHK2(a,w); if(unlikely(((((I)AR(w)-1)&SGNIF(AT(w),FLX))<0)))if(unlikely(0.5==DAV(w)[0]))R sqroot(a);  R jtatomic2(jtinplace,a,w,self);}  // use sqrt hardware for sqrt.  Only for atomic w. 
@@ -1356,17 +1298,17 @@ DF2(jtresidue){F2PREFIP; ARGCHK2(a,w); I intmod; if(!((AT(a)|AT(w))&((NOUN|SPARS
 // Shift the w-is-inplaceable flag to a.  Bit 1 is known to be 0 in any call to a monad
 #define IPSHIFTWA (jt = (J)(intptr_t)(((I)jt+JTINPLACEW)&-JTINPLACEA))
 
-// We use the right type of singleton so that we engage AVX loops
-#define SETCONPTR(n) A conptr=num(n); A conptr2=zeroionei(n); A conptr3=numvr(n); conptr=AT(w)&INT?conptr2:conptr; conptr=AT(w)&FL?conptr3:conptr;  // for 0 or 1 only
-#define SETCONPTR2(n) A conptr=num(n); A conptr3=numvr(n); conptr=AT(w)&FL?conptr3:conptr;   // used for 2, when the only options are INT/FL
-
+// We use the right type of singleton so that we engage AVX loops and avoid promotion of INT[124]
+#define SETCONPTR(n) A conptr=num(n); \
+  if(unlikely(!(AT(w)&B01+INT+FL))){A conptr2=numi2(n); conptr=AT(w)&INT2?conptr2:conptr; conptr2=numi4(n); conptr=AT(w)&INT4?conptr2:conptr;  \
+  }else{A conptr2; if(n<2){conptr2=zeroionei(n); conptr=AT(w)&INT?conptr2:conptr;} conptr2=numvr(n); conptr=AT(w)&FL?conptr2:conptr;}
 F1(jtnot   ){ARGCHK1(w); SETCONPTR(1) R AT(w)&B01?eq(num(0),w):minus(conptr,w);}
-F1(jtnegate){ARGCHK1(w); SETCONPTR(0) R minus(conptr,w);}
+// negate moved to va1
 F1(jtdecrem){ARGCHK1(w); SETCONPTR(1) IPSHIFTWA; R minus(w,conptr);}
 F1(jtincrem){ARGCHK1(w); SETCONPTR(1) R plus(conptr,w);}
-F1(jtduble ){ARGCHK1(w); SETCONPTR2(2) R tymes(conptr,w);}
+F1(jtduble ){ARGCHK1(w); SETCONPTR(2) R tymes(conptr,w);}
 F1(jtsquare){ARGCHK1(w); R tymes(w,w);}   // leave inplaceable in w only  ?? never inplaces
-F1(jtrecip ){ARGCHK1(w); SETCONPTR(1) R divide(conptr,w);}
+// recip moved to va1
 F1(jthalve ){ARGCHK1(w); if(!(AT(w)&XNUM+RAT))R tymes(onehalf,w); IPSHIFTWA; R divide(w,num(2));} 
 
 static AHDR2(zeroF,B,void,void){mvc(m*(n^REPSGN(n)),z,1,MEMSET00);R EVOK;}
@@ -1394,32 +1336,35 @@ VA2 jtvar(J jt,A self,I at,I wt){I t;
   // vaptr converts the character pseudocode into an entry in va;
   // that entry contains 34 (ado,cv) pairs, indexed according to verb/argument types.
   // the first 9 entries [0-8] are a 3x3 array of the combinations of the main numeric types
-  // B,I,D; then [9] CMPX [10] XINT (but not RAT) [11] RAT [12] SBT (symbol)
-  // then [13-19] are for verb/, with precisions B I D Z X Q Symb
-  // [20-26] for verb\, and [27-33] for verb\.
+  // B,I,D; then [9] CMPX [10] XNUM (but not RAT) [11] RAT [12] SBT (symbol) [13] SP [14] QP [15] INT2 [16] INT4
+  // then [17-25] are for verb/, with precisions B I D Z X Q Symb INT2 INT4
+  // [26-34] for verb\, and [35-43] for verb\.
   VA *vainfo=((VA*)((I)va+FAV(self)->localuse.lu1.uavandx[1]));  // extract table line from the primitive
   if(!((t=(at|wt))&(NOUN&~(B01|INT|FL)))){
    // Here for the fast and important case, where the arguments are both B01/INT/FL
    // The index into va is atype*3 + wtype, calculated sneakily
    R vainfo->p2[(at>>(INTX-1))+((at+wt)>>INTX)];
   }else if(!(t&(NOUN&~NUMERIC))) {
-   // Here one of the arguments is CMPX/RAT/XNUM  (we don't support XD and XZ yet)
-   // They are in priority order CMPX, FL, RAT, XNUM.  Extract those bits and look up
-   // the type to use
-   I  prix=(xnumpri>>(((t&(FL+CMPX))>>(FLX-2))+((t&RAT)>>(RATX-4))))&15; // routine index, FL/CMPX/XNUM/RAT   bits: RAT CMPX FL
-   VA2 selva2 = vainfo->p2[prix];  // 
-   // Entries specify no input conversion in the (DD,DD) slot, if they can accept FL arguments directly.  But if we select the FL line,
-   // one input is FL and the other must be RAT or XNUM, 
-   // we'd better specify an input conversion of VDD, unless the verb is one like +. or bitwise that forces conversion to integer/boolean
-   if((prix==8)&&!(selva2.cv&(VBB|VII|VDD|VZZ))){selva2.cv = (selva2.cv&(~VARGMSK))|VDD;}   // This is part of where XNUM/RAT is promoted to FL
+   // Numeric args, but one of the arguments is CMPX/RAT/XNUM/other numeric precisions 
+   I apri=TYPEPRIORITYNUM(at), wpri=TYPEPRIORITYNUM(wt), pri=MAX(apri,wpri);  // conversion priority for each arg
+   //  0   1   2   3   4   5   6    7  8  9  A  B  C  D  E   F    10   // priorities
+   // B01 LIT C2T C4T INT BOX XNUM RAT FL I1 I2 I4 HP SP QP CMPX SBT
+   // 0 4 8 9 10 11   12 13 14 15 16 routine indexes for homogeneous args
+   //   0 4 5  6  7    8  9 10 11 12 biased by 4, the smallest we use here
+   // B I D Z  X  Q Symb DS  E I2 I4 
+   pri=4+((0x5affcbf476ffffffLL>>(pri<<2))&0xf);  // 4 is II, lower than the lowest routine# we can call for here
+   VA2 selva2 = vainfo->p2[pri];  // routine/flags for the top-priority arg
+   I cvtflgs=(apri>wpri?VCOPYA:0)+(apri<wpri?VCOPYW:0);  // set the flag to cause conversion of low-pri arg to the upper.  This handles ALL mixed-mode conversions  scaf would be nice to avoid conversion of left arg of o.
+   cvtflgs=selva2.cv&(VBB|VII|VDD|VZZ)?0:cvtflgs;  //  If the routine already forces a conversion, don't override.  Most DD, SP, QP specify no conversion, but +. or bitwise require bool or integer 
+   selva2.cv|=cvtflgs;
    R selva2;
   }else{
    // Normal case, but something is nonnumeric.  This will be a domain error except for = and ~:, and a few symbol operations
    VA2 retva2;  retva2.cv=VB; // where we build the return value   cv indicates no input conversion, boolean result
-    if(likely(((UC)FAV(self)->id&~1)==CEQ)){I opcode;  // CEQ or CNE
+   if(likely(((UC)FAV(self)->id&~1)==CEQ)){I opcode;  // CEQ or CNE
     // = or ~:, possibly inhomogeneous
     if(likely(HOMO(at,wt))){
-     opcode=((at>>(C2TX-2))+(wt>>C2TX))|(3*(5&(((t>>(SBTX-(BOXX+2)))+t)>>BOXX))); // bits are a4 a2 w4 w2 if char, 1100 if symbol, 0011 if box.  symbol is 1110, coming from a and symb shift
+     opcode=((at>>(C2TX-2))&0b1100)+((wt>>C2TX)&0b0011); opcode=at&SBT?0b1110:opcode; opcode=at&BOX?0b0011:opcode; // bits are a4 a2 w4 w2 if char, 1110 if symbol, 0011 if box.
     }else opcode=15;  // inhomogeneous line
     retva2.f=eqnetbl[(UC)FAV(self)->id&1][opcode];  // return the comparison
     R retva2;

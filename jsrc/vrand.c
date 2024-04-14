@@ -1,4 +1,4 @@
-/* Copyright 1990-2011, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Verbs: Random Numbers                                                   */
@@ -21,9 +21,9 @@
 #define SETNEXT     UF nextfn=jt->rngdata->rngparms[jt->rngdata->rng].rngF;
 #define NEXT        (nextrand(jt,nextfn))
 // call the rng efficiently.  The call is an indirect call from many places & thus likely to mispredict.  To help out, we make
-// all calls through a common routine that does the indirect call; in the one location it is more likely to be predicted.  Compiler 'optimizations'
-// may defeat us.  SETNEXT must appear in every function that calls NEXT
-static UI nextrand(J jt, UF f){R (*f)(jt);}
+// all calls through a common routine that does the indirect call; in the one location it is more likely to be predicted
+// SETNEXT must appear in every function that calls NEXT
+static NOINLINE UI nextrand(J jt, UF f){R (*f)(jt);}
 
 #if SY_64
 #define INITD       {sh=mk=1;}
@@ -316,8 +316,8 @@ static UI jtdx_next30(J jt){I j;UI*u,*v,*vv,r,x;
 
 static UI jtdx_next(J jt){UI a,b,c;
  a=dx_next30()&0x000000003fffffff;
- b=dx_next30()&0x000000003fffffff;;
- c=dx_next30()&0x000000003fffffff;;
+ b=dx_next30()&0x000000003fffffff;
+ c=dx_next30()&0x000000003fffffff;
  R a|b<<30|c<<34&0xf000000000000000UL;
 }
 #else
@@ -452,22 +452,20 @@ F1(jtrngraw){A z;I n,*v;SETNEXT
  R z;
 }
 
-B jtrnginit(JS jjt,I nthreads){
- I threadno; for(threadno=0;threadno<nthreads;++threadno){JJ jt=&jjt->threaddata[threadno];
-  DO(NRNG, jt->rngdata->rngparms[i].rngV=jt->rngdata->rngparms0[i].rngV=0;);
-  jt->rngdata->rngparms[0].rngF=jtsm_next; jt->rngdata->rngparms[0].rngS=16807;
-  jt->rngdata->rngparms[1].rngF=jtgb_next; jt->rngdata->rngparms[1].rngS=16807;
-  jt->rngdata->rngparms[2].rngF=jtmt_next; jt->rngdata->rngparms[2].rngS=16807;
-  jt->rngdata->rngparms[3].rngF=jtdx_next; jt->rngdata->rngparms[3].rngS=16807;
-  jt->rngdata->rngparms[4].rngF=jtmr_next; jt->rngdata->rngparms[4].rngS=16807;
-  jt->rngdata->rngparms[0].rngM=SY_64?0:0;             /*   %      2^32 */
-  jt->rngdata->rngparms[1].rngM=SY_64?0:2147483648UL;  /*   %      2^31 */
-  jt->rngdata->rngparms[2].rngM=0;                     /*   %      2^32 */
-  jt->rngdata->rngparms[3].rngM=SY_64?0:2147483648UL;  /*   %   _1+2^31 */  /* fudge; should be _1+2^31 */
-  jt->rngdata->rngparms[4].rngM=SY_64?0:4294967087UL;  /*   % _209+2^32 */
-  jt->rngdata->rngparms0[GBI].rngI=54;
-  rngselects(num(2));
- }
+B jtrnginit(J jt){
+ DO(NRNG, jt->rngdata->rngparms[i].rngV=jt->rngdata->rngparms0[i].rngV=0;);
+ jt->rngdata->rngparms[0].rngF=jtsm_next; jt->rngdata->rngparms[0].rngS=16807;
+ jt->rngdata->rngparms[1].rngF=jtgb_next; jt->rngdata->rngparms[1].rngS=16807;
+ jt->rngdata->rngparms[2].rngF=jtmt_next; jt->rngdata->rngparms[2].rngS=16807;
+ jt->rngdata->rngparms[3].rngF=jtdx_next; jt->rngdata->rngparms[3].rngS=16807;
+ jt->rngdata->rngparms[4].rngF=jtmr_next; jt->rngdata->rngparms[4].rngS=16807;
+ jt->rngdata->rngparms[0].rngM=SY_64?0:0;             /*   %      2^32 */
+ jt->rngdata->rngparms[1].rngM=SY_64?0:2147483648UL;  /*   %      2^31 */
+ jt->rngdata->rngparms[2].rngM=0;                     /*   %      2^32 */
+ jt->rngdata->rngparms[3].rngM=SY_64?0:2147483648UL;  /*   %   _1+2^31 */  /* fudge; should be _1+2^31 */
+ jt->rngdata->rngparms[4].rngM=SY_64?0:4294967087UL;  /*   % _209+2^32 */
+ jt->rngdata->rngparms0[GBI].rngI=54;
+ rngselects(num(2));
  R 1;
 }
 
@@ -550,19 +548,19 @@ F1(jtrngstates){A*wv;I k;struct rngparms*vv=jt->rngdata->rngparms;
  ASSERT(BOX&AT(w),EVDOMAIN);
  ASSERT(2<=AN(w),EVLENGTH);
  wv=AAV(w); 
- RZ(rngselects(wv[0]));  /* changes jt->rngdata->rng */
+ RZ(rngselects(C(wv[0])));  /* changes jt->rngdata->rng */
  ASSERT(AN(w)==(jt->rngdata->rng?3:9),EVLENGTH);
  switch(jt->rngdata->rng){
   case SMI: vv=jt->rngdata->rngparms0;
-            RE(k=i0(wv[1])); RZ(rngstates1(GBI,GBN,vv,0,k,wv[2],1)); jt->rngdata->rngparms0[GBI].rngI=k;  // We accept 0-55 even though we never produce 55 ourselves
-            RE(k=i0(wv[3])); RZ(rngstates1(MTI,MTN,vv,0,k,wv[4],0)); jt->rngdata->rngparms0[MTI].rngI=k;
-            RE(k=i0(wv[5])); RZ(rngstates1(DXI,DXN,vv,0,k,wv[6],1)); jt->rngdata->rngparms0[DXI].rngI=k;
-            RE(k=i0(wv[7])); RZ(rngstates1(MRI,MRN,vv,0,k,wv[8],0)); jt->rngdata->rngparms0[MRI].rngI=k;
+            RE(k=i0(C(wv[1]))); RZ(rngstates1(GBI,GBN,vv,0,k,C(wv[2]),1)); jt->rngdata->rngparms0[GBI].rngI=k;  // We accept 0-55 even though we never produce 55 ourselves
+            RE(k=i0(C(wv[3]))); RZ(rngstates1(MTI,MTN,vv,0,k,C(wv[4]),0)); jt->rngdata->rngparms0[MTI].rngI=k;
+            RE(k=i0(C(wv[5]))); RZ(rngstates1(DXI,DXN,vv,0,k,C(wv[6]),1)); jt->rngdata->rngparms0[DXI].rngI=k;
+            RE(k=i0(C(wv[7]))); RZ(rngstates1(MRI,MRN,vv,0,k,C(wv[8]),0)); jt->rngdata->rngparms0[MRI].rngI=k;
             break;
-  case GBI: RE(k=i0(wv[1])); RZ(rngstates1(GBI,GBN,vv,0,k,wv[2],1)); break;  // We accept 0-55 even though we never produce 55 ourselves
-  case MTI: RE(k=i0(wv[1])); RZ(rngstates1(MTI,MTN,vv,0,k,wv[2],0)); break;
-  case DXI: RE(k=i0(wv[1])); RZ(rngstates1(DXI,DXN,vv,0,k,wv[2],1)); break;
-  case MRI: RE(k=i0(wv[1])); RZ(rngstates1(MRI,MRN,vv,0,k,wv[2],0)); break;
+  case GBI: RE(k=i0(C(wv[1]))); RZ(rngstates1(GBI,GBN,vv,0,k,C(wv[2]),1)); break;  // We accept 0-55 even though we never produce 55 ourselves
+  case MTI: RE(k=i0(C(wv[1]))); RZ(rngstates1(MTI,MTN,vv,0,k,C(wv[2]),0)); break;
+  case DXI: RE(k=i0(C(wv[1]))); RZ(rngstates1(DXI,DXN,vv,0,k,C(wv[2]),1)); break;
+  case MRI: RE(k=i0(C(wv[1]))); RZ(rngstates1(MRI,MRN,vv,0,k,C(wv[2]),0)); break;
  }
  R mtv;
 }
@@ -622,6 +620,9 @@ static F2(jtrollksub){A z;I an,*av,k,m1,n,p,q,r,sh;UI m,mk,s,t,*u,x=jt->rngdata-
   // Output the rest, one bit at a time
   t=NEXT;  // Get random # for bits
   B*c=(B*)u; DQ(r&(SZI-1), *c++=1&t; t>>=1;);
+ }else if(unlikely(IMAX==m&&XNUM&AT(w))){
+  // extended output
+  X*xv=XAV(z); RZ(xv); AT(z)= XNUM; mvc(n*SZI, xv, SZI, MEMSET00); DO(n,(*xv++)=XAV(roll(w))[0];)
  }else{
   // integer output
   r=n; s=GMOF(m,x); if(s==x)s=0;
@@ -650,18 +651,45 @@ DF2(jtrollk){A g,z;V*sv;
  RETF(rollksub(a,vi(w)));
 }    /* ?@$ or ?@# or [:?$ or [:?# */
 
-static X jtxrand(J jt,X x){PROLOG(0090);A q,z;B b=1;I j,m,n,*qv,*xv,*zv;
- n=AN(x); xv=AV(x);  // number of Digits in x, &first digit
- m=n;  // m is number of result digits, same as input.  If input is 10000... this will always be 1 digit too many, but that's not worth checking for
- GATV0(q,INT,m,1); qv=AV(q);  // allocate place to hold base, qv-> result digits
- DO(m-1, qv[i]=XBASE;); qv[m-1]=xv[n-1]+1;  // init base to the largest possible value in each Digit
- // loop to roll random values until we get one that is less than x
- NOUNROLL do{
-  RZ(z=roll(q)); if(unlikely(ISDENSETYPE(AT(z),B01)))RZ(z=cvt(INT,z)); zv=AV(z);  // roll one value in each Digit position; if by chance it comes back Boolean, input must have been single digit 1, convert to ,1
-  DQ(j=m, --j; if(xv[j]!=zv[j]){b=xv[j]<zv[j]; break;});  // MS mismatched Digit tells the tale; if no mismatch, that's too high, keep b=1
- }while(b);  // loop till b=0
- j=m-1; NOUNROLL while(0<j&&!zv[j])--j; AN(z)=AS(z)[0]=++j;  // remove leading 0s from (tail of) result
- EPILOG(z);
+static X jtxrand(J jt,X x){PROLOG(0090);
+ // CONSTRAINT NO LONGER VALID: if (unlikely(!ISGMP(x))) SEGFAULT; // x must be an extended integer -- anything else is a coding error
+ if (unlikely(1>(XSGN(x)))) SEGFAULT; // x must be positive -- anything else is a coding error
+ I n=XLIMBLEN(x), *xv=AV(x);  // number of Digits in x, &first digit
+ X q= GAGMP(q, n*SZI); UI*qv= UIAV1(q); // result goes here
+ B big= 1; I prev=0; A halflimb= sc(1LL<<SZI*4);
+#define rollpart(t) \
+       1==t ?0 \
+            :2==t ?(UI)(CAV0(roll(sc(2)))[0]) \
+	                 :(UI)(IAV0(roll(sc(t)))[0])
+#define rollhalf() ((UI)IAV0(roll(halflimb))[0])
+ for (I j= n-1; j>=0; j--) {
+  UI limb= (UI)xv[j];
+  if (big) { // does our limit still matter here?
+   I hi= limb>>SZI*4;
+   I lo= limb&(1LL<<SZI*4)-1;
+   I rhi= 0, rlo;
+   if (!big||prev>hi) hi= 1LL<<SZI*4;
+   prev= 1;
+   if (hi) {
+    rhi= rollpart(hi);
+    big= rhi==hi-1;
+   }
+   if (!big||!lo) lo= 1LL<<SZI*4;
+   rlo= rollpart(lo);
+   big= big&&rlo==lo-1;
+   qv[j]= (rhi<<SZI*4)+rlo;
+  } else { // we're plenty small, just fill in the rest:
+   qv[j]= (rollhalf()<<SZI*4)+rollhalf();
+  }
+ }
+ q->s[0]= 0;
+ for (I j= n-1; j>=0; j--) {
+  if (qv[j]) {
+   q->s[0]= 1+j;
+   break;
+  }
+ }
+ EPILOG(q);
 }    /* ?x where x is a single strictly positive extended integer */
 
 static F1(jtrollxnum){A z;B c=0;I d,n;X*u,*v,x;SETNEXT
@@ -669,12 +697,12 @@ static F1(jtrollxnum){A z;B c=0;I d,n;X*u,*v,x;SETNEXT
  n=AN(w); v=XAV(w);
  GATV(z,XNUM,n,AR(w),AS(w)); u=XAV(z);
  // deal an extended random for each input number.  Error if number <0; if 0, put in 0 as a placeholder
- DQ(n, x=*v++; d=XDIG(x); ASSERT(0<=d,EVDOMAIN); if(d)RZ(*u++=rifvs(xrand(x))) else{*u++=iv0; c=1;});
+ DQ(n, x=*v++; d=XSGN(x); ASSERT(0<=d,EVDOMAIN); if(d)RZ(*u++=xrand(x)) else{*u++=X0; c=1;});
  // If there was a 0, convert the whole result to float, and go back and fill the original 0s with random floats
  if(c){D*d;I mk,sh;
   INITD;
   RZ(z=cvt(FL,z)); d=DAV(z); v=XAV(w);
-  DQ(n, x=*v++; if(!XDIG(x))*d=sh?NEXTD1:NEXTD0; ++d;);
+  DQ(n, x=*v++; if(!XSGN(x))*d=sh?NEXTD1:NEXTD0; ++d;);
  } 
  R z;
 }    /* ?n$x where x is extended integer */
@@ -761,11 +789,11 @@ F1(jtroll){A z;B b=0;I m,wt;
  RETF(z&&!(FL&AT(z))&&wt&XNUM+RAT?xco1(z):z);
 }
 
-F2(jtdeal){A z;I at,j,k,m,n,wt,*zv;UI c,s,t,x=jt->rngdata->rngparms[jt->rngdata->rng].rngM;UI sq;SETNEXT
+DF2(jtdeal){A z;I at,j,k,m,n,wt,*zv;UI c,s,t,x=jt->rngdata->rngparms[jt->rngdata->rng].rngM;UI sq;SETNEXT
  ARGCHK2(a,w);
  at=AT(a); wt=AT(w);
  ASSERT(!ISSPARSE(at|wt),EVDOMAIN);
- F2RANK(0,0,jtdeal,DUMMYSELF);
+ F2RANK(0,0,jtdeal,self);
  RE(m=i0(a)); RE(c=n=i0(w));  // c starts as max#+1
  ASSERT(0<=m&&m<=n,EVDOMAIN);  // m and n must both be positive
  if(0==m)z=mtv;
@@ -774,6 +802,7 @@ F2(jtdeal){A z;I at,j,k,m,n,wt,*zv;UI c,s,t,x=jt->rngdata->rngparms[jt->rngdata-
   // calculate the number of values to deal: m, plus a factor times the expected number of collisions, plus 2 for good measure.  Will never exceed n.  Repeats a little less than 1% of the time for n between 30 and 300
   A h=sc(m+4+(I)((n<1000?2.4:2.2)*((D)m+(D)n*(pow((((D)(n-1))/(D)n),(D)m)-1)))); NOUNROLL do{RZ(z=nub(rollksub(h,w)));}while(AN(z)<m); RZ(z=jttake(JTIPW,a,z));
 #else
+  if(unlikely(n==IMAX&&XNUM&AT(w))){A h= plus(num(2),a); NOUNROLL do{RZ(z=nub(rollksub(h,w)));}while(AN(z)<m);R take(a,z);}
   A h,y; I d,*hv,i,i1,p,q,*v,*yv;
   FULLHASHSIZE(2*m,INTSIZE,1,0,p);
   GATV0(h,INT,p,1); hv=AV(h); DO(p, hv[i]=0;);
@@ -842,7 +871,7 @@ static F2(jtrollksubdot){A z;I an,*av,k,m1,n,p,q,r,sh;UI m,mk,s,t,*u,x=jt->rngda
   B*c=(B*)u; DQ(r&(SZI-1), *c++=1&t; t>>=1;);
  }else{
   r=n; s=GMOF(m,x); if(s==x)s=0;
-  CTLZI(m-1,k); ++k; k=m==1?0:k;
+  k=CTLZI(m-1); ++k; k=m==1?0:k;
   if(k&&(1LL<<k)==m){  /* m=2^k but is not 1 or 2 */
    p=jt->rngdata->rngw/k; q=n/p; r=n%p; mk=m-1;
    switch((s?2:0)+(1<p)){
@@ -863,40 +892,41 @@ DF2(jtrollkdot){A g,z;V*sv;
  sv=FAV(self); g=sv->fgh[2]?sv->fgh[2]:sv->fgh[1];
  if(AT(w)&XNUM+RAT||!(!AR(w)&&1>=AR(a)&&(g==ds(CDOLLAR)||1==AN(a))))R roll(df2(z,a,w,g));
  RETF(rollksub(a,vi(w)));
-}    /* ?@$ or ?@# or [:?$ or [:?# */
+}    /* ?.@$ or ?.@# or [:?.$ or [:?.# */
 
 #undef xrand
 #define xrand(w) jtxranddot(jt,(w))
-static X jtxranddot(J jt,X x){PROLOG(0090);A q,z;B b=1;I j,m,n,*qv,*xv,*zv;
- n=AN(x); xv=AV(x);  // number of Digits in x, &first digit
- m=n;  // m is number of result digits, same as input.  If input is 10000... this will always be 1 digit too many, but that's not worth checking for
- GATV0(q,INT,m,1); qv=AV(q);  // allocate place to hold base, qv-> result digits
- DO(m-1, qv[i]=XBASE;); qv[m-1]=xv[n-1]+1;  // init base to the largest possible value in each Digit
+#define XBASE 10000 /* flash from the past */
+static X jtxranddot(J jt,X x){PROLOG(0090); // A q,z;B b=1;I j,m,n,*qv,*xv,*zv;
+ // CONSTRAINT NO LONGER VALID: if (unlikely(!ISGMP(x))) SEGFAULT; // x must be an extended integer -- anything else is a coding error
+ if (unlikely(1>(XSGN(x)))) SEGFAULT; // x must be positive -- anything else is a coding error
+ I n= oldsize(x); // number of "old big digits" to represent x
+ A q; GATV0(q,INT,n,1); I*qv= AV(q); // range of values which might appear at each digit position
+ A xbase= scx(XgetI(XBASE)); RZ(xbase);
  // loop to roll random values until we get one that is less than x
- NOUNROLL do{
-  RZ(z=roll(q)); zv=AV(z);  // roll one value in each Digit position
-  DQ(j=m, --j; if(xv[j]!=zv[j]){b=xv[j]<zv[j]; break;});  // MS mismatched Digit tells the tale; if no mismatch, that's too high, keep b=1
- }while(b);  // loop till b=0
- j=m-1; NOUNROLL while(0<j&&!zv[j])--j; AN(z)=AS(z)[0]=++j;  // remove leading 0s from (tail of) result
- EPILOG(z);
-}    /* ?x where x is a single strictly positive extended integer */
+ DO(n-1, qv[i]= XBASE;); qv[n-1]= IgetX(Xfdiv_qXX(x, XpowUU(XBASE, n-1)));
+ NOUNROLL while(1){
+  A z= poly2(roll(q), xbase); RZ(z); X rz= XAV(z)[0];
+  if (0<icmpXX(x,rz)) {EPILOG(rz);}
+ }
+}    /* ?.x where x is a single strictly positive extended integer */
 
 #undef rollxnum
 #define rollxnum(w) jtrollxnumdot(jt,(w))
 static F1(jtrollxnumdot){A z;B c=0;I d,n;X*u,*v,x;SETNEXT
- if(!(AT(w)&XNUM))RZ(w=cvt(XNUM,w));  // convert rational to numeric
+ if(!(AT(w)&XNUM))RZ(w=cvt(XNUM,w));  // convert rational to integer
  n=AN(w); v=XAV(w);
  GATV(z,XNUM,n,AR(w),AS(w)); u=XAV(z);
  // deal an extended random for each input number.  Error if number <0; if 0, put in 0 as a placeholder
- DQ(n, x=*v++; d=XDIG(x); ASSERT(0<=d,EVDOMAIN); if(d)RZ(*u++=rifvs(xrand(x))) else{*u++=iv0; c=1;});
+ DQ(n, x=*v++; d=XSGN(x); ASSERT(0<=d,EVDOMAIN); if(d)RZ(*u++=rifvs(xrand(x))) else{*u++=X0; c=1;});
  // If there was a 0, convert the whole result to float, and go back and fill the original 0s with random floats
  if(c){D*d;I mk,sh;
   INITD;
   RZ(z=cvt(FL,z)); d=DAV(z); v=XAV(w);
-  DQ(n, x=*v++; if(!XDIG(x))*d=sh?NEXTD1:NEXTD0; ++d;);
+  DQ(n, x=*v++; if(!XSGN(x))*d=sh?NEXTD1:NEXTD0; ++d;);
  } 
  R z;
-}    /* ?n$x where x is extended integer */
+}    /* ?.n$x where x is extended integer */
 
 #undef rollbool
 #define rollbool(w) jtrollbooldot(jt,(w))
@@ -906,7 +936,7 @@ static F1(jtrollbooldot){A z;B*v;D*u;I n,sh;UINT mk;SETNEXT
  if(sh)DQ(n, *u++=*v++?0.0:NEXTD1;)
  else  DQ(n, *u++=*v++?0.0:NEXTD0;)
  R z;
-}    /* ?n$x where x is boolean */
+}    /* ?.n$x where x is boolean */
 
 // If w is all 2, deal Booleans, with each each bit of a random number providing a single Boolean
 // Result is Boolean array, or mark if w is not all 2
@@ -942,7 +972,7 @@ static A jtroll2dot(J jt,A w,B*b){A z;I j,n,nslice,p,q,r,*v;UI mk,t,*zv;SETNEXT
  t=NEXT;  // Get random # for bits
  B*c=(B*)zv; DQ(r&(SZI-1), *c++=1&t; t>>=1;);
  *b=1; R z;
-}    /* ?n$x where x is 2, maybe */
+}    /* ?.n$x where x is 2, maybe */
 
 #undef rollnot0
 #define rollnot0(w,b) jtrollnot0dot(jt,(w),(b))
@@ -958,7 +988,7 @@ static A jtrollnot0dot(J jt,A w,B*b){A z;I j,m1,n,*u,*v;UI m,s,t,x=jt->rngdata->
    s=GMOF(m,x); t=NEXT; if(s){NOUNROLL while(s<=t)t=NEXT;} *u++=t%m;
  }}
  *b=1; R z;
-}    /* ?n$x where x is not 0, maybe */
+}    /* ?.n$x where x is not 0, maybe */
 
 #undef rollany
 #define rollany(w,b) jtrollanydot(jt,(w),(b))
@@ -971,7 +1001,7 @@ static A jtrollanydot(J jt,A w,B*b){A z;D*u;I j,m1,n,sh,*v;UI m,mk,s,t,x=jt->rng
   else{s=GMOF(m,x); t=NEXT; if(s){NOUNROLL while(s<=t)t=NEXT;} *u++=(D)(t%m);}
  }
  *b=1; R z;
-}    /* ?s$x where x can be anything and 1<#x */
+}    /* ?.s$x where x can be anything and 1<#x */
 
 #undef roll
 #define roll(w) jtrolldot(jt,(w))
@@ -990,12 +1020,12 @@ static F1(jtrolldot){A z;B b=0;I m,wt;
 }
 
 #undef deal
-#define deal(a,w) jtdealdot(jt,(a),(w))
-static F2(jtdealdot){A h,y,z;I at,d,*hv,i,i1,j,k,m,n,p,q,*v,wt,*yv,*zv;UI c,s,t,x=jt->rngdata->rngparms[jt->rngdata->rng].rngM;SETNEXT
+#define deal(a,w) jtdealdot(jt,(a),(w),ds(CQRYDOT))
+static DF2(jtdealdot){A h,y,z;I at,d,*hv,i,i1,j,k,m,n,p,q,*v,wt,*yv,*zv;UI c,s,t,x=jt->rngdata->rngparms[jt->rngdata->rng].rngM;SETNEXT
  ARGCHK2(a,w);
  at=AT(a); wt=AT(w);
  ASSERT(!ISSPARSE(at|wt),EVDOMAIN);
- F2RANK(0,0,jtdealdot,DUMMYSELF);
+ F2RANK(0,0,jtdealdot,self);
  RE(m=i0(a)); RE(c=n=i0(w));
  ASSERT(0<=m&&m<=n,EVDOMAIN);  // m and n must both be positive
  if(0==m)z=mtv;
@@ -1025,10 +1055,10 @@ static F2(jtdealdot){A h,y,z;I at,d,*hv,i,i1,j,k,m,n,p,q,*v,wt,*yv,*zv;UI c,s,t,
 #define FXSDO       {i=j==GBI?jt->rngdata->rngi:jt->rngdata->rngparms[GBI].rngI;                                \
                      if(!jt->rngdata->rngfxsv){GAT0(z,INT,GBN,1); ACINITZAP(z); jt->rngdata->rngfxsv=AV(z);}  \
                      jt->rngdata->rngparms[GBI].rngV=jt->rngdata->rngfxsv; rngselects(sc(GBI)); gb_init(16807);}
-#define FXSOD       {jt->rngdata->rngparms[GBI].rngV=v; jt->rngdata->rngparms[GBI].rngI=jt->rngdata->rngi=i; rngselects(sc(j));}
+#define FXSOD       {jt->rngdata->rngparms[GBI].rngV=v; jt->rngdata->rngparms[GBI].rngI=jt->rngdata->rngi=i; I e=jt->jerr; jt->jerr=0; rngselects(sc(j)); jt->jerr=e;}  // rngselects doesn't function if there is error
 
 F1(jtrollx  ){FXSDECL; ARGCHK1(w);                 FXSDO; z=roll(w);         FXSOD; R z;}       
-F2(jtdealx  ){FXSDECL; F2RANK(0,0,jtdealx,DUMMYSELF); FXSDO; z=deal(a,w);       FXSOD; R z;}        
+DF2(jtdealx  ){FXSDECL; F2RANK(0,0,jtdealx,self); FXSDO; z=deal(a,w);       FXSOD; R z;}        
 DF2(jtrollkx){FXSDECL; ARGCHK3(a,w,self);        FXSDO; z=rollk(a,w,self); FXSOD; R z;}      
 
 

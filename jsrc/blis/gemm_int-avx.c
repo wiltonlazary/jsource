@@ -1,4 +1,4 @@
-/* Copyright 1990-2016, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* gemm micro kernel                                                       */
@@ -60,7 +60,6 @@ void BLI_DGEMM
 
   const double *va = (const double *)a;
 
-  _mm256_zeroupper();
   register __m256d t0_00, t0_01, t0_02, t0_03;
   register __m256d t1_00, t1_01, t1_02, t1_03;
   register __m256d t2_00, t2_01, t2_02, t2_03;
@@ -461,7 +460,6 @@ void BLI_ZGEMM
 
   const double *va = (const double *)a;
 
-  _mm256_zeroupper();
   register __m256d t0_00, t0_01, t0_02, t0_03;
   register __m256d t1_00, t1_01, t1_02, t1_03;
   register __m256d t2_00, t2_01, t2_02, t2_03;

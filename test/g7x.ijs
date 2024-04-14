@@ -1,13 +1,19 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g7x.ijs'
+prolog './g7x.ijs'
 NB. 7!: -----------------------------------------------------------------
 
 NB. Testing malloc/free; try  f 200  or  g 40000, etc.
+delth =: {{ while. 1 T. '' do. 55 T. '' end. 1 }}  NB. delete all worker threads
+
+NB. We use whatever threads the system defines
 
 sp  =: 7!:0
+spa =: 7!:8
 space=:7!:2
 
 pr =: [             NB. for silent iteration
 NB. pr =: 1!:2&2    NB. to see each iteration
+
+chk=: (<UNAME) e. 'FreeBSD';'OpenBSD'
 
 f =: 3 : 0
  old=.sp ''
@@ -52,9 +58,13 @@ s =: g 30+?200
 y =: sp ''
 x -: y
 
-x =: sp ''
+x =: spa ''
 s =: h 3+?7
-y =: sp ''
+empty echo^:chk 'g7x a1'
+NB. the following line hang on freebsd
+1: 6!:3 ] 3.00  NB. must give the task a chance to be dequeued, 0.01 is insufficient
+empty echo^:chk 'g7x a2'
+y =: spa ''
 x -: y
 
 t =: sp ''
@@ -73,6 +83,12 @@ t-:i.100
 'domain error' -: 7!:2 etx 3;4 5
 
 
+NB. 7!:1 ----------------------------------------------------------------
+
+1: (3!:3)&1  ^: _1 :: 1: ] 9
+2e10 > {:7!:1''
+
+
 NB. 7!:3 ----------------------------------------------------------------
 
 t=:7!:3 ''
@@ -84,6 +100,9 @@ t -: /:~t
 *./~:{."1 t
 
 
-4!:55 ;:'f g h n old pr s sp space t x y '
+4!:55 ;:'chk delth f g h n old pr s sp spa space t x y '
 
+
+
+epilog''
 

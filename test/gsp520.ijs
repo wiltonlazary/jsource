@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './gsp520.ijs'
+prolog './gsp520.ijs'
 NB. { -------------------------------------------------------------------
 
 f=: 3 : '(i{d) -: $.^:_1 i{(2;y)$.s'
@@ -81,24 +81,31 @@ c=: ; (i.1+r) <"1@comb&.>r=:#$d
 h&>c [ i=: <''
 h&>c [ i=: <$0
 
-'domain error' -: 'abc'    { etx $. i.2 3
-'domain error' -: (u:'abc')    { etx $. i.2 3
-'domain error' -: (10&u:'abc')    { etx $. i.2 3
+NB. index from sparse y should result in the same error as index from dense array
+spd=: {etx -: ({etx $.)
+spde=: { :: ('error'"_) -: ({ :: ('error'"_))  NB. use when order of analysis causes different error
 
-'rank error'   -: (<2 3$<0){ etx $. i.2 3
+      'abc'   spd i.2 3
+(u:   'abc')  spd i.2 3
+(10&u:'abc')  spd i.2 3
 
-'length error' -: (<2;3;4) { etx $. i.5 6
+(<2 3$<0) spd i.2 3
+(<2;3;4)  spd i.5 6
 
-'index error'  -: 2        { etx $. i.2 3
-'index error'  -: _3       { etx $. i.2 3
-'index error'  -: (<'ab')  { etx $. i.2 3
-'index error' -: (<2;'a')  { etx $. i.2 3
-'index error'  -: (<u:'ab')  { etx $. i.2 3
-'index error' -: (<2;u:'a')  { etx $. i.2 3
-'index error'  -: (<10&u:'ab')  { etx $. i.2 3
-'index error' -: (<2;10&u:'a')  { etx $. i.2 3
+ 2 spd i.2 3
+_3 spd i.2 3
+
+(<'ab')       spd i.2 3
+(<2;'a')      spde i.2 3
+(<u:'ab')     spd i.2 3
+(<2;u:'a')    spde i.2 3
+(<10&u:'ab')  spd i.2 3
+(<2;10&u:'a') spde i.2 3
 
 
-4!:55 ;:'c d f g h i r s x'
+4!:55 ;:'c d f g h i r s x spd spde'
 
+
+
+epilog''
 

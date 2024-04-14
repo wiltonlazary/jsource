@@ -1,4 +1,4 @@
-/* Copyright 1990-2007, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Verbs                                                                   */
@@ -22,14 +22,14 @@ F1(jtravel){A a,c,q,x,y,y0,z;B*b;I f,j,m,r,*u,*v,*yv;P*wp,*zp;
  if(likely(!ISSPARSE(AT(w)))){
   if(r==1)R RETARG(w);  // if we are enfiling 1-cells, there's nothing to do, return the input (note: AN of sparse array is always 1)
   CPROD(AN(w),m,r,f+AS(w));   // m=#atoms in cell
-  if(ASGNINPLACESGN(SGNIF((I)jtinplace,JTINPLACEWX)&(-r),w) && !(AFLAG(w)&AFUNINCORPABLE)){  // inplace allowed, rank not 0 (so shape will fit), usecount is right
+  if(ASGNINPLACESGN(SGNIF(jtinplace,JTINPLACEWX)&(-r),w) && !(AFLAG(w)&AFUNINCORPABLE)){  // inplace allowed, rank not 0 (so shape will fit), usecount is right
    // operation is loosely inplaceable.  Just shorten the shape to frame,(#atoms in cell).  We do this here rather than relying on
    // the self-virtual-block code in virtual() because we can do it for indirect types also, since we know we are not changing
    // the number of atoms
    // We preserve pristinity between the input and the output
    AR(w)=(RANKT)(1+f); AS(w)[f]=m; RETF(w);
   }
-  // Not self-virtual.  Create a (noninplace) virtual copy, but not if NJA memory  NJAwhy
+  // Not self-virtual.  Create a (noninplace) virtual copy, but not if NJA memory (because we avoid virtualing from NJA, which makes the NJA unmodifiable)
   // Transfer pristinity from w to z, if w is abandoned.  Taking the virtual block will clear prist from w
   if(!(AFLAG(w)&(AFNJA))){I wprist=PRISTFROMW(w); RZ(z=virtual(w,0,1+f)); AN(z)=AN(w); MCISH(AS(z),AS(w),f) AS(z)[f]=m; AFLAGORLOCAL(z,wprist) RETF(z);}
 
@@ -67,7 +67,7 @@ F1(jttable){A z,zz;I r,wr;
  F1PREFIP;ARGCHK1(w);
  // We accept the pristine calculations from ravel
  wr=AR(w); r=(RANKT)jt->ranks; r=wr<r?wr:r;  // r=rank to use
- RZ(IRSIP1(w,0L,r-1<0?0:r-1,jtravel,z));  // perform ravel on items
+ RZ(IRSIP1(w,0L,r-((UI)r>0),jtravel,z));  // perform ravel on items
  R r?z:IRSIP1(z,0L,0L,jtravel,zz);  // If we are raveling atoms, do it one more time on atoms
 } // ,."r y
 
@@ -83,7 +83,7 @@ static A jtlr2(J jt,RANK2T ranks,A a,A w){I acr,af,ar,wcr,wf,wr;
  // is the one being discarded (eg (i. 10 10) ["0 i. 10), the replication doesn't matter, and we
  // simply keep the surviving argument intact.
  if(wf>=af){RETF(w);}  // no replication - quick out
- RESETRANK; RETF(reitem(vec(INT,af-wf,AS(a)),lamin1(w)));  // could use virtual block, but this case is so rare...
+ RESETRANK; a=apip(drop(sc(wf),take(sc(af),shape(a))),drop(sc(wf),shape(w))); A z; IRS2(a,w,0L,RMAX,wcr,jtreshape,z); RETF(z);  // ((wf }. af {. $a) , wf }. $w) ($,)"(_,wcr) w
 } 
 
 // ][.  Must not call EPILOG because the verb propagates WILLOPEN.  When rank is specified ]"n does not propagate
@@ -92,13 +92,13 @@ F2(jtright2){F2PREFIP;RANK2T jtr=jt->ranks; if(likely(jtr==R2MAX))RETF(RETARG(w)
 
 F1(jtright1){RETF(RETARG(w));}
 // lev, dex, and ident - identity adverb/conjunction  (ident uses the same code as lev)
-F2(jtlev){RETF(RETARG(a));}  F2(jtdex){RETF(RETARG(w));}
+F2(jtlev){F2PREFIP;RETF(RETARG(a));}  F2(jtdex){F2PREFIP;RETF(RETARG(w));}
 
 
 
 // i. y
-F1(jtiota){A z;I m,n,*v;
- F1RANK(1,jtiota,DUMMYSELF);
+DF1(jtiota){A z;I m,n,*v;
+ F1RANK(1,jtiota,self);
  if(AT(w)&XNUM+RAT)R cvt(XNUM,iota(vi(w)));  // if extended, take integer and convert
  RZ(w=vi(w)); n=AN(w); v=AV(w);
  if(1==n){m=*v; R 0>m?apv(-m,-m-1,-1L):IX(m);}  // if list required, create it (ascending or descending) and return it
@@ -108,8 +108,8 @@ F1(jtiota){A z;I m,n,*v;
 }
 
 // i: w
-F1(jtjico1){A y,z;B b;D d,*v;I c,m,n; 
- F1RANK(0,jtjico1,DUMMYSELF);
+DF1(jtjico1){A y,z;B b;D d,*v;I c,m,n; 
+ F1RANK(0,jtjico1,self);
  RZ(y=cvt(FL,rect(w))); v=DAV(y); d=*v;  // convert to complex, d=real part of value
  RE(m=v[1]?i0(cvt(INT,tail(y))):i0(tymes(mag(w),num(2))));  // m=#steps: imaginary part if nonzero; otherwise 2*|w
  ASSERT(0<m||!m&&0==d,EVDOMAIN);  // error if imag part was negative, or 0 unless d is also 0
@@ -120,8 +120,30 @@ F1(jtjico1){A y,z;B b;D d,*v;I c,m,n;
  RETF(z);
 }
 
-// _9: to 9:, return the saved value.  These MUST NOT inplace because of a pun in the coding of comparison combination flags
-DF1(jtnum1){ARGCHK2(w,self); R FAV(self)->fgh[2];}
+// _9: to 9: and _:, return the saved value.  If we can inplace the operation (i. e. 0:"0), do so for DIRECT types, preserving the existing precision
+DF1(jtnum1){F1PREFIP;A z=0;
+ ARGCHK2(w,self); RANKT rank=(RANKT)jt->ranks; rank=rank>AR(w)?AR(w):rank; A a=FAV(self)->fgh[2];  // fetch value to store: always an INT/boolean, but if boolean the high-order bytes are 0, so 0 is valid INT/FL and 1 a valid INT
+ if(rank==AR(w))R a;  // at infinite rank, just return the value
+ // rank given, must replicate the value.  if rank 0, we can do it inplace
+ I natoms;  // number of atoms to allocate
+ I k=bplg(AT(a));  // lg2 of size of atoms moved
+ if(rank==0){
+  natoms=AN(w);  // result has same # atoms as input
+  if(ASGNINPLACESGN(SGNIF(jtinplace,JTINPLACEWX)&-(AT(w)&B01+INT+FL)&~((AT(w)&B01+INT+FL)-(AT(a)&B01+INT+FL)),w)){  // inplaceable, and direct numeric and type of a is not bigger than that of w
+   // inplace: we will cast the atom of a to the (never smaller) size of w.  This is OK because a is never a bigger type
+   // 0 can be used for any w; boolean 1 can be used as is for boolean/INT w; other values must be converted in FL.  So, if result is FL, nonzero values must be converted
+   if((AT(w)>>FLX)&(IAV0(a)[0]!=0))RZ(a=cvt(FL,a));  // make value conform to existing type
+   z=w; k=bplg(AT(w));  // copy to the existing output area, 
+  }
+ }else{
+  // not inplace: count the atoms of the result
+  PROD(natoms,AR(w)-rank,AS(w));  // # atoms in result: 1 per cell
+ }
+ if(!z)GA(z,AT(a),natoms,AR(w)-rank,AS(w));  // allocate result if not inplace
+ // We now have the result area, with the right type.  Fill it
+ mvc(natoms<<k,voidAV(z),1LL<<k,voidAV(a));  // could use voidAV0(a)
+ R z;
+}
 DF2(jtnum2){ARGCHK3(a,w,self); R FAV(self)->fgh[2];}
 
 F2(jtfromr  ){ARGCHK2(a,w); A z; R IRS2(a,w,0, RMAX,1L,jtfrom  ,z);} // no agreement check because left rank is infinite - no frame  {"_ 1
@@ -130,24 +152,29 @@ F2(jtrepeatr){ARGCHK2(a,w); A z; R IRS2(a,w,0, RMAX,1L,jtrepeat,z);}  // #"_ 1
 A jttaker(J jt,I n,A w){ARGCHK1(w); A a,z; RZ(a=sc(n)); R IRS2(a,w,0, RMAX,1L,jttake,z);}  // n {."1 w
 A jtdropr(J jt,I n,A w){ARGCHK1(w); A a,z; RZ(a=sc(n)); R IRS2(a,w,0, RMAX,1L,jtdrop,z);}  // n }."1 w
 
-F1(jticap){A a,e;I n;P*p;
- F1RANK(1,jticap,DUMMYSELF);
+// I. y
+DF1(jticap){A a,e;I n;P*p;
+ F1RANK(1,jticap,self);
  SETIC(w,n);
- if((AT(w)&SPARSE+B01)==SPARSE+B01){
+ if(unlikely((AT(w)&SPARSE+B01)==SPARSE+B01)){
   p=PAV(w); a=SPA(p,a); e=SPA(p,e); 
   R BAV(e)[0]||equ(mtv,a) ? repeat(w,IX(n)) : repeat(SPA(p,x),ravel(SPA(p,i)));
  }
- R B01&AT(w) ? ifb(n,BAV(w)) : repeat(w,IX(n));
+ R likely((B01&AT(w))!=0) ? ifb(n,BAV(w)) : repeat(w,IX(n));
 }
 
-A jtcharmap(J jt,A w,A x,A y){A z;B bb[256];I k,n,wn;UC c,*u,*v,zz[256];
+DF1(jtcharmap){F1PREFIP; A z;B bb[256];I k,n,wn;UC c,*u,*v,zz[256];  // scaf should inplace w
+ A x=FAV(FAV(self)->fgh[2])->fgh[0], y=FAV(self)->fgh[0];  // extract translation tables
  RZ(w&&x&&y);
  if(!(LIT&AT(w)))R from(indexof(x,w),y);
- wn=AN(w); n=MIN(AN(x),AN(y)); u=n+UAV(x); v=n+UAV(y);
- k=256; mvc(256,bb,1,MEMSET00); if(n<AN(y)) mvc(256,zz,1,iotavec-IOTAVECBEGIN+UAV(y)[n]);   // bb is array telling which input chars are in x; zz is result char to map for given input byte.  If not exact mapping, init z to the 'not found' char
- DQ(n, c=*--u; zz[c]=*--v; k-=(I)bb[c]^1; bb[c]=1;);   // mark characters in x, and count down to see if we hit all 256.  Note earliest mapped character for each
- GATV(z,LIT,wn,AR(w),AS(w)); v=UAV(z); u=UAV(w);
- if(((k-1)&(n-AN(y)))>=0)DQ(wn, c=*u++; ASSERT(bb[c],EVINDEX); *v++=zz[c];)  // not all codes mapped AND #x>=#y, meaning index error possible on {
- else if(!bitwisecharamp(zz,wn,u,v))DQ(wn, *v++=zz[*u++];);  // no index error possible, and special case not handled
+ I yn=AN(y); wn=AN(w); n=MIN(AN(x),yn); u=n+UAV(x); v=n+UAV(y);
+ k=256; mvc(256,bb,1,MEMSET00); if(n<yn) mvc(256,zz,1,iotavec-IOTAVECBEGIN+UAV(y)[n]);   // bb is array telling which input chars are in x; zz is result char to map for given input byte.  If not exact mapping, init z to the 'not found' char
+ DQ(n, c=*--u; zz[c]=*--v; k-=(I)bb[c]^1; bb[c]=1;);   // mark characters in x, and count down to see if we hit all 256.  Note earliest mapped character for each.  Surplus chars of x ignored
+ if(ASGNINPLACESGN(SGNIF(jtinplace,JTINPLACEWX),w))z=w; else{GATV(z,LIT,wn,AR(w),AS(w));} v=UAV(z); u=UAV(w);  // alloc block unless inplace and no possible error; point to input & output strings
+ if(unlikely(((k-1)|(n-yn))>=0)){   // NOT(all codes mapped OR #x<#y, meaning no error possible): index error possible on {
+  DO(wn, if(!bb[u[i]])R from(indexof(x,w),y);)} // Check for index error.  If error, abort through the { path to generate the right error message--don't bother trying to make this fast
+ DO(wn, *v++=zz[u[i]];)  // no index error, do the translate, possibly inplace
+  // Roger's code first checked to see if the translation exactly represented a bitwise op.  That seems like a lot of work for an unlikely case.  If the user wants a bitwise op, he can use
+  // m b. &.(a.&i.) where we catch the case
  RETF(z);
-}    /* y {~ x i. w */
+}    /* (y {~ x i. ]) w */

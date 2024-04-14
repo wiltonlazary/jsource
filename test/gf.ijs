@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './gf.ijs'
+prolog './gf.ijs'
 NB. f. ------------------------------------------------------------------
 
 ws=: 9!:40 ''
@@ -22,6 +22,11 @@ f    =: 'eachh' f.
 g    =: &.>
 (ar<'f') -: ar<'g'
 (|.&.>y) -: |. 'eachh' f. y=: ;:'Cogito, ergo sum.'
+
+eachh=: + t. ''
+f    =: 'eachh' f.
+g    =: + t. ''
+(ar<'f') -: ar<'g'
 
 f=: undefined_no
 'value error' -: ex 'f f.'
@@ -82,7 +87,7 @@ NB. Verify that f. verbs are functionally equivalent, without checking reps
 i =: 0&$: : s
 'domain error' -: ex 'i&> b. 1'  NB. used to hang
 
-load 'foo.ijs' [(3!:6 'a001 =: ]',LF,'a001`]@.1: f.') 1!:2 <'foo.ijs'
+load foo [(3!:6 'a001 =: ]',LF,'a001`]@.1: f.') 1!:2 <foo=: 'foo','.ijs',~(":2!:6''),'_',":3&T.''
 
 
 1: 0 : 0
@@ -103,6 +108,7 @@ eq=: 2 : 0
  1
 ))
 
+
 >:@ s          eq (>:@ ambi       )
 >:@:s          eq (>:@:ambi       )
 >:@ s@ *:      eq (>:@ monad@ *:  )
@@ -119,6 +125,15 @@ s & *:@>:      eq (monad& *:@>:   )
 NB. illegal *&.s           eq (* &.monad      )
 *&:s           eq (* &:monad      )
 )
+
+
++ F. - {{ (5!:5 <'u') -: (5!:5 <'v') return. u v}} (+ F. - f.)
++ F.. - {{ (5!:5 <'u') -: (5!:5 <'v') return. u v}} (+ F.. - f.)
++ F.: - {{ (5!:5 <'u') -: (5!:5 <'v') return. u v}} (+ F.: - f.)
++ F: - {{ (5!:5 <'u') -: (5!:5 <'v') return. u v}} (+ F: - f.)
++ F:: - {{ (5!:5 <'u') -: (5!:5 <'v') return. u v}} (+ F:: - f.)
++ F:. - {{ (5!:5 <'u') -: (5!:5 <'v') return. u v}} (+ F:. - f.)
+
 'domain error' -: ex '*&.$:'
 'domain error' -: ex '*&.i.'
 'domain error' -: ex '*&.:$:'
@@ -167,7 +182,10 @@ f=: (C +:)"0 f.
 (f -: (!+:)) y=: 10 ?@$ 6
 
 
-4!:55 ;:'a a001 ambi ar b C cap dec dyad eachh f fact fact1 eq g i inc lr '
+4!:55 ;:'a a001 ambi ar b C cap dec dyad eachh eq f fact fact1 foo g i inc lr '
 4!:55 ;:'mat monad plus s sgn slash t v ws y'
 
+
+
+epilog''
 

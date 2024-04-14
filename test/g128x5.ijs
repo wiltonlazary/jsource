@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g128x5.ijs'
+prolog './g128x5.ijs'
 NB. 128!:5 --------------------------------------------------------------
 
 isnan=: 128!:5
@@ -30,23 +30,8 @@ b=: (#x) ?@$ 2
 x=: (-~0j1)+_. (I.b)}x
 b -: isnan x
 
-'domain error' -: 0 (128!:5) etx 3 4 5
-'domain error' -: 1 (128!:5) etx 3 4 5
-
-1: 0 : 0  NB. mapped boxed no longer supported
-NB. 128!:5 and mapped boxed arrays --------------------------------------
-
-0!:0 <testpath,'gmbx.ijs'
-
-r=: x=: 1 2 3 ; _. ; 3j4 _. ; (] , <@(s:"0)) 'abc' ; (u: 128+a.i. 'ABC') ; (10&u: 65536+a.i. 'Abc')
-(isnan x) -: isnan r
-
-r=: x=: (5!:1 <'mean') ; _. ; (<<<3j4 _.) ; (] , <@(s:"0)) 'abc' ; (u: 128+a.i. 'ABC') ; (10&u: 65536+a.i. 'Abc')
-(isnan x) -: isnan r
-
-0 = unmap_jmf_ 'q'
-0 = unmap_jmf_ 'r'
-)
+'valence error' -: 0 (128!:5) etx 3 4 5
+'valence error' -: 1 (128!:5) etx 3 4 5
 
 NB. [x] 128!:8 y   hashing --------------------------------------------------------------
 ('') -: $ (128!:8) 0
@@ -86,3 +71,6 @@ NB. [x] 128!:8 y   hashing -----------------------------------------------------
 
 
 4!:55 ;:'b f f1 g i isnan mean q r x'
+
+epilog''
+

@@ -1,4 +1,4 @@
-/* Copyright 1990-2006, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Verbs: Grade -- dyad /: and \: where a==w                               */
@@ -57,12 +57,11 @@ static const US orderfromcomp5[1024] = {
 
 // Comparison functions.  Do one comparison before the loop for a fast exit if it differs.
 // On VS this sequence, where a single byte is returned, creates a CMP/JE/SETL sequence, performing only one (fused) compare
-// #define COMPGRADE(T,t) T av=*a, bv=*b; if(av!=bv) R av t bv; while(--n){++a; ++b; av=*a, bv=*b; if(av!=bv) R av t bv;} R a<b;
 #define COMPGRADE(T,t) do{T av=*a, bv=*b; if(av!=bv) R av t bv; if(!--n)break; ++a; ++b;}while(1); R 1;
-static __forceinline B compiu(I n, I *a, I *b){COMPGRADE(I,<)}
-static __forceinline B compid(I n, I *a, I *b){COMPGRADE(I,>)}
-static __forceinline B compdu(I n, D *a, D *b){COMPGRADE(D,<)}
-static __forceinline B compdd(I n, D *a, D *b){COMPGRADE(D,>)}
+static INLINE B compiu(I n, I *a, I *b){COMPGRADE(I,<)}
+static INLINE B compid(I n, I *a, I *b){COMPGRADE(I,>)}
+static INLINE B compdu(I n, D *a, D *b){COMPGRADE(D,<)}
+static INLINE B compdd(I n, D *a, D *b){COMPGRADE(D,>)}
 
 // General sort, with comparisons by function call, but may do extra comparisons to avoid mispredicted branches
 #define GRADEFNNAME jmsort
@@ -113,17 +112,19 @@ static struct {
 } sortroutines[][2] = {  // index is [bitx][up]
 [B01X]={{compcd,jmsort},{compcu,jmsort}}, [LITX]={{compcd,jmsort},{compcu,jmsort}}, [INTX]={{0,(void *(*)())jmsortid},{0,(void *(*)())jmsortiu}}, [FLX]={{0,(void *(*)())jmsortdd},{0,(void *(*)())jmsortdu}},
 [CMPXX]={{0,(void *(*)())jmsortdd},{0,(void *(*)())jmsortdu}},
-[C2TX]={{compud,jmsort},{compuu,jmsort}}, [C4TX]={{comptd,jmsort},{comptu,jmsort}}
+[QPX]={{0,(void *(*)())jmsortdd},{0,(void *(*)())jmsortdu}},
+[C2TX]={{compud,jmsort},{compuu,jmsort}}, [C4TX]={{comptd,jmsort},{comptu,jmsort}},
+[INT2X]={{compsd,jmsort},{compsu,jmsort}}, [INT4X]={{compld,jmsort},{complu,jmsort}},
 };
 
 // sort for direct types, without pointers.  When the operand overflows cache the pointer method is very slow
-// We support B01/LIT/C2T/C4T/INT/FL/CMPX
+// We support B01/LIT/C2T/C4T/INT/INT2/INT4/FL/CMPX/QP
 // jt has the JTDESCEND flag
 static A jtsortdirect(J jt,I m,I api,I n,A w){F1PREFJT;A x,z;I t;
  t=AT(w);
  // Create putative output area, same size as input.  If there is more than one cell in result, this will always be the result.
  GA(z,AT(w),AN(w),AR(w),AS(w));
- I cpi=api<<((t>>CMPXX)&1);  // compares per item on a sort
+ I cpi=api+(t&CMPX+QP?api:0);  // compares per item on a sort
  I bpi=api<<bplg(t);  // bytes per item of a sort
  I bps=bpi*n;  // bytes per sort
  void * RESTRICT wv=voidAV(w); void * RESTRICT zv=voidAV(z);
@@ -168,61 +169,51 @@ static SF(jtsortb){F1PREFJT;A z;B up,*u,*v;I i,s;
  R z;
 }    /* w grade"1 w on boolean */
 
-static SF(jtsortb2){F1PREFJT;A z;B up;I i,ii,j,p,yv[4];US*v,*wv,x,zz[4];
+static SF(jtsortb2){F1PREFJT;A z;B up;I i,ii,yv[4];US*v,*wv;
  GA(z,AT(w),AN(w),AR(w),AS(w)); v=USAV(z);
- wv=USAV(w); p=4; up=(~(I)jtinplace>>JTDESCENDX)&1;
- DO(p, yv[i]=0;); 
- zz[0]=BS00; zz[1]=BS01; zz[2]=BS10; zz[3]=BS11;
+ wv=USAV(w); up=(~(I)jtinplace>>JTDESCENDX)&1;
+ I startfill=0;
  for(i=0;i<m;++i){
+  mvc(sizeof(yv),yv,1,MEMSET00);
   DQ(n, IND2(*wv++); ++yv[ii];);
-  if(up){j=0;   DQ(p, x=zz[j]; DQ(yv[j], *v++=x;); yv[j]=0; ++j;);}
-  else  {j=p-1; DQ(p, x=zz[j]; DQ(yv[j], *v++=x;); yv[j]=0; --j;);}
+  DO(4, ii=i^((up-1)&3); US b2=(ii+(ii<<9)); b2=(b2>>1)&0x0101; mvc(yv[ii]*2,v+startfill,2,&b2); startfill+=yv[ii];)
  }
  R z;
 }    /* w grade"r w on 2-byte boolean items */
 
-static SF(jtsortb4){F1PREFJT;A z;B up;I i,ii,j,p,yv[16];UINT*v,*wv,x,zz[16];
+static SF(jtsortb4){F1PREFJT;A z;B up;I i,ii,yv[16];UINT*v,*wv;
  GA(z,AT(w),AN(w),AR(w),AS(w)); v=(UINT*)AV(z);
- wv=(UINT*)AV(w); p=16; up=(~(I)jtinplace>>JTDESCENDX)&1;
- DO(p, yv[i]=0;); 
- zz[ 0]=B0000; zz[ 1]=B0001; zz[ 2]=B0010; zz[ 3]=B0011;
- zz[ 4]=B0100; zz[ 5]=B0101; zz[ 6]=B0110; zz[ 7]=B0111;
- zz[ 8]=B1000; zz[ 9]=B1001; zz[10]=B1010; zz[11]=B1011;
- zz[12]=B1100; zz[13]=B1101; zz[14]=B1110; zz[15]=B1111;
+ wv=(UINT*)AV(w); up=(~(I)jtinplace>>JTDESCENDX)&1;
+ I startfill=0;
  for(i=0;i<m;++i){
+  mvc(sizeof(yv),yv,1,MEMSET00);
   DQ(n, IND4(*wv++); ++yv[ii];);
-  if(up){j=0;   DQ(p, x=zz[j]; DQ(yv[j], *v++=x;); yv[j]=0; ++j;);}
-  else  {j=p-1; DQ(p, x=zz[j]; DQ(yv[j], *v++=x;); yv[j]=0; --j;);}
+  DO(16, ii=i^((up-1)&15); UINT b4=(ii+(ii<<9)); b4=(b4+(b4<<18)); b4=(b4>>3)&0x01010101; mvc(yv[ii]*4,v+startfill,4,&b4); startfill+=yv[ii];)
  }
  R z;
 }    /* w grade"r w on 4-byte boolean items */
 
-static SF(jtsortc){F1PREFJT;A z;B up;I i,p,yv[256];UC j,*wv,*v;
+static SF(jtsortc){F1PREFJT;A z;B up;I i,ii,yv[256];UC*v,*wv;
  GA(z,AT(w),AN(w),AR(w),AS(w)); v=UAV(z);
- wv=UAV(w); p=LIT&AT(w)?256:2; up=(~(I)jtinplace>>JTDESCENDX)&1;
- DO(p, yv[i]=0;);
+ wv=UAV(w); up=(~(I)jtinplace>>JTDESCENDX)&1; I p=LIT&AT(w)?256:2; 
+ I startfill=0;
  for(i=0;i<m;++i){
+  mvc(p*SZI,yv,1,MEMSET00);
   DQ(n, ++yv[*wv++];);
-  if(up){j=0;         DQ(p, DQ(yv[j], *v++=j;); yv[j]=0; ++j;);}
-  else  {j=(UC)(p-1); DQ(p, DQ(yv[j], *v++=j;); yv[j]=0; --j;);}
+  DO(p, ii=i^((up-1)&(p-1)); mvc(yv[ii],v+startfill,1,&ii); startfill+=yv[ii];)
  }
  R z;
 }    /* w grade"1 w on boolean or character */
 
-static SF(jtsortc2){F1PREFJT;A y,z;B up;I i,p,*yv;US j,k,*wv,*v;
+static SF(jtsortc2){F1PREFJT;A z;B up;I i,yv[65536];US*v,*wv;
  GA(z,AT(w),AN(w),AR(w),AS(w)); v=USAV(z);
- wv=USAV(w); p=65536; up=(~(I)jtinplace>>JTDESCENDX)&1;
- GATV0(y,INT,p,1); yv=AV(y);
- DO(p, yv[i]=0;);
+ wv=USAV(w); up=(~(I)jtinplace>>JTDESCENDX)&1;
+ I startfill=0; I sct=AT(w)&C2T?0:8;  // C2T is littleendian, 2 chars are bigendian
  for(i=0;i<m;++i){
+  mvc(65536*SZI,yv,1,MEMSET00);
   DQ(n, ++yv[*wv++];);
-  if(C2T&AT(w)||!C_LE){
-   if(up){j=0;         DQ(p,                DQ(yv[j], *v++=j;); yv[j]=0;           ++j;);}
-   else  {j=(US)(p-1); DQ(p,                DQ(yv[j], *v++=j;); yv[j]=0;           --j;);}
-  }else{
-   if(up){k=0;         DQ(256, j=k; DQ(256, DQ(yv[j], *v++=j;); yv[j]=0; j+=256;); ++k;);}
-   else  {k=(US)(p-1); DQ(256, j=k; DQ(256, DQ(yv[j], *v++=j;); yv[j]=0; j-=256;); --k;);}
- }}
+  DO(65536, US ii=i^((up-1)&(65536-1)); ii=(ii<<sct)|(ii>>sct); mvc(yv[ii]*2,v+startfill,2,&ii); startfill+=yv[ii];)  // scaf could exit early when startfill goes to end
+ }
  R z;
 }    /* w grade"1 w on 2-byte character or unicode items */
 
@@ -247,10 +238,13 @@ static SF(jtsorti1){F1PREFJT;A x,y,z;I*wv;I i,*xv,*zv;void *yv;
  R z;
 }    /* w grade"r w on large-range integers */
 
+//todo should use for avx2 too
+//maybe even swar??
+#if !(C_AVX512 && C_FSGSBASE)
 // sort a single integer list using quicksort without misprediction, inplace
-#define SORTQCOND ((C_AVX2&&SY_64) || EMU_AVX2)
-#define SORTQNAME sortiq1
-#define SORTQTYPE I
+#define SORTQCOND (C_AVX2 || EMU_AVX2)
+#define SORTQNAME vvsortqs8ai
+#define SORTQTYPE IL
 #define SORTQSCOPE
 #define SORTQSET256 _mm256_set_epi64x
 #define SORTQTYPE256 __m256i
@@ -262,36 +256,76 @@ static SF(jtsorti1){F1PREFJT;A x,y,z;I*wv;I i,*xv,*zv;void *yv;
 #define SORTQULOADTYPE __m256i*
 #include "vgsortq.h"
 
+#define SORTQCOND 0 //todo--avx2 vectorised version wants 8-byte quantities so disable for now.  Fine as should switch to 
+#define SORTQNAME vvsortqs4ai
+#define SORTQTYPE I4
+#define SORTQSCOPE
+#define SORTQSET256 _mm256_set_epi32
+#define SORTQTYPE256 __m256i
+#define SORTQCASTTOPD _mm256_castsi256_pd
+#define SORTQCMP256 _mm256_cmpgt_epi32
+#define SORTQCMPTYPE 
+#define SORTQMASKLOAD _mm256_maskload_epi32
+#define SORTQULOAD _mm256_loadu_si256
+#define SORTQULOADTYPE __m256i*
+#include "vgsortq.h"
+// scaf
+void vvsortqs8ao(IL *z,IL *w,I n){ memcpy(z,w,8*n); vvsortqs8ai(z,n); }
+void vvsortqs4ao(I4 *z,I4 *w,I n){ memcpy(z,w,4*n); vvsortqs4ai(z,n); }
+#endif
+
+
 // JTDESCEND set in jt
 static SF(jtsortiq){F1PREFIP;  // m=#sorts, n=#items in each sort, w is block
- A z; 
- if(ASGNINPLACESGN(SGNIF((I)jtinplace,JTINPLACEWX),w))z=w; else RZ(z=ca(w));   // output area, possibly the same as the input
- I *zv=IAV(z); DQ(m, sortiq1(zv,n); if((I)jtinplace&JTDESCEND){I *zv1=zv; I *zv2=zv+n; DQ(n>>1, I t=*zv1; *zv1++=*--zv2; *zv2=t;)} zv+=n;)  // sort each list (ascending); reverse if descending
- RETF(z);
-}
-
+ A z;I inplace=ASGNINPLACESGN(SGNIF(jtinplace,JTINPLACEWX),w); //inplace sort?
+ if(inplace)z=w;
+ else GA(z,AT(w),AN(w),AR(w),AS(w));
+ I *zv=IAV(z),*wv=IAV(w);
+ DQ(m,
+  if(inplace)vvsortqiai(zv,n);
+  else vvsortqiao(zv,wv,n),wv+=n;
+  if((I)jtinplace&JTDESCEND){I *zv1=zv; I *zv2=zv+n; DQ(n>>1, I t=*zv1; *zv1++=*--zv2; *zv2=t;)} //scaf strawman reverse if desc
+  zv+=n;)
+ RETF(z);}
 
 static SF(jtsorti){F1PREFIP;A y,z;I i;UI4 *yv;I j,s,*wv,*zv;
  wv=AV(w);
  // figure out whether we should do small-range processing.  Comments in vg.c
  // First, decide, based on the length of the list, what the threshold for small-range sorting will be.
- // This is what we are trying to calculate, based on n:
- // n<800: if range<5n, use smallrange, otherwise qsort
- // 800<n<50000: if range<2n use smallrange, otherwise qsort
- // 100000<n<600000: if range<3n use smallrange, otherwise radix
- // 600000<n<1000000: if range<2n use smallrange, otherwise radix
- // 1000000<n if range<n use smallrange, otherwise radix
- I nrange=(n>=800)+(n>=50000)+(n>=600000)+(n>=1000000);  // TUNE
- CR rng = condrange(wv,AN(w),IMAX,IMIN,n*((0x12325>>(nrange<<2))&7)); // 1 2 3 2 5 5 are the shift amounts for the ranges
- // smallrange always wins if applicable; otherwise use the table above
+#if 1  // set to 0 to TUNE
+ I nrange;   // range allowed, as multiple of size
+ if(BETWEENC(n,1024,100000000)){
+  I lzn=CTLZI(n); lzn=((((UI)n<<1)<<((BW-1)-lzn))>>(BW-8))+(lzn<<8);  // approx lg(n), binary point 8
+  lzn=lzn*709-1006633;  // 0.0108333 2^.x - 0.06, binary point at 24
+  nrange=16777216/lzn;  // 1/lzn, binary point back to 0
+ }else{nrange=n<=1023?25:2;}  // for small or large, use limit.  On the high end we don't want to run out of memory
+ CR rng = condrange(wv,AN(w),IMAX,IMIN,n*nrange); // see if smallrange allowed
+ // smallrange always wins if applicable
  if(!rng.range){  // range was too large
-  if(n<50000)R jtsortiq(jtinplace,m,n,w);  // qsort for very short lists.  TUNE
-  if(n<100000)R jtsortdirect(jtinplace,m,1,n,w);  // 800-99999, mergesort   TUNE
-  R sorti1(m,n,w);  // 100000+, radix  TUNE
+  R jtsortiq(jtinplace,m,n,w);  // qsort always wins as of 2/2023 Alder Lake
+//  if(n<100000)R jtsortdirect(jtinplace,m,1,n,w);  // 800-99999, mergesort   TUNE
+//  R sorti1(m,n,w);  // 100000+, radix  TUNE
  }
+#else
+  CR rng = condrange(wv,AN(w),IMAX,IMIN,n*50); // testing on Alder Lake 2/2023
+  if(!rng.range){  // range was too large
+   if((n&3)==0b00)R jtsortiq(jtinplace,m,n,w);  // qsort  TUNE
+   if((n&3)==0b01)R jtsortdirect(jtinplace,m,1,n,w);  //  mergesort   TUNE
+   if((n&2)==0b10)R sorti1(m,n,w);  // radix  TUNE
+// {{y , 0 _3 _2 {{ 6!:2 '/:~ nn' [ nn =. x }. y }}"0 _  y ?@$ 1e9}}"0 <.&.(%&4) 10000 * 10 ^ 10 %~ i. 41  NB. tuning not including smallrange: qsort merge radix.  range up to 1e9
+// {{y , 0 _3 _2 {{ 6!:2 '/:~ nn' [ nn =. x }. y }}"0 _  y ?@$ 1e9}}"0 <.&.(%&4) 1e9 1e10 1e11  NB. tuning not including smallrange: qsort merge radix, big arrays, range to 1e9
+// (] , ] {{ 6!:2 '/:~ nn' [ nn =. x ?@$ y }}"0 (1e18) , *&(>:2 * i. 10))"0 (3) + <.&.(%&4) 10000 * 10 ^ 10 %~ i. 41  NB. smallrange, buckets of length 2
+   // n&3==0b11 for smallrange
+   // smallrange results 
+   // 2e3 25x 3e3 20x 6e3 11x 8e3 8x 1e4 7x 1e5 7x 1.6e6 6x 6e6 5x 1e8 5x
+   // we approximate this by the line in (lg x,%y space) from (12,.07) to (24,0.2)
+   // %y-.07 % 2^.x-12 = .13%12
+   // %y = 0.0108333 2^.x - 0.06
+  }
+#endif
  // allocate area for the data, and result area
  GATV0(y,C4T,rng.range,1); yv=C4AV(y)-rng.min;  // yv->totals area
- if(ASGNINPLACESGN(SGNIF((I)jtinplace,JTINPLACEWX),w))z=w;else GA(z,AT(w),AN(w),AR(w),AS(w));
+ if(ASGNINPLACESGN(SGNIF(jtinplace,JTINPLACEWX),w))z=w;else GA(z,AT(w),AN(w),AR(w),AS(w));
  zv=AV(z);
  // clear all totals to 0, then bias address of area so the data fits
  for(i=0;i<m;++i){  // for each list...
@@ -346,7 +380,7 @@ static SF(jtsortu1){F1PREFJT;A x,y,z;C4 *xu,*wv,*zu;I i;void *yv;
 
 
 // sort a single real list using quicksort without misprediction, inplace
-#define SORTQCOND ((C_AVX&&SY_64) || EMU_AVX)
+#define SORTQCOND (C_AVX2 || EMU_AVX2)
 #define SORTQNAME sortdq1
 #define SORTQTYPE D
 #define SORTQSCOPE static
@@ -362,17 +396,21 @@ static SF(jtsortu1){F1PREFJT;A x,y,z;C4 *xu,*wv,*zu;I i;void *yv;
 
 static SF(jtsortdq){F1PREFIP;  // m=#sorts, n=#items in each sort, w is block
  A z; 
- if(ASGNINPLACESGN(SGNIF((I)jtinplace,JTINPLACEWX),w))z=w; else RZ(z=ca(w));   // output area, possibly the same as the input
+ if(ASGNINPLACESGN(SGNIF(jtinplace,JTINPLACEWX),w))z=w; else RZ(z=ca(w));   // output area, possibly the same as the input
  D *zv=DAV(z); DQ(m, sortdq1(zv,n); if((I)jtinplace&JTDESCEND){D *zv1=zv; D *zv2=zv+n; DQ(n>>1, D t=*zv1; *zv1++=*--zv2; *zv2=t;)} zv+=n;)  // sort each list (ascending); reverse if descending
  RETF(z);
 }
 
 // We are known to have 1 atom per item
 static SF(jtsortd){F1PREFIP;A x,y,z;B b;D*g,*h,*xu,*wv,*zu;I i,nneg;void *yv;
- // Use quicksort for normal-sized lists
- if(n<50000)R jtsortdq(jtinplace,m,n,w);  // TUNE
-// testing if(n&1)R jtsortdq(jtinplace,m,n,w);
-// testing if(n&2)R jtsortdirect(jtinplace,m,1,n,w);  // TUNE - it never wins
+#if 1  // normal case
+ // Use quicksort always
+ R jtsortdq(jtinplace,m,n,w);  // TUNE
+#else
+ if((n&3)==0b00)R jtsortdq(jtinplace,m,n,w);
+ if((n&3)==0b01)R jtsortdirect(jtinplace,m,1,n,w);  // TUNE
+// {{y , 0 _3 _2 {{ 6!:2 '/:~ nn' [ nn =. x }. y }}"0 _  (1.e8) * y ?@$ 0}}"0 <.&.(%&4) 100 * 10 ^ 10 %~ i. 41  NB. tuning not including smallrange: qsort merge radix.  range up to 1e9
+#endif
  // falling through for radix sort
  GA(z,AT(w),AN(w),AR(w),AS(w));
  wv=DAV(w); zu=DAV(z);
@@ -406,7 +444,7 @@ F2(jtgr2){F2PREFIP;PROLOG(0076);A z=0;I acr,api,d,f,m,n,*s,t,wcr;
  acr=jt->ranks>>RANKTX; acr=AR(a)<acr?AR(a):acr; 
  wcr=(RANKT)jt->ranks; wcr=AR(w)<wcr?AR(w):wcr; t=AT(w);
  // Handle special reflexive cases, when the arguments are identical and the cells are also.  Only if cells have rank>0 and have atoms
- if(a==w&&acr==wcr&&wcr>0&&AN(a)&&t&(B01+LIT+C2T+C4T+INT+FL+CMPX)){  // tests after the first almost always succeed
+ if(a==w&&acr==wcr&&wcr>0&&AN(a)&&t&(B01+LIT+C2T+C4T+INT+INT2+INT4+FL+CMPX+QP)){  // tests after the first almost always succeed
   // f = length of frame of w; s->shape of w; m=#cells; n=#items in each cell;
   // d = #bytes in an item of a cell of w
   f=AR(w)-wcr; s=AS(w); PROD(m,f,s); SETICFR(w,f,AR(w),n);  PROD(api,wcr-1,1+f+s);
@@ -417,11 +455,11 @@ F2(jtgr2){F2PREFIP;PROLOG(0076);A z=0;I acr,api,d,f,m,n,*s,t,wcr;
    if(t&(C4T+INT+FL)){
     // If this datatype supports smallrange or radix sorting, go try that
     if(1==api)RZ(z=(t&INT?jtsorti:t&FL?jtsortd:jtsortu)(jtinplace,m,n,w))   // Lists of INT/FL/C4T
-   else if(d==2){
-    // 2-byte types, which must be B01/LIT/C2T.  Use special code, unless strings too short
+   }else if(((d^2)+(t&INT2))==0){
+    // 2-byte types (not INT2), which must be B01/LIT/C2T.  Use special code, unless strings too short
     if(t&B01)             RZ(z=sortb2(m,n,w))  // Booleans with cell-items 2 bytes long
-    if(t&LIT+C2T&&n>4600)RZ(z=sortc2(m,n,w))  // long character strings with cell-items 2 bytes long   TUNE
-   }else if(d<2)RZ(z=(t&B01&&(m==1||0==(n&(SZI-1)))?jtsortb:jtsortc)(jtinplace,m,n,w))  // Lists of B01/LIT
+    else if(n>4600)RZ(z=sortc2(m,n,w))  // long character strings with cell-items 2 bytes long   TUNE
+   }else if(d<2){RZ(z=(t&B01&&(m==1||0==(n&(SZI-1)))?jtsortb:jtsortc)(jtinplace,m,n,w))  // Lists of B01/LIT
    }else if(d==4&&t&B01) RZ(z=sortb4(m,n,w))  // Booleans with cell-items 4 bytes long
   }
    // for direct types, we have the choice of direct/indirect.  For indirect, we do grade followed by from to apply the grading permutation.
@@ -431,7 +469,7 @@ F2(jtgr2){F2PREFIP;PROLOG(0076);A z=0;I acr,api,d,f,m,n,*s,t,wcr;
    // for 1e6 items - 80 bytes; 1e5 - 64 bytes; 1e4 - 40 bytes - 1e3 - 48 bytes
    // We roughly approximate this curve
   if(!z){  // not a special case
-   UI4 lgn; CTLZI(n,lgn);
+   UI4 lgn=CTLZI(n);
    if(d<40||(UI4)d<(lgn<<4))RZ(z=jtsortdirect(jtinplace,m,api,n,w))  //  TUNE
   }
  }

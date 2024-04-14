@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g320ip.ijs'
+prolog './g320ip.ijs'
 NB. ,y ravel in place -----------------------------------------------
 
 (i. 1000) -: , i. 1000
@@ -317,21 +317,27 @@ a =: i. 1e6
 f10=:{{ _5 {. a , 6 }}
 999996 999997 999998 999999 6 -: f10 a
 a =: i. 1e6
-1e6 -: # ([ f10) a
+1e6 -: # ([ f10@5) a
+20000 > 7!:2 'f10 5 [ a'
+NB. asgn-in-place still allowed if name has been taken off the stack
+a =: i. 1e6
+f10=:{{ _5 {. a =: a , 6 }}
+999996 999997 999998 999999 6 -: f10 a
+a =: i. 1e6
+1e6 -: # ([ f10@5) a
 20000 > 7!:2 'f10 5 [ a'
 NB. asgn-in-place not allowed if name is on the stack
 a =: i. 1e6
 f10=:{{ _5 {. a =: a , 6 }}
 999996 999997 999998 999999 6 -: f10 a
 a =: i. 1e6
-1e6 -: # ([ f10) a
-20000 < 7!:2 'f10 5 [ a'
-
+1e6 -: # ([ f10@5) a
+20000 < 7!:2 '([ f10@5) a'
 
 NB. Verify forms for indexing
 a =: i. 1e6
 10000 > 7!:2 '3 : ''a =: }:@:(,&8) a'''  NB. must be in an explicit to inplace
-5000 > 7!:2 '1 2 3 _1 { a , 7'
+NB. no virtual extension 5000 > 7!:2 '1 2 3 _1 { a , 7'
 1 2 3 7 -: 1 2 3 _1 { a , 7
 
 NB. Verify no local-to-global aliasing
@@ -560,19 +566,19 @@ IGNOREIFFVI 4000 < 7!:2 'a =: (, {.@unsafename) a'
 NB. singleton hook
 a =: 10+1
 aad =: 15!:14 <'a'
-a =: a + 4
-aad2=:15!:14 <'a'  NB. On NVR stack, so not inplaceable
-aad ~: aad2
-a =: a (+ ]) 4
-aad=:15!:14 <'a'  NB. On NVR stack, so not inplaceable
-aad ~: aad2
+a =: a + 4  NB. inplaceable
+aad2=:15!:14 <'a'
+aad = aad2
+a =: a (+ ]) 4  NB. inplaceable
+aad=:15!:14 <'a'
+aad = aad2
 3 : 0 ''
 a =. 10+1
 aad =. 15!:14 <'a'
 a =. a + 4
-assert. aad = 15!:14 <'a' [ 1  NB. not on NVR in defn
+assert. aad = 15!:14 <'a' [ 1
 a =. a (+ ]) 4
-assert. aad = 15!:14 <'a' [ 2 NB. not on NVR in defn (hook)
+assert. aad = 15!:14 <'a' [ 2
 1
 )
 9!:53 (0)
@@ -629,14 +635,14 @@ a =: i. 1000
 0 1 2 3 4 -: ($0) {.&(5 ,~ ]) a
 9!:53 (0)
 a =: i. 1000
-IGNOREIFFVI 3000 < 7!:2 'a =: ($0) {.&([: >@< 5 ,~ ]) a'  NB. realize any virtual block
+IGNOREIFFVI 3000 < 7!:2 'a =: ($0) {.&([: >@{.@< 5 ,~ ]) a'  NB. realize any virtual block
 
 f =: 3 : 0
 9!:53 (1)
 a =: i. 1000
-assert. IGNOREIFFVI 3000 > 7!:2 'a =: ($0) {.&([: >@< 5 ,~ ]) a'
+assert. IGNOREIFFVI 3000 > 7!:2 'a =: ($0) {.&([: >@{.@< 5 ,~ ]) a'
 a =: i. 1000
-assert. IGNOREIFFVI 3000 < 7!:2 'a =: ($0) {.&([: >@< 5 ,~ unsafename) a'
+assert. IGNOREIFFVI 3000 < 7!:2 'a =: ($0) {.&([: >@{.@< 5 ,~ unsafename) a'
 1
 )
 f''
@@ -647,13 +653,13 @@ a =: i. 1000
 0 1 2 3 4 -: ($0) {.&:(5 ,~ ]) a
 9!:53 (0)
 a =: i. 1000
-IGNOREIFFVI 3000 < 7!:2 'a =: ($0) {.&:([: >@< 5 ,~ ]) a'
+IGNOREIFFVI 3000 < 7!:2 'a =: ($0) {.&:([: >@{.@< 5 ,~ ]) a'
 f =: 3 : 0
 9!:53 (1)
 a =: i. 1000
-assert. IGNOREIFFVI 3000 > 7!:2 'a =: ($0) {.&:([: >@< 5 ,~ ]) a'
+assert. IGNOREIFFVI 3000 > 7!:2 'a =: ($0) {.&:([: >@{.@< 5 ,~ ]) a'
 a =: i. 1000
-assert. IGNOREIFFVI 3000 < 7!:2 'a =: ($0) {.&:([: >@< 5 ,~ unsafename) a'
+assert. IGNOREIFFVI 3000 < 7!:2 'a =: ($0) {.&:([: >@{.@< 5 ,~ unsafename) a'
 1
 )
 f''
@@ -851,15 +857,16 @@ NB. Add a line here whenever new verbs are inplaced
 y =. i. 5 5
 3 : 'y =. ,y' y
 assert. y -: i. 5 5
-3 : 'y =. y , i. 5'
+3 : 'y =. y , i. 5' y
 assert. y -: i. 5 5
 1
 )
 
 NB. Verify fork does not execute f if there is an error in f
-'domain error' -: (18!:4 [ 1&+) etx <'nonexlocale'
+qd=:18!:4
+'domain error' -: (qd [ 1&+) etx <'nonexlocale'
 -. (<'nonexlocale') e. 18!:1]0 
-'domain error' -: 1 (18!:4@] [ +) etx <'nonexlocale'
+'domain error' -: 1 (qd@] [ +) etx <'nonexlocale'
 -. (<'nonexlocale') e. 18!:1]0
 
 NB. Test for intermediate result persisting when the name of which it is a part is reassigned
@@ -964,10 +971,18 @@ y =. y
 
 NB. Inplaceable result of explicit definition stays inplaceable after exit
 f3 =: 3 : '10000 # a'
-(dbq'') +. 170000 > 7!:2 '(f3 131000 # a) [ (f3 131000 # a) [ (f3 131000 # a) [ (f3 131000 # a) [ (f3 131000 # a)'
+(dbq'') +. 210000 > 7!:2 '(f3 131000 # a) [ (f3 131000 # a) [ (f3 131000 # a) [ (f3 131000 # a) [ (f3 131000 # a)'
 NB. Even if named
 f3 =: 3 : 'p =. 10000 # a'
-(dbq'') +. 170000 > 7!:2 '(f3 131000 # a) [ (f3 131000 # a) [ (f3 131000 # a) [ (f3 131000 # a) [ (f3 131000 # a)'
+(dbq'') +. 210000 > 7!:2 '(f3 131000 # a) [ (f3 131000 # a) [ (f3 131000 # a) [ (f3 131000 # a) [ (f3 131000 # a)'
+
+a =.  'this';'is'  NB. Old bug when tried to zap the backer for a virtual block
+(1;'this') -: ((}. 1: 1:);0&{) a_:
+a =.  'this';'is'
+(1;'this') -: ((1: 1: }.);0&{) a_:
+a =.  'this';'is'
+(1;'this') -: (([: 1: }.);0&{) a_:
+
 
 NB. Inplacing forks
 NB. The code to generate the testcases:
@@ -1176,4 +1191,7 @@ assert. ((<P;0),(<01),<(<I),(<00),<P;0) -: (* ] ((9!:63) (9!:63))) 0
 
 4!:55 ;:'a a1 aad aad2 b f f1 f2 f3 f4 f5 f6 f7 f8 f9 f10 f11 f12 f13 global i ipexp jdlast l0 l1 local max min nmm nb qd t test testa unsafename undefinedname x'
 
+
+
+epilog''
 

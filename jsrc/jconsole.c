@@ -1,6 +1,8 @@
-/* Copyright 1990-2007, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
-/* J console */
+/*                                                                         */
+/* J console                                                               */
+
 /* #define READLINE for Unix readline support */
 #ifdef _WIN32
 #include <windows.h>
@@ -11,30 +13,75 @@
 #include <sys/resource.h>
 #define _isatty isatty
 #define _fileno fileno
+#if !defined(__wasm__) && !defined(TARGET_IOS)
 #include <dlfcn.h>
 #define GETPROCADDRESS(h,p) dlsym(h,p)
+#endif
 #endif
 #include <signal.h>
 #include <stdint.h>
 #include <locale.h>
-#ifdef __MACH__
+#ifdef __APPLE__
 #include <xlocale.h>
 #endif
 
 #include "j.h"
 #include "jeload.h"
 
-#define J_STACK  0x1000000uL // 16mb
+#if !defined(_WIN32) && !defined(__OpenBSD__) && !defined(__FreeBSD__) && !defined(__wasm__) //temporary
+#include "../libbacktrace/backtrace.h"
+#endif
 
+#define J_STACK  0xc00000uL // 12mb
+
+static int runjscript=0;   /* exit after running script */
 static int forceprmpt=0;   /* emit prompt even if isatty is false */
 static int breadline=0;    /* 0: none  1: libedit  2: linenoise */
 static int norl=0;         /* disable readline/linenoise */
-static char **adadbreak;
-static void sigint(int k){**adadbreak+=1;signal(SIGINT,sigint);}
-static void sigint2(int k){**adadbreak+=1;}
+static int noel=0;         /* disable readline but not linenoise */
+static void sigint(int k){jeinterrupt();signal(SIGINT,sigint);}
+static void sigint2(int k){jeinterrupt();}
+#if defined(_WIN32)
+static BOOL WINAPI CtrlHandler(DWORD fdwCtrlType){
+ switch (fdwCtrlType){
+// Handle the CTRL-C signal.
+  case CTRL_C_EVENT:
+   jeinterrupt(); return TRUE;
+  default: return FALSE;
+ }
+}
+#endif
+#if !defined(_WIN32) && !defined(__OpenBSD__) && !defined(__FreeBSD__) && !defined(__wasm__) //temporary
+static int err_write(void *data, uintptr_t pc, const char *file, int line, const char *function){
+ char buf[512];
+ file = file ? file : "?";
+ while(!strncmp(file, "../", 3)) file += 3; // strip leading '../'.  Don't strip leading 'jsrc/' to avoid ambiguity with source files with other origins.
+ snprintf(buf, sizeof(buf), "%0*lx: %s:%d:\t%s\n", BW==64?16:8, (unsigned long)pc, file, line, function ? function : "?");
+ (void)!write(STDERR_FILENO, buf, strlen(buf));
+ R 0;}
+static void err_error(void *data, const char *msg, int errnum) {
+ char buf[512];
+ snprintf(buf, sizeof(buf), "Could not generate stack trace: %s (%d)\n", msg, errnum);
+ (void)!write(STDERR_FILENO, buf, strlen(buf));
+}
+static void sigsegv(int k){
+ //todo should say to report to the beta forums for beta builds
+ const char msg[] = "JE has crashed, likely due to an internal bug.  Please report the code which caused the crash, as well as the following printout, to the J forum.\n";
+ // write is async-signal safe; fwrite&co are not, but still do this, just to be safe
+ // similarly, can't fflush(stderr) first; too bad
+ (void)!write(STDERR_FILENO, msg, sizeof(msg)-1);
+ struct backtrace_state *state = backtrace_create_state(NULL, 1, NULL, NULL);
+ if(state)backtrace_full(state, 0, err_write, err_error, NULL);
+ const char line[] = "-----------------------------------------------------------------------------\n";
+ (void)!write(STDERR_FILENO, line, 78);
+ fsync(STDERR_FILENO);
+ //abort rather than exit to ensure a core dump is still generated
+ abort();}
+#endif
+
 static char input[30000];
 
-#if defined(ANDROID) || defined(_WIN32)
+#if defined(ANDROID) || defined(_WIN32) || defined(__wasm__)
 #undef USE_LINENOISE
 #ifdef READLINE
 #define USE_LINENOISE
@@ -64,28 +111,29 @@ char* rl_readline_name;
 int hist=1;
 char histfile[512];
 
-#if !defined(ANDROID) && !defined(_WIN32)
+#if !defined(ANDROID) && !defined(_WIN32) && !defined(__wasm__)
 static int readlineinit()
 {
  if(hreadline)return 0; // already run
-#ifndef __MACH__
- if(!(hreadline=dlopen("libedit.so.3",RTLD_LAZY)))
- if(!(hreadline=dlopen("libedit.so.2",RTLD_LAZY)))
-  if(!(hreadline=dlopen("libedit.so.1",RTLD_LAZY)))
-   if(!(hreadline=dlopen("libedit.so.0",RTLD_LAZY))){
+ static const char *libedit[] = {
+#ifndef __APPLE__
+  "libedit.so.5.2","libedit.so.3","libedit.so.2","libedit.so.1","libedit.so.0","libedit.so",
 #else
- if(!(hreadline=dlopen("libedit.dylib",RTLD_LAZY))){
+  "libedit.dylib",
 #endif
+  0};
+ if(!noel) for(const char **l = libedit;*l;l++) if((hreadline=dlopen(*l,RTLD_LAZY))) goto ledit;
+ // couldn't find libedit
 #if defined(USE_LINENOISE)
-    add_history=linenoiseHistoryAdd;
-    read_history=linenoiseHistoryLoad;
-    write_history=linenoiseHistorySave;
-    readline=linenoise;
-    return 2;
+ add_history=linenoiseHistoryAdd;
+ read_history=linenoiseHistoryLoad;
+ write_history=linenoiseHistorySave;
+ readline=linenoise;
+ return 2;
 #else
-    return 0;
+ return 0;
 #endif
-   }
+ledit:
  add_history=(ADD_HISTORY)GETPROCADDRESS(hreadline,"add_history");
  read_history=(READ_HISTORY)GETPROCADDRESS(hreadline,"read_history");
  write_history=(WRITE_HISTORY)GETPROCADDRESS(hreadline,"write_history");
@@ -144,18 +192,18 @@ if(hist)
 
 char* Jinput_stdio(char* prompt)
 {
-  if(prompt&&strlen(prompt)){
+  if(!runjscript&&prompt&&strlen(prompt)){
 	fputs(prompt,stdout);
 	fflush(stdout); /* windows emacs */
   }
-	if(!fgets(input, sizeof(input), stdin))
+	while(!fgets(input, sizeof(input), stdin))  // loop if there is an error.  If it's ctrl-c, read again; otherwise terminate
 	{
 #ifdef _WIN32
 		/* ctrl+c gets here for win */
 		if(!(forceprmpt||_isatty(_fileno(stdin)))) return "2!:55''";
 		fputs("\n",stdout);
 		fflush(stdout);
-		**adadbreak+=1;
+		jeinterrupt();
 #else
 		/* unix eof without readline */
 		return "2!:55''";
@@ -184,8 +232,13 @@ void _stdcall Joutput(JST* jt,int type, C* s)
 #endif
   exit((int)(intptr_t)s);
  }
+ if((2==type)||(4==type)){
+ fputs((char*)s,stderr);
+ fflush(stderr);
+ }else{
  fputs((char*)s,stdout);
  fflush(stdout);
+ }
 }
 
 void addargv(int argc, char* argv[], char* d)
@@ -214,36 +267,48 @@ JST* jt;
 
 int main(int argc, char* argv[])
 {
- setlocale(LC_ALL, "");
+#if !defined(_WIN32) && !defined(__OpenBSD__) && !defined(__FreeBSD__) && !defined(__wasm__) //temporary
+ signal(SIGSEGV,sigsegv);
+ signal(SIGILL,sigsegv);
+#ifdef __APPLE__
+ signal(SIGTRAP,sigsegv); //catch SEGFAULT
+#endif
+#endif
 #if !(defined(ANDROID)||defined(_WIN32))
- locale_t loc;
- if ((loc = newlocale(LC_NUMERIC_MASK, "C", (locale_t) 0))) uselocale(loc);
+ locale_t loc=0;
+ if ((loc = newlocale(LC_ALL_MASK, "", (locale_t)0 )))
+  if ((loc = newlocale(LC_NUMERIC_MASK, "C", loc ))) uselocale(loc);
+/* Test effect of LC_NUMERIC. */
+/*  printf("%8.3f\n", 123456.789); */
 #else
+ setlocale(LC_ALL, "");
  setlocale(LC_NUMERIC,"C");
 #endif
  void* callbacks[] ={Joutput,0,Jinput,0,(void*)SMCON}; int type;
- int i,poslib=0,poslibpath=0,posnorl=0,posprmpt=0; // assume all absent
+ int i,poslib=0,poslibpath=0,posnorl=0,posnoel=0,posprmpt=0,posscrpt=0; // assume all absent
  for(i=1;i<argc;i++){
   if(!poslib&&!strcmp(argv[i],"-lib")){poslib=i; if((i<argc-1)&&('-'!=*(argv[i+1])))poslibpath=i+1;}
   else if(!posnorl&&!strcmp(argv[i],"-norl")) {posnorl=i; norl=1;}
+  else if(!posnoel&&!strcmp(argv[i],"-noel")) {posnoel=i; noel=1;}
   else if(!posprmpt&&!strcmp(argv[i],"-prompt")) {posprmpt=i; forceprmpt=1;}
+  else if(!posscrpt&&!strcmp(argv[i],"-jscript")) {posscrpt=i; runjscript=1; norl=1; noel=1; forceprmpt=0;}
  }
-// fprintf(stderr,"poslib %d,poslibpath %d,posnorl %d,posprmpt %d\n",poslib,poslibpath,posnorl,posprmpt);
+// fprintf(stderr,"poslib %d,poslibpath %d,posnorl %d,posnoel %d,posprmpt %d,posscrpt %d\n",poslib,poslibpath,posnorl,posnoel,posprmpt,posscrpt);
  jepath(argv[0],(poslibpath)?argv[poslibpath]:"");
  // remove processed arg
- if(poslib||poslibpath||posnorl||posprmpt){
+ if(poslib||poslibpath||posnorl||posnoel||posprmpt||posscrpt){
   int j=0; 
   char **argvv = malloc(argc*sizeof(char*));
   argvv[j++]=argv[0];
   for(i=1;i<argc;i++){
-   if(!(i==poslib||i==poslibpath||i==posnorl||i==posprmpt))argvv[j++]=argv[i];
+   if(!(i==poslib||i==poslibpath||i==posnorl||i==posnoel||i==posprmpt||i==posscrpt))argvv[j++]=argv[i];
   }
   argc=j;
   for(i=1;i<argc;++i)argv[i]=argvv[i];
   free(argvv);
  }
 
-#if !defined(WIN32)
+#if 0
 // set stack size to get limit error instead of crash
  struct rlimit lim;
  if(!getrlimit(RLIMIT_STACK,&lim)){
@@ -270,13 +335,22 @@ int main(int argc, char* argv[])
   if(!norl) norl|=!!getenv("SHELL");  // only works on real windows terminals
 #endif
 #endif
-  if(!norl&&_isatty(_fileno(stdin)))
+  if(!norl&&_isatty(_fileno(stdin))){
    breadline=readlineinit();
+#if !defined(__wasm__)
+   dlerror(); //clear error
+#endif
+  }
 #endif
 
+#ifdef JAMALGAM
+#ifdef _WIN32
+ extern int attach_process();
+ attach_process();
+#endif
+#endif
  jt=jeload(callbacks);
  if(!jt){char m[1000]; jefail(m); fputs(m,stderr); exit(1);}
- adadbreak=(char**)jt; // first address in jt is address of breakdata
 #ifndef _WIN32
  if(2==breadline){
   struct sigaction sa;
@@ -287,7 +361,11 @@ int main(int argc, char* argv[])
   sigaction(SIGINT, &sa, NULL);
  }else
 #endif
+#if defined(_WIN32)
+  SetConsoleCtrlHandler(CtrlHandler, TRUE);
+#else
   signal(SIGINT,sigint);
+#endif
  
 #ifdef READLINE
  if(!norl){
@@ -309,11 +387,16 @@ int main(int argc, char* argv[])
   if(!norl)
   _setmode( _fileno( stdin ), _O_TEXT ); //readline filters '\r' (so does this)
 #endif
- jefirst(type,input);
- while(1){jedo((char*)Jinput(jt,(forceprmpt||_isatty(_fileno(stdin)))?(C*)"   ":(C*)""));}
+ if(runjscript)type|=256;
+ int r=jefirst(type,input);
+#if !defined(TESTS)
+ if(!runjscript)while(1){r=jedo((char*)Jinput(jt,(forceprmpt||_isatty(_fileno(stdin)))?(C*)"   ":(C*)""));}
+#else
+ r=jedo((char*)"RUN4 ddall[ECHOFILENAME=:1[(0!:0)<'test/tsu.ijs'");
+#endif
  jefree();
 #if !(defined(ANDROID)||defined(_WIN32))
  if(loc)freelocale(loc);
 #endif
- return 0;
+ return r;
 }

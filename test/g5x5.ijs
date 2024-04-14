@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g5x5.ijs'
+prolog './g5x5.ijs'
 NB. 5!:5 ----------------------------------------------------------------
 
 randuni''
@@ -351,6 +351,7 @@ NB. 5!:5 ----------------------------------------------------------------
 +:                               test1
 j.                               test1
 0:                               test1
++ t. ''                          test1
 f                                test1
 +/                               test1
 +./                              test1
@@ -380,6 +381,12 @@ f                                test1
 (1 2 3x (2&+) ])                 test1
 (-&3x   (2&+) ])                 test1
 2 b.                             test1
++ F. -                           test1
++ F.. -                           test1
++ F.: -                           test1
++ F: -                           test1
++ F:. -                           test1
++ F:: -                           test1
 
 f =:+ 
 g =:- 
@@ -442,6 +449,18 @@ c test1
 
 
 a=: /
+test2 <'a' 
+a=: @
+test2 <'a' 
+a=: @:
+test2 <'a' 
+a=: &
+test2 <'a' 
+a=: &:
+test2 <'a' 
+a=: &.
+test2 <'a' 
+a=: &.:
 test2 <'a' 
 a=: /.
 test2 <'a'
@@ -900,6 +919,22 @@ f =: (1 0$'') 1 : 'u y'
 f=: (<(<,':'),<(<(,'0');1),<(,'0');1 0$'') (1 : 'u u`:6`:6 y')
 (lr<'f') -: '(<(<,'':''),<(<(,''0'');1),<(,''0'');1 0$'''') (1 : ''u u`:6`:6 y'')'
 
+NB. 5!:5 dyadic
+f =: {{ 1 + y }}
+('3 : 0',LF,'1 + y ',LF,')') -: (1) 5!:5 <'f'
+('3 : 0',LF,')') -: (2) 5!:5 <'f'
+f =: {{ x + y }}
+('4 : 0',LF,')') -: (1) 5!:5 <'f'
+('4 : 0',LF,'x + y ',LF,')') -: (2) 5!:5 <'f'
+f =: {{ 1 + y
+:
+x + y
+y
+}}
+('3 : 0',LF,'1 + y',LF,')') -: (1) 5!:5 <'f'
+('3 : 0',LF,'x + y',LF,'y',LF,')') -: (2) 5!:5 <'f'
+
+
 4!:55 ;:'a act adot1 adot2 sdot0 alp ar base bot boxc boxed bp bs '
 4!:55 ;:'bsd c center connect cp cross dash dig dotco em '
 4!:55 ;:'en extent f f3 fx g gap graft h hfork '
@@ -912,4 +947,7 @@ f=: (<(<,':'),<(<(,'0');1),<(,'0');1 0$'') (1 : 'u u`:6`:6 y')
 4!:55 ;:'t take test test1 test2 testeq testlr tr trcase tree trg trgl trgr trtil trx '
 4!:55 ;:'value vbox vchar x '
 randfini''
+
+
+epilog''
 

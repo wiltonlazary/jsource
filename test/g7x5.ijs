@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g7x5.ijs'
+prolog './g7x5.ijs'
 NB. 7!:5 ----------------------------------------------------------------
 
 randuni''
@@ -148,10 +148,11 @@ if. _1=nc<'MAPNAME_jmf_' do.
  'MAPNAME_jmf_ MAPFN_jmf_ MAPSN_jmf_ MAPFH_jmf_ MAPMH_jmf_ MAPADDRESS_jmf_ MAPHEADER_jmf_ MAPFSIZE_jmf_ MAPMSIZE_jmf_ MAPREFS_jmf_'=: i.10
 end. 
 1
-) 
-18!:4 <'base'
+)
+f=: 18!:4
+f <'base'
 1 [ unmap_jmf_ 'q'
-f=: <jpath '~temp/q.jmf'
+f=: <jpath'~temp/q','.jmf',~(":2!:6''),'_',":3&T.''
 1 [ createjmf_jmf_ f,<3e5      NB. 3e5 bytes for data
 map_jmf_ (<'q'),f,'';0   NB. map q to jmf file
 '' -: q
@@ -167,7 +168,7 @@ map_jmf_ (<'q'),f,'';0   NB. map q to jmf file
 (fmapped -: gmapped) q [ q=:x=: s: <"0 adot1{~(?1e4)?@$#adot1
 (fmapped -: gmapped) q [ q=:x=: s: <"0 adot2{~(?1e4)?@$#adot2
 
-'domain error' -: 3!:9 etx q
+'valence error' -: 3!:9 etx q
 'domain error' -: (1) 3!:9 etx q
 'rank error' -: (,.0) 3!:9 etx q
 1 -: (0) 3!:9 q
@@ -177,10 +178,11 @@ map_jmf_ (<'q'),f,'';0   NB. map q to jmf file
 
 
 1 [ unmap_jmf_ 'q'
+1!:55 ::1: f
 
 NB. Test usecount on mapped arrays
 NB. create clean mapped noun a
-f=: jpath'~temp/t.jmf'
+f=: jpath'~temp/t','.jmf',~(":2!:6''),'_',":3&T.''
 1 [ createjmf_jmf_ f;1000
 1 [ 1 unmap_jmf_'a' NB. 1 forces unmap - even with dangling refs
 1 [ map_jmf_ 'a';f
@@ -199,9 +201,13 @@ NB. run foo calling goo calling foo (note perhaps nasty goo calling foo!)
 1 [ 1 foo '' NB. a NB. ".&.> <'a' [ !a
 (<,2) -: (<1,MAPREFS_jmf_) { showmap_jmf_''
 1 [ unmap_jmf_ 'a'
+1!:55 ::1: <f
 
 18!:55 <'jmf'
 
 4!:55 ;:'adot1 adot2 fmapped gmapped sdot0 bp f g q sp x a foo goo'
 randfini''
+
+
+epilog''
 

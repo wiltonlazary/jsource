@@ -1,4 +1,4 @@
-/* Copyright 1990-2004, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Verbs: Grade -- Compare                                                 */
@@ -10,16 +10,21 @@
 // inlinable functions are moved to vg.c
 // functions differing between merge & sort are moved to those modules
 B compcu(I n, UC *a, UC *b){do{if(*a!=*b)R *a<*b; if(!--n)break; ++a; ++b;}while(1); R a<b;}
+// interesting but no faster B compcu(I n, UC *a, UC *b){I lsh=(-n&(SZI-1))<<LGSZI; do{UI ai=*(UI*)a; UI bi=*(UI*)b; I sh=(n-SZI)<=0?lsh:0; UI comp=(ai^bi)<<sh; if(comp){sh+=BW-SZI-(CTTZI(comp)&-SZI); R (ai<<sh)<(bi<<sh);} if((n=n-SZI)<=0)break; a+=SZI; b+=SZI;}while(1); R a<b;}
 B compcd(I n, UC *a, UC *b){do{if(*a!=*b)R *a>*b; if(!--n)break; ++a; ++b;}while(1); R a<b;}
 B compuu(I n, US *a, US *b){do{if(*a!=*b)R *a<*b; if(!--n)break; ++a; ++b;}while(1); R a<b;}
 B compud(I n, US *a, US *b){do{if(*a!=*b)R *a>*b; if(!--n)break; ++a; ++b;}while(1); R a<b;}
 B comptu(I n, C4 *a, C4 *b){do{if(*a!=*b)R *a<*b; if(!--n)break; ++a; ++b;}while(1); R a<b;}
 B comptd(I n, C4 *a, C4 *b){do{if(*a!=*b)R *a>*b; if(!--n)break; ++a; ++b;}while(1); R a<b;}
-B compr(I n, A *a, A *b){SORT *sbk=(SORT *)n; I j; n=sbk->n; J jt=sbk->jt; do{if(j=compare(*a,*b))R SGNTO0(j^SGNIF(jt,JTDESCENDX)); if(!--n)break; ++a; ++b;}while(1); R a<b;}  // compare returns 1/0/-1 value, switch if descending a<b makes the sort stable
+B compsu(I n, I2 *a, I2 *b){do{if(*a!=*b)R *a<*b; if(!--n)break; ++a; ++b;}while(1); R a<b;}
+B compsd(I n, I2 *a, I2 *b){do{if(*a!=*b)R *a>*b; if(!--n)break; ++a; ++b;}while(1); R a<b;}
+B complu(I n, I4 *a, I4 *b){do{if(*a!=*b)R *a<*b; if(!--n)break; ++a; ++b;}while(1); R a<b;}
+B compld(I n, I4 *a, I4 *b){do{if(*a!=*b)R *a>*b; if(!--n)break; ++a; ++b;}while(1); R a<b;}
+B compr(I n, A *a, A *b){SORT *sbk=(SORT *)n; I j; n=sbk->n; J jt=sbk->jt; do{if(j=compare(C(*a),C(*b)))R SGNTO0(j^SGNIF(jt,JTDESCENDX)); if(!--n)break; ++a; ++b;}while(1); R a<b;}  // compare returns 1/0/-1 value, switch if descending a<b makes the sort stable
 B compxu(I n, X *a, X *b){SORT *sbk=(SORT *)n; I j; n=sbk->n; J jt=(J)((I)sbk->jt&~JTFLAGMSK); do{if(j=xcompare(*a,*b))R SGNTO0(j); if(!--n)break; ++a; ++b;}while(1); R a<b;} // xcompare returns 1/0/-1
 B compxd(I n, X *a, X *b){SORT *sbk=(SORT *)n; I j; n=sbk->n; J jt=(J)((I)sbk->jt&~JTFLAGMSK); do{if(j=xcompare(*b,*a))R SGNTO0(j); if(!--n)break; ++a; ++b;}while(1); R a<b;} // xcompare returns 1/0/-1
-B compqu(I n, Q *a, Q *b){SORT *sbk=(SORT *)n; I j; n=sbk->n; J jt=(J)((I)sbk->jt&~JTFLAGMSK); do{if(j=QCOMP(*a,*b))R SGNTO0(j); if(!--n)break; ++a; ++b;}while(1); R a<b;} // QCOMP returns 1/0/-1
-B compqd(I n, Q *a, Q *b){SORT *sbk=(SORT *)n; I j; n=sbk->n; J jt=(J)((I)sbk->jt&~JTFLAGMSK); do{if(j=QCOMP(*b,*a))R SGNTO0(j); if(!--n)break; ++a; ++b;}while(1); R a<b;} // QCOMP returns 1/0/-1
+B compqu(I n, Q *a, Q *b){SORT *sbk=(SORT *)n; I j; n=sbk->n; J jt=(J)((I)sbk->jt&~JTFLAGMSK); do{if(j=QCOMP(*a,*b))R SGNTO0(j); if(!--n)break; ++a; ++b;}while(1); R a<b;} // QCOMP returns value with same sign as *a-*b
+B compqd(I n, Q *a, Q *b){SORT *sbk=(SORT *)n; I j; n=sbk->n; J jt=(J)((I)sbk->jt&~JTFLAGMSK); do{if(j=QCOMP(*b,*a))R SGNTO0(j); if(!--n)break; ++a; ++b;}while(1); R a<b;} // QCOMP returns value with same sign as *a-*b
 
 #define CF(f)            int f(SORT * RESTRICT sortblok,I a,I b)
 
@@ -50,13 +55,13 @@ I jtcompare(J jt,A a,A w){C*av,*wv;I ar,an,*as,at,c,d,j,m,t,wn,wr,*ws,wt;F1PREFJ
   RZ(w=take(s,w));
  }
  m=MIN(an,wn); 
- if(unlikely((-(t&XNUM+RAT)&-((at|wt)&FL+CMPX))<0)){A p,q;B*u,*v;
-  // indirect numeric type vs flt/complex: create boolean vector for each value in turn
+ if(unlikely((-(t&XNUM+RAT)&-((at|wt)&FL+CMPX+QP))<0)){A p,q;B*u,*v;
+  // indirect numeric type vs flt/complex: create boolean vector for each value in turn   this does extra work
   RZ(p=lt(a,w)); u=BAV(p);
   RZ(q=gt(a,w)); v=BAV(q);
   DO(m, if(u[i]|v[i])R RETGT(!u[i]););
- }else{
-  if(unlikely(TYPESNE(t,at)))RZ(a=cvt(t,a));
+ }else{   // normal 
+  if(unlikely(TYPESNE(t,at)))RZ(a=cvt(t,a));  // convert to common types
   if(unlikely(TYPESNE(t,wt)))RZ(w=cvt(t,w));
   av=CAV(a); wv=CAV(w);
   switch(CTTZ(t)){
@@ -66,9 +71,12 @@ I jtcompare(J jt,A a,A w){C*av,*wv;I ar,an,*as,at,c,d,j,m,t,wn,wr,*ws,wt;F1PREFJ
    case C4TX:  COMPLOOQ (C4,m  );         break;
    case SBTX:  COMPLOOS (SB,m  );         break;
    case FLX:   COMPLOOQ (D, m  );         break;
+   case QPX:
    case CMPXX: COMPLOOQ (D, m+m);         break;
    case XNUMX: COMPLOOQG(X, m, xcompare); break;
    case RATX:  COMPLOOQG(Q, m, QCOMP   ); break;
+   case INT2X:  COMPLOOQ (I2, m  );         break;
+   case INT4X:  COMPLOOQ (I4, m  );         break;
    case BOXX:  {COMPDCLQ(A);I j; DO(m, if(j=jtcompare(jtinplace,x[i],y[i]))R j;);} break;
   }
  }
@@ -121,12 +129,12 @@ I jtcompare(J jt,A a,A w){C*av,*wv;I ar,an,*as,at,c,d,j,m,t,wn,wr,*ws,wt;F1PREFJ
     case  0: DO(n, if(xa[i] <xb[i] )R (int)((~(I)sortblok->jt>>JTDESCENDX)&1); else if(xa[i] >xb[i] )R (int)(((I)sortblok->jt>>JTDESCENDX)&1);); xa+=xc; ++ia; xb+=xc; ++ib;          \
  }}}
 
-COMPSPDS(compspdsB,B,0,                   e       )
-COMPSPDS(compspdsI,I,0,                   e       )
-COMPSPDS(compspdsD,D,0,                   e       )
+COMPSPDS(compspdsB,B,0,                   (e1,e)       )
+COMPSPDS(compspdsI,I,0,                   (e1,e)       )
+COMPSPDS(compspdsD,D,0,                   (e1,e)       )
 COMPSPDS(compspdsZ,D,*(1+(D*)spblok->sev),(i&1)?e1:e)
 
-COMPSPSS(compspssB,B,0,                   e       )
-COMPSPSS(compspssI,I,0,                   e       )
-COMPSPSS(compspssD,D,0,                   e       )
+COMPSPSS(compspssB,B,0,                   (e1,e)       )
+COMPSPSS(compspssI,I,0,                   (e1,e)       )
+COMPSPSS(compspssD,D,0,                   (e1,e)       )
 COMPSPSS(compspssZ,D,*(1+(D*)spblok->sev),(i&1)?e1:e)

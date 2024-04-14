@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './gsp.ijs'
+prolog './gsp.ijs'
 NB. $. ------------------------------------------------------------------
 
 bsp=: #@<@$. :: 0: 0 1    NB. support boxed sparse array
@@ -184,7 +184,6 @@ NB. {:: CFETCH,  VERB, map,     fetch,
 NB. }:: CEMEND,  ADV,  emend,   0L,     
 NB.  A. CATOMIC, VERB, adot1,   adot2,  
 NB.  b. CBDOT,   ADV,  bdot,    0L,     
-NB.  c. CEIGEN,  VERB, eig1,    eig2,   
 NB.  C. CCYCLE,  VERB, cdot1,   cdot2,  
 NB.  d. CDDOT,   CONJ, 0L,      ddot,   
 NB.  D. CDCAP,   CONJ, 0L,      dcap,   
@@ -237,6 +236,12 @@ sa=. 1 (0 0 ; 1 1)} 1 $. 2 2 ; 0 01 ; 00
 (2 2$1 0 0 1) -: $.^:_1 sa
 (<"1 ]2 2$1 0 0 1) -: <@($.^:_1)"1 sa
 
+(-: $."1) 5 5$i.9
+1: ". '": $."1 5 5 $ i. 9'
+
 4!:55 ;:'bsp i s sa t x y'
 
+
+
+epilog''
 

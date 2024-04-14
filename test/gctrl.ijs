@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './gctrl.ijs'
+prolog './gctrl.ijs'
 NB. control word parsing ------------------------------------------------
 
 f0 =. 3 : 'if. if. 1 do. 2 end. do. 3 else. 4 end.'
@@ -66,8 +66,11 @@ test 'whilst. 1 do. 2 else. 3 end.'
 'spelling error' -: ex '3 : ''begin.'''
 
 
-NB. Direct definition
-NB. Note SP added after {{
+NB. Direct definition {{ }} ----------------------------------------------------------------------
+
+'open quote' -: ". etx '{{ a. =. }}'  NB. used to crash
+
+NB. Note SP added after {{ and }}
 f0=. 3 : 0
 NB.
 ; {{
@@ -77,7 +80,7 @@ NB.
 (r =: '3 : 0' , LF , 0 : 0 , ')') -:5!:5<'f0'
 NB.
 ; {{   '<', (|. y), '>'
- }} &.> |. 'one'; 'two'; 'three'
+ }}  &.> |. 'one'; 'two'; 'three'
 )
 
 f0=. {{     NB. empty first line
@@ -93,16 +96,64 @@ f0=. {{     NB. empty first line
 r =: {{ y }} :. {{ y }}
 '3 : ''y '' :.(3 : ''y '')' -: 5!:5 <'r'
 
-r =: {{ u
-(".'x')
+r =: {{
+_1 = 4!:0 u
 }}
-'value error' -: ". etx '4 r'  NB. x/y not defined in non-operator modifier execution
-r =: {{ u
-(".'y')
-}}
-'value error' -: ". etx '4 r'
+(<'x') r  NB. x/y not defined in non-operator modifier execution
+(<'y') r  NB. x/y not defined in non-operator modifier execution
 
-NB. Nameref caching
+NB. {{ }} in single-line defs
+f0 =. 3 : ' 5 {{ x + y }} y'
+'control error' -: ". etx '3 : '' 5 {{ x + y y'''
+'3 : '' 5 {{ x + y }}  y''' -: 5!:5 <'f0'
+0!:0 'f1 =. ',5!:5 <'f0'
+'3 : '' 5 {{ x + y }}   y''' -: 5!:5 <'f1'
+f0 =. 3 : '5 {{ x + y }} y'
+'3 : ''5 {{ x + y }}  y''' -: 5!:5 <'f0'
+0!:0 'f1 =. ',5!:5 <'f0'
+'3 : ''5 {{ x + y }}   y''' -: 5!:5 <'f1'
+
+NB. verb DD followed by noun DD
+(' ') -: {{y}} {{)n }}
+(' a') -: {{y}} {{)n }} , 'a'
+
+NB. open quote
+'aCasey''s Tool Works' -: {{ y , {{)nCasey's Tool Works}} }} 'a'
+('aCasey''s Tool Works',LF) -: {{ y , {{)n
+Casey's Tool Works
+}} }} 'a'
+'open quote' -:  0!:100 etx '{{',LF,'1+y',LF,'''',LF,'}}'
+
+
+'control error' -: ". etx '{{ while. do. elseif. do.  end. }}'
+
+'noun result was required' -: {{ {{ }} }} etx ''
+
+'noun result was required' -: ({. ({{ {{ y }} }})`'') 5!:0 etx ''
+'' -: ({. ({{ {{ y }} y }})`'') 5!:0  ''
+
+10 -: ({. ({{
+{{
+y
+}}
++: y
+}})`'') 5!:0 (5)
+
+f0 =. {{ u }}
+1 = 4!:0<'f0'
+f0 =. {{ u v }}
+2 = 4!:0<'f0'
+f0 =. {{ v }}
+2 = 4!:0<'f0'
+f0 =. {{ u. }}
+1 = 4!:0<'f0'
+f0 =. {{ v. }}
+2 = 4!:0<'f0'
+f0 =. {{ u. v. }}
+2 = 4!:0<'f0'
+
+
+NB. Nameref caching  -------------------------------------------------------------------------------
 NB. names are cached
 4!:55 ;:'vb__ vb_z_'
 vb_z_ =: 5:
@@ -117,7 +168,7 @@ vb y
 )
 9!:5 (0)
 
-5 -: g0 ''
+5 -: g0 ''   NB. run the verbs to establish caching for the names
 5 -: g1 ''
 5 -: g0 ''
 5 -: g1 ''
@@ -478,7 +529,7 @@ y vb"+ y
 ) 
 9!:5 (0)
 r =: 1e6 ?@$ 0
-(6!:2 'f0 r') < 0.5 * (6!:2 'f0 r')
+THRESHOLD +. (6!:2 'f0 r') < 0.5 * (6!:2 'f0 r')
 
 9!:5 (2)
 vb__ =: ;
@@ -506,14 +557,14 @@ f1 < _250 + 7!:0''
 f3 =. 3 : '((i. 1e6))'
 f0 < 100000 + 7!:0''
 
-'|syntax error: efx|       (3 3$0 1 2 1 2 3 2 3 4)+' -: efx '3 : ''((+/~ i. 3)) +'' 5'
+'|syntax error in efx, executing 3:...|       ((3 3$0 1 2 1 2 3 2 3 4))+' -:&(10&{. , i:&' ' }. ]) efx '3 : ''((+/~ i. 3)) +'' 5'
 9!:41(0)  NB. lose comments
 f0 =. 3 : '(+/ #  *) y'
 '3 : ''(+/#*)y''' -: 5!:5 <'f0'
 f0 =. 3 : '(*: >:) (/  / ) y'
 '3 : ''(*:>:)(//)y''' -: 5!:5 <'f0'
 f0 =. 3 : '((+/~ i. 3)) + y'
-'3 : ''(3 3$0 1 2 1 2 3 2 3 4)+y''' -: 5!:5 <'f0'
+'3 : ''((3 3$0 1 2 1 2 3 2 3 4))+y''' -: 5!:5 <'f0'
 
 f0 =. {{ (u. f. b. 0) }}   NB. u. does not invoke PPPP
 
@@ -521,4 +572,7 @@ f0 =. {{ (u. f. b. 0) }}   NB. u. does not invoke PPPP
 
 4!:55 ;:'f0 f1 f2 f3 g0 g1 g1__ g2 g3 g4 g5 gvb l numloc1 numloc2 r test vb__ vb_z_'
 
+
+
+epilog''
 

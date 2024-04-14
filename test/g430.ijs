@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g430.ijs'
+prolog './g430.ijs'
 NB. f/. f\  f\. models --------------------------------------------------
 
 randuni''
@@ -498,7 +498,7 @@ k (<\ -: < bs) a     [ k=:0
 k (<\ -: < bs) a     [ k=:4
 
 (, <x) -: __       < \x=: ?20$100
-(, <x) -: (o._1e13)< \x
+(, <x) -: (_1.0e7)< \x
 (,+/x) -: __       +/\x
 
 12 = # 0 (3 : 'y') \ i. 11 0
@@ -586,4 +586,7 @@ a =: i. 1000 1000
 4!:55 ;:'infix inv k kay key n ob oind omask osub '
 4!:55 ;:'outfix prefix sd seg suffix t test w x y'
 randfini''
+
+
+epilog''
 

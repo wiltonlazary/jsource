@@ -1,4 +1,4 @@
-/* Copyright 1990-2006, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Xenos: CRC calculation and base64 encode/decode                         */
@@ -9,8 +9,6 @@
 #include "../base64/include/libbase64.h"
 #if C_AVX2
 #define B64CODEC BASE64_FORCE_AVX2
-#elif C_AVX
-#define B64CODEC BASE64_FORCE_AVX
 #elif defined(__aarch64__)
 #define B64CODEC BASE64_FORCE_NEON64
 #else
@@ -22,7 +20,7 @@ static UINT jtcrcvalidate(J jt,A w, UINT* crctab){A*wv;B*v;I m;UINT p,x,z=-1;
  ARGCHK1(w);
  ASSERT(1>=AR(w),EVRANK);
  m=AN(w);
- if(m&&BOX&AT(w)){ASSERT(2>=m,EVLENGTH); wv=AAV(w);  w=wv[0]; if(2==m)RE(z=(UINT)i0(wv[1]));}
+ if(m&&BOX&AT(w)){ASSERT(2>=m,EVLENGTH); wv=AAV(w);  w=C(wv[0]); if(2==m)RE(z=(UINT)i0(C(wv[1])));}
  if(B01&AT(w)){ASSERT(32==AN(w),EVLENGTH); v=BAV(w); p=0; DQ(32, p=2*p+*v++;);}
  else RE(p=(UINT)i0(w));
  DO(256, x=(UINT)i; DO(8, x=(x>>1)^(p&((UINT)-(I4)(x&1)));); crctab[i]=x;); 
@@ -56,7 +54,7 @@ F1(jtcrccompile){A h,*hv;UINT z; UINT crctab[256];
 
 DF1(jtcrcfixedleft){A h,*hv;I n;UINT*t,z;UC*v;
  ARGCHK1(w);
- h=FAV(self)->fgh[2]; hv=AAV(h); t=(UINT*)AV(hv[0]); z=(UINT)AV(hv[1])[0];
+ h=FAV(self)->fgh[2]; hv=AAV(h); t=(UINT*)AV(C(hv[0])); z=(UINT)AV(C(hv[1]))[0];
  n=AN(w); v=UAV(w);
  ASSERT(!n||AT(w)&LIT+C2T+C4T,EVDOMAIN);
  n=AT(w)&C4T?(4*n):AT(w)&C2T?n+n:n;
@@ -79,7 +77,7 @@ F2(jtqhash12){F2PREFIP; I hsiz; UI crc;
   crc=-1;  // where we accumulate CRC
   I lpct=AN(w)<<((AT(w)>>RATX)&1);  // number of component values
   A *av=AAV(w);  // pointer to subvalues
-  DQ(lpct, crc=CRC32L(crc,i0(jtqhash12(jt,zeroionei(0),*av++)));)  // recur
+  DQ(lpct, crc=CRC32L(crc,i0(jtqhash12(jt,zeroionei(0),C(*av)))); ++av;)  // recur
  }
 #if SY_64
  if(hsiz)crc=(crc*(UI)hsiz)>>32;   // convert hash to user's range
@@ -90,10 +88,10 @@ F2(jtqhash12){F2PREFIP; I hsiz; UI crc;
 }
 
 // base64 stuff
-
+#include<assert.h>
 static C base64tab[64] = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
-F1(jttobase64){
- F1RANK(1,jttobase64,DUMMYSELF);  // here we deal only with rank<= 1
+DF1(jttobase64){
+ F1RANK(1,jttobase64,self);  // here we deal only with rank<= 1
  ASSERT(AT(w)&LIT,EVDOMAIN);  // we work only on ASCII (which includes UTF-8).  Other types must be converted first
  // Calculate # triples, #extras
  I n3=AN(w)/3; I ne=AN(w)%3;
@@ -101,7 +99,7 @@ F1(jttobase64){
  // Allocate result
  A z; GATV0(z,LIT,zn<<2,1); UI4 *zv=UI4AV(z);  // result block, pointer into it
  C *wv=CAV(w);  // input pointer
-#if 0
+#if defined(__wasm__)  // superseded by library
  // Handle each 3-byte group, producing a 4-byte result.  We load 3 bytes at a time, so we may read into the padding area, but never
  // past the valid allocation.  We don't worry about load alignment
  for(;n3;--n3){
@@ -153,8 +151,8 @@ static C base64invtab[256] = {
 0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff,0xff
  };
 
-F1(jtfrombase64){
- F1RANK(1,jtfrombase64,DUMMYSELF);  // here we deal only with rank<= 1
+DF1(jtfrombase64){
+ F1RANK(1,jtfrombase64,self);  // here we deal only with rank<= 1
  ASSERT(AT(w)&LIT,EVDOMAIN);  // we work only on ASCII
  // Calculate the number of result bytes.  We take the number of input bytes, and discard trailing '=' on a 2- or 3-boundary
  I wn=AN(w);
@@ -165,7 +163,7 @@ F1(jtfrombase64){
  A z; GATV0(z,LIT,(wn>>2)*3 + (((wn&3)+1)>>1),1);  // 3 bytes per full set, plus 0, 1, or 2
  // process the input in full 4-byte groups.  We may overread the input AND overwrite the result, but we will always stay in the padding area,
  // which is OK because we allocated the result here
-#if 0
+#if defined(__wasm__)  // superseded by library
  UI4 *wv4=UI4AV(w); C *zv=CAV(z);  // write result as bytes, to avoid requiring heroic action in the write combiners
  for(wn-=3;wn>0;wn-=4){  // for each block of 4, not counting an incomplete last one
   // translate the UTF8 via table lookup.  We could avoid the table reads if we didn't feel the need to validate the input

@@ -3,7 +3,7 @@ NB. y is square matrix
 NB. result is (permutation);(LU in Doolittle form)
 NB. L and U are mashed together with the principal diagonal of L (which is all 1) omitted
 Lu_j_=: 3 : 0
-d =. #y  NB. dimension of array
+d =. _1 x: #y  NB. dimension of array, as integer
 pv =. i. d NB. initialize permutation array to index vector
 remvec =. i. d  NB. vector to fetch from i to end of vector
 for_i. i. d do.  NB. for each ring

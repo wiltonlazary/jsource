@@ -1,12 +1,7 @@
-/* Copyright 1990-2002, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Debug                                                                   */
-
-
-/* jt->uflags.us.cx.cx_c.db and JT(jt,dbuser) values; 0 means no debug                           */
-
-#define DB1         1       /* full debug                                   */
 
 
 // values returned in box 0 of an AFDEBUGRESULT value - big enough to be an integer
@@ -17,6 +12,7 @@
 #define SUSJUMP     4       /* jump to specified line                       */
 #define SUSNEXT     5       /* run next line                                */
 #define SUSSS       6       /* single step mode                             */
+#define SUSTHREAD   8       // set thread number
 
 
 /* si->dcss values; 0 means not single step                                 */

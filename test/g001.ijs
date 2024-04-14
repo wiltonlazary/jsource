@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g001.ijs'
+prolog './g001.ijs'
 NB. =. and =: -----------------------------------------------------------
 
 erase  =: 4!:55
@@ -94,9 +94,11 @@ a=:12
 'ill-formed name'   -: ". etx '''p__a_b_c_d'' =. 9'
 'ill-formed name'   -: ". etx '''p__a_b_c_d_e'' =. 9'
 'ill-formed name'   -: ". etx '''p__9ab'' =. 9'
-'ill-formed name'   -: ". etx '''p__9'' =. 9'
+'locale error'   -: ". etx '''p__900'' =. 9'
+'locale error'   -: ". etx '''p___900'' =. 9'
+'ill-formed name'   -: ". etx '''p____900'' =. 9'
 'ill-formed name'   -: ". etx '''p__ab_'' =. 9'
-'ill-formed name'   -: ". etx '''p__ab__9'' =. 9'
+'locale error'   -: ". etx '''p__ab__900'' =. 9'
 
 
 'domain error'      -: ". etx '(''p'';2 3  ) =. 9'
@@ -315,7 +317,9 @@ fb 5
 
 
 NB. lookups of nonassigned names skip local lookup if there have been no assignments
+9!:55 ]0;7 [ a =. 9!:54''
 'noun result was required' -: 3 : '(y) =. 1 [ one =. 1 if. do. end. two' etx 'one'
+9!:55 a
 1 -: 3 : '(y) =. 1 [ one =. 1 if. do. end. two' 'two'
 2 -: 3 : '(y) =. 2 [ one =. 1 if. do. end. one' 'one'
 1 -: 3 : '(y) =. 2 [ one =. 1 if. do. end. one' 'two'
@@ -341,6 +345,12 @@ a > 7!:0''
 a > 7!:0''
 
 0 = ('=',':') +./@:E. a =. 2 , :: (13!:12@'') '2'  NB. For a while the =. was changed to =:
+
+NB. assignment messages
+'|length error: efx|number of assigned names does not match number of values|   ''a b c''    =:5 6'  -:&(1 {:: <;._1) efx '''a b c'' =: 5 6'
+'|domain error: efx|error opening an item for assignment|   ''a b''    =:2 2$5;;:''a b c'''  -:&(1 {:: <;._1) efx '''a b'' =: 2 2 $ 5;;:''a b c'''
+'|spelling error: efx|error evaluating atomic representation for assignment|   ''`a''    =:<''123'''  -:&(1 {:: <;._1) efx '''`a'' =: <''123'''
+'|domain error: ex02|public assignment to a name with a private value|   y    =:5' -:&(1 {:: <;._1) {{ y=: 5 }} eftx ''
 
 NB. Test that arithmetic dyads migrate outer loop to inner loop
 p =: 0.5 * i. 10000 [ q =: 0.5
@@ -373,4 +383,7 @@ neg p
 4!:55 ;:'ghi global j_k j_k_l j_k_l_m lf local names p pqr q r s second sscript gval_z_'
 4!:55 ;:'sum t third write x y'
 
+
+
+epilog''
 

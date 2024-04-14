@@ -1,4 +1,4 @@
-/* Copyright 1990-2006, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Debug: Function Call Information                                        */
@@ -13,22 +13,22 @@ static SYMWALK(jtdloc,A,BOX,5,2,1,{RZ(*zv++=incorp(sfn(0,d->name))); RZ(*zv++=in
 
 static B jtdrow(J jt,DC si,DC s0,A*zv){A fs,q,*qv,y,z;C c;
  fs=si->dcf;
- GATV0(q,BOX,si->dcx&&si->dcy?2:1,1); qv=AAV(q);  // allo place to store arg list
- if(si->dcx)*qv++=incorp(dfrep(si->dcx));   // fill in x if any
- if(si->dcy)*qv++=incorp(dfrep(si->dcy));  // fill in y if any
- *zv++=incorp(sfn(0,si->dca));                     /* 0 name                     */
- *zv++=incorp(sc(si->dcj));                        /* 1 error number             */
- *zv++=incorp(sc(lnumsi(si)));                     /* 2 line number              */
+ GATV0(q,BOX,!!si->dcx+!!si->dcy,1); qv=AAV(q);  // allo place to store arg list
+ if(si->dcx)RZ(*qv++=incorp(dfrep(si->dcx)));   // fill in x if any
+ if(si->dcy)RZ(*qv++=incorp(dfrep(si->dcy)));  // fill in y if any
+ RZ(*zv++=incorp(si->dca&&si->dcnmlev!=3?over(sfn(0,si->dca),str(si->dcnmlev,">>")):mtv));    // 0 name - decorated
+ RZ(*zv++=incorp(sc(si->dcj)));                        /* 1 error number             */
+ RZ(*zv++=incorp(sc(lnumsi(si))));                     /* 2 line number              */
  *zv++=num(ADV&AT(fs)?1:CONJ&AT(fs)?2:3);  /* 3 name class               */
- *zv++=incorp(lrep(fs));                           /* 4 linear rep.              */
+ RZ(*zv++=incorp(jtlrep((J)((I)jt|(JTEXPVALENCEOFFD>>si->dcdyad)),fs)));  // linear rep, but only the correct valence
  *zv++=0;                                  /* 5 script name, filled in later              */
- *zv++=incorp(q);                                  /* 6 argument list            */
- if(si->dcloc){RZ(y=dloc(si->dcloc)); RZ(*zv++=incorp(grade2(y,ope(IRS1(y,0L,1L,jthead,z)))));}
+ RZ(*zv++=incorp(q));                                  /* 6 argument list            */
+ if(si->dcloc&&si->dcc){RZ(y=dloc(si->dcloc)); RZ(*zv++=incorp(grade2(y,ope(IRS1(y,0L,1L,jthead,z)))));}  // local symbols only if explicit defn
  else         RZ(*zv++=incorp(iota(v2(0L,2L))));   /* 7 locals                   */  // empty so cannot be readonly
  c=si->dcsusp||s0&&DCPARSE==s0->dctype&&s0->dcsusp?'*':' ';
  RZ(*zv++=incorp(scc(c)));                         /* 8 * if begins a suspension */
  R 1;
-}    /* construct one row of function call matrix */
+}    /* construct one row of function stack- called only for DCCALL type */
 
 F1(jtdbcall){A y,*yv,z,zz,*zv;DC si,s0=0;I c=9,m=0,*s;
  ASSERTMTV(w);
@@ -41,4 +41,4 @@ F1(jtdbcall){A y,*yv,z,zz,*zv;DC si,s0=0;I c=9,m=0,*s;
  yv=AAV(y); zv=5+AAV(z);
  DQ(m, *zv=incorp(*yv); yv++; zv+=c;);  // copy the script names into column 5
  RETF(z);
-}    /* 13!:13 function call matrix */
+}    /* 13!:13 function stack */

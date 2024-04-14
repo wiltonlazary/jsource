@@ -1,407 +1,280 @@
-/* Copyright 1990-2008, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
-/* Verbs: Extended Precision Integers                                      */
+/* Rational Numbers                                                        */
 
 #include "j.h"
 #include "ve.h"
 
+#define DXBODY(exp)  R 0
+#define DX1(f,exp)   R 0
+#define DX2(f,exp)   R 0
+#define XT(w)        R 0
 
-X jtxev1(J jt,A w,C*s){A y; 
- RZ(df1(y,cvt(XNUM,w),eval(s)));
- ASSERTSYS(!AR(y),"xev1");
- if(!(XNUM&AT(y)))RZ(y=cvt(XNUM,y)); 
- R XAV(y)[0];
+X jtxc(J jt,I n){ // convert n to X
+ GEMP0; mpz_t mpz; jmpz_init_set_si(mpz, n);
+ R Xmp(z);
 }
-
-X jtxev2(J jt,A a,A w,C*s){A y; 
- RZ(df2(y,cvt(XNUM,a),cvt(XNUM,w),eval(s))); 
- ASSERTSYS(!AR(y),"xev2");
- if(!(XNUM&AT(y)))RZ(y=cvt(XNUM,y)); 
- R XAV(y)[0];
-}
-
-X jtxc(J jt,I n){I m=1,p,*zv;X z; 
- p=n; NOUNROLL while(p/=XBASE)++m;
- GATV0(z,INT,m,1); zv=AV(z);
- p=n; DO(m, zv[i]=p%XBASE; p/=XBASE;);
- R z;
-}    /* n is non-negative */
-
-D xdouble(X w){D z=0;I c,n,*v;
- n=AN(w); v=n+AV(w); c=*--v;
- if(c==XPINF)R inf; else if(c==XNINF)R infm;
- DQ(n, z=*v--+z*XBASE;);
- R z;   
-}
-
-I jtxint(J jt,X w){I c,n,*v,z;
- n=AN(w); v=AV(w); v+=n; c=z=*--v;
- ASSERT(n<=XIDIG&&c!=XPINF&&c!=XNINF,EVDOMAIN);
- DQ(n-1, z=*--v+z*XBASE;);
- ASSERT((c^z)>=0,EVDOMAIN);
- R z;
-}
-
-XF1(jtxstd){A z;B b;I c=0,d,i,j,k,m=XBASE,n,*zv;
- ARGCHK1(w);
- n=AN(w); RZ(z=ca(w)); zv=AV(z);
- b=0; j=n; DQ(n, --j; if(zv[j]){b=0<zv[j]; break;});
- if(b) for(i=0;i<n;++i){
-  k=zv[i]+=c; 
-  if     (0>  k){c=-1-(-k)/m; zv[i]=d=m-(-k)%m; if(d== m){zv[i]=0; ++c;}}
-  else if(m<= k){c=k/m;       zv[i]=k%m;}
-  else          c=0;
- }else for(i=0;i<n;++i){
-  k=zv[i]+=c; 
-  if     (0<  k){c=1+k/m;     zv[i]=d=(k%m)-m;  if(d==-m){zv[i]=0; --c;}}
-  else if(m<=-k){c=-(-k)/m;   zv[i]=-(-k)%m;}
-  else          c=0;
+I jtxint(J jt,X w){ // return w as integer (assuming it fits)
+ ASSERT(2>XLIMBLEN(w),EVDOMAIN);
+ I sgn=XSGN(w);if(0==sgn)R0;UI limb=XLIMB0(w);
+ if(0>sgn){
+  if(1+(UI)IMAX>=limb)R-limb; // assume 2s complement
+ }else{
+  if(IMAX>=limb)R limb;
  }
- if(c)R apip(z,sc(c));
- j=n-1; NOUNROLL while(j&&!zv[j])--j; ++j;
- R j==n?z:vec(INT,j,zv);
-}    /* convert to standard form */
-
-I jtxcompare(J jt,X a,X w){I*av,j,m,n,x,y,*wv;int s,t;
- RE(1);
- m=AN(a); av=AV(a); x=av[m-1]; s=SGN(x);
- n=AN(w); wv=AV(w); y=wv[n-1]; t=SGN(y);
- if(s!=t)R s?s:-t;
- if(1==m&&(x==XPINF||x==XNINF))R 0<x? !(1==n&&y==XPINF):-!(1==n&&y==XNINF);
- if(1==n&&(y==XPINF||y==XNINF))R 0<y?-!(1==m&&x==XPINF): !(1==m&&x==XNINF);
- if(m!=n)R m>n?s:-s;
- j=m; DQ(m, --j; if(av[j]!=wv[j])R av[j]>wv[j]?1:-1;);
- R 0;
-}    /* _1 0 1 depending on whether a<w, a=w, a>w */
-
-
-XF1(jtxsgn){I x=XDIG(w); R xc(SGN(x));}
-
-XF2(jtxplus){PROLOG(0094);A z;I an,*av,c,d,m,n,wn,*wv,*zv;
+ ASSERT(0,EVDOMAIN);
+}
+I jtxcompare(J jt,X a,X w){ // *a-w  NB. J's *
+ int z= icmpXX(a, w);
+ R z<0 ?-1 :z>0;
+}
+XF1(jtxsgn){ // *w NB. X w, X result
+ R xc(XSGN(w)<0 ?-1 :XSGN(w)>0);
+}
+XF2(jtxplus){ // a+w  
  ARGCHK2(a,w);
- an=AN(a); av=AV(a); c=av[an-1];
- wn=AN(w); wv=AV(w); d=wv[wn-1];
- if(c==XPINF||c==XNINF||d==XPINF||d==XNINF){
-  ASSERT(!(c==XPINF&&d==XNINF||c==XNINF&&d==XPINF),EVNAN);
-  R rifvsdebug(vci(c==XPINF||d==XPINF?XPINF:XNINF));
- }
- m=MAX(an,wn); n=MIN(an,wn);
- GATV0(z,INT,m,1); zv=AV(z);
- DQ(n, *zv++=*av+++*wv++;);
- if(m>n)ICPY(zv,an>wn?av:wv,m-n);
- z=xstd(z);
- EPILOGNOVIRT(z);
-}
-
-XF2(jtxminus){PROLOG(0095);A z;I an,*av,c,d,m,n,wn,*wv,*zv;
- ARGCHK2(a,w);
- an=AN(a); av=AV(a); c=av[an-1];
- wn=AN(w); wv=AV(w); d=wv[wn-1];
- if(c==XPINF||c==XNINF||d==XPINF||d==XNINF){
-  ASSERT(c!=d,EVNAN);
-  R rifvsdebug(vci(c==XPINF||d==XNINF?XPINF:XNINF));
- }
- m=MAX(an,wn); n=MIN(an,wn);
- GATV0(z,INT,m,1); zv=AV(z);
- DQ(n, *zv++=*av++-*wv++;);
- if(m>n){if(an>wn)ICPY(zv,av,m-n); else DQ(m-n, *zv++=-*wv++;);}
- z=xstd(z);
- EPILOGNOVIRT(z);
-}
-
-XF2(jtxtymes){A z;I an,*av,c,d,e,i,j,m=XBASE,n,*v,wn,*wv,*zv;
- ARGCHK2(a,w);
- an=AN(a); av=AV(a); c=av[an-1];
- wn=AN(w); wv=AV(w); d=wv[wn-1];
- if(!c||!d)R iv0;
- if(c==XPINF||c==XNINF||d==XPINF||d==XNINF)R rifvsdebug(vci(0<c*d?XPINF:XNINF));
- n=an+wn; GATV0(z,INT,n,1); zv=v=AV(z); mvc(n*SZI,zv,1,MEMSET00);
- for(i=0;i<an;++i,++zv){
-  if(c=av[i])for(j=0;j<wn;++j){
-   d=zv[j]+=c*wv[j];
-   if     (m<= d){e=  d /m; zv[j]-=e*m; zv[1+j]+=e;}
-   else if(m<=-d){e=(-d)/m; zv[j]+=e*m; zv[1+j]-=e;}
- }}
- R rifvsdebug(v[n-1]?z:vec(INT,v[n-2]?n-1:1,v));
-}
-
-static X jtshift10(J jt,I e,X w){A z;I c,d,k,m,n,q,r,*wv,*zv;
- n=AN(w); wv=AV(w); c=wv[n-1];
- q=e/XBASEN; r=e%XBASEN; d=0==r?1:1==r?10:2==r?100:1000;
- m=n+q+(I )(XBASE<=c*d);
- GATV0(z,INT,m,1); zv=AV(z);
- DQ(q, *zv++=0;);
- if(r){c=0; DQ(n, k=c+d**wv++; *zv++=k%XBASE; c=k/XBASE;); if(c)*zv=c;}
- else DQ(n, *zv++=*wv++;);
- R z;
-}    /* w*10^e, positive w */
-
-B jtxdivrem(J jt,X a,X w,X*qz,X*rz){B b,c;I*av,d,j,n,*qv,r,y;X q;
- j=n=AN(a); av=AV(a); b=0<=av[n-1];
- y=AV(w)[0]; c=0<=y; if(!c)y=-y; r=0;
- GATV0(q,INT,n,1); qv=AV(q);
- switch(2*b+c){
-  case 0: DQ(n, --j; d=r*XBASE-av[j]; r=d%y; qv[j]=  d/y ;); r=-r;      break;
-  case 1: DQ(n, --j; d=r*XBASE-av[j]; r=d%y; qv[j]=-(d/y);); r=r?y-r:0; break;
-  case 2: DQ(n, --j; d=r*XBASE+av[j]; r=d%y; qv[j]=-(d/y);); r=r?r-y:0; break;
-  case 3: DQ(n, --j; d=r*XBASE+av[j]; r=d%y; qv[j]=  d/y ;);            break;
- }
- if(r&&b!=c){--qv[0]; DO(n-1, if(qv[i]>-XBASE)break; qv[i]=0; --qv[1+i];);}
- if(1<n&&!qv[n-1])AN(q)=AS(q)[0]=n-1;
- *qz=q; *rz=rifvsdebug(vec(INT,1L,&r)); R 1;
-}    /* (<.a%w),(w|a) where w has a single "digit" and is nonzero */
- 
-X jtxdiv(J jt,X a,X w,I mode){PROLOG(0096);B di;I an,*av,c,c0,d,e,k,s,u[2],u1,wn,*wv,yn;X q,r,y;
- RZ(a&&w&&!jt->jerr);
- an=AN(a); av=AV(a); c=c0=av[an-1];
- wn=AN(w); wv=AV(w); d=   wv[wn-1]; di=d==XPINF||d==XNINF;
- if(c&&!d)R rifvsdebug(vci(0<c?XPINF:XNINF));
- if(c==XPINF||c==XNINF){ASSERT(!di,EVNAN); R rifvsdebug(vci(0<c*d?XPINF:XNINF));}
- if(di)R iv0;
- if(1==wn&&d){I*v;
-  RZ(xdivrem(a,w,&q,&r));  // must not return virtual
-  if(!AV(r)[0]||mode==XMFLR)R q;
-  ASSERT(mode==XMCEIL,EWRAT);
-  v=AV(q); ++*v; 
-  R rifvsdebug(XBASE>*v?q:xstd(q));
- }
- switch((0<=c?2:0)+(I )(0<=d)){
-  case 0: R rifvsdebug(xdiv(negate(a),negate(w),mode));
-  case 1: R rifvsdebug(negate(xdiv(negate(a),w,mode==XMFLR?XMCEIL:mode==XMCEIL?XMFLR:mode)));
-  case 2: R rifvsdebug(negate(xdiv(a,negate(w),mode==XMFLR?XMCEIL:mode==XMCEIL?XMFLR:mode)));
-  default:
-   if(1!=(e=xcompare(a,w))){
-    ASSERT(!(c&&e&&mode==XMEXACT),EWRAT); 
-    d=c&&(mode||!e); 
-    R rifvsdebug(vec(INT,1L,&d));
-   }
-   if(1<an)c=av[an-2]+c*XBASE;
-   if(1<wn)d=wv[wn-2]+d*XBASE;
-   e=c>=d?c/d:(I)((XBASE*(D)c)/d); u[0]=e%XBASE; u[1]=u1=e/XBASE; 
-   RZ(q=vec(INT,u1?2L:1L,u)); 
-   RZ(y=xtymes(w,q)); yn=AN(y); e=AV(y)[yn-1];
-   k=c0>=e?c0/e:e/c0; 
-   k=(k>3)+(k>32)+(k>316)+(k>3162);
-   s=XBASEN*(an-yn)+(c0>=e?k:-k); 
-   if(s){q=shift10(s,q); y=shift10(s,y);}
-   A z=xplus(q,xdiv(xminus(a,y),w,mode));
-   EPILOGNOVIRT(z);
+ if (unlikely(ISX0(a))) R w;
+ if (unlikely(ISX0(w))) R a;
+ // X z= XaddXX(a,w); // XaddXX could become [temporary] syntactic sugar for jtxplus
+ mp_size_t an= XLIMBLEN(a), wn= XLIMBLEN(w); // arg sizes
+ mp_size_t m= MIN(an, wn), n= MAX(an, wn); // result sizes
+ X z; GAX(z, n+1); const mp_ptr zd= voidAV1(z), ad= voidAV1(a), wd= voidAV1(w); // data locations
+ B ap= XSGN(a)>0; B wp= XSGN(w)>0; // positive or negative?
+ B ax= an>= wn; // when w and a have different lengths, larger should be first arg to mpn_add/mpn_sub
+ if (ap==wp) { // work with unsigned magnitudes:
+  if (jmpn_add(zd, ax?ad:wd, n, ax?wd:ad, m)) zd[n++]= 1;
+  XSGN(z)= ap ?n :-n; // signs matched, result has sign of both args
+ } else {
+  B zp= ax ?ap :wp;
+  if (jmpn_sub(zd, ax?ad:wd, n, ax?wd:ad, m)) {
+   zp= 1-zp; // borrow means need to negate result
+   if(unlikely(!jmpn_neg(zd, zd, n))) R X0; /* this X0 presumably never happens */
   }
-}   /* <.a%w (mode=XMFLR) or >.a%w (mode=XMCEIL) or a%w (mode=XMEXACT) */
-
-XF2(jtxrem){I c,d,e;X q,r,y;
+  while (likely(n) && unlikely(!zd[n-1])) n--; /* trim leading zeros */
+  if (unlikely(!n)) R X0;
+  XSGN(z)= zp ?n :-n;
+ }
+ R z;
+}
+XF2(jtxminus){ // a-w  NB. X a, w
  ARGCHK2(a,w);
- c=XDIG(a); d=XDIG(w);
- if(!c)R rifvs(w);
- ASSERT(!(d==XPINF||d==XNINF),EVNAN);
- if(c==XPINF)R 0<=d?w:a;
- if(c==XNINF)R 0>=d?w:a;
- if(1==AN(a)&&c){RZ(xdivrem(w,a,&q,&r)); R rifvsdebug(r);}
- switch((0<=c?2:0)+(I )(0<=d)){
-  case 0:  R rifvsdebug(negate(xrem(negate(a),negate(w))));
-  case 1:  y=xrem(negate(a),w); R rifvsdebug(xcompare(y,iv0)? xplus(a,y):y);
-  case 2:  y=xrem(a,negate(w)); R rifvsdebug(xcompare(y,iv0)?xminus(a,y):y);
-  default: R rifvsdebug(0<=(e=xcompare(a,w)) ? (e?w:iv0) : xminus(w,xtymes(a,xdiv(w,a,XMFLR))));
-}}
-                                             
-XF2(jtxgcd){I c,d;X p,q,t;
- ARGCHK2(a,w);
- c=XDIG(a); if(0>c)RZ(a=negate(a)); 
- d=XDIG(w); if(0>d)RZ(w=negate(w));
- ASSERT(!(c==XPINF||c==XNINF||d==XPINF||d==XNINF),EVNAN);
- if(!c)R rifvsdebug(w);
- if(!d)R rifvsdebug(a);
- p=a; q=w; A *old=jt->tnextpushp;
- while(XDIG(p)){
-  t=p;
-  RZ(p=xrem(p,q));
-  q=t;
-  if(!gc3(&p,&q,0L,old))R0;
+ R XsubXX(a,w);
+}
+XF2(jtxtymes){ // a*w  NB. X a, w
+ ARGCHK2(a,w); A z;
+ ASSERT(1+NBITS(a)+NBITS(w)<GMPMAXBITS, EVWSFULL); // result should fit in emergency gmp memory pool
+ R XmulXX(a,w);
+}
+B jtxdivrem(J jt,X a,X w,X*qz,X*rz){ // a (<.@%,|~) w
+ mpX(a); mpX(w); mpz_t mpq; mpz_t mpr; jmpz_init(mpq); jmpz_init(mpr);
+ jmpz_fdiv_qr(mpq, mpr, mpa, mpw);
+ *qz= Xmp(q); *rz= Xmp(r);
+ R 1;
+}
+X jtxdiv(J jt,X a,X w,I mode){ // a mode@% w NB. X a, w // mode is <. or >. or ] 
+ RZ(a&&w&&!jt->jerr); if(ISX0(a))R X0;ASSERT(XSGN(w), EWRAT); // infinity requres RAT
+ switch(mode) {
+  case XMFLR/* a<.@%w*/: R Xfdiv_qXX(a, w);
+  case XMCEIL/*a>.@%w*/: R Xcdiv_qXX(a, w);
+  case XMEXACT/*  a%w*/: {
+    mpX(a); mpX(w); mpX0(z); mpX0(r);
+    jmpz_fdiv_qr(mpz, mpr, mpa, mpw); 
+    X z= Xmp(z); X r= Xmp(r);
+    ASSERT(0==XSGN(r), EWRAT);
+    R z;
+   }
  }
- R rifvsdebug(q);
+ SEGFAULT; R0; // this should never happen
 }
-
-XF2(jtxlcm){R rifvsdebug(xtymes(a,xdiv(w,xgcd(a,w),XMEXACT)));}
-
-static X jtxexp(J jt,X w,I mode){I k,m;X s,y;
- ARGCHK1(w);
- k=XDIG(w);
- ASSERT(!k||mode!=XMEXACT,EWIRR);
- if(0>k)R rifvsdebug(xc(mode));
- m=(I)(2.718281828*xint(w)); k=2; s=xplus(iv1,w); y=w;
- DQ(m, y=xtymes(y,w); s=xplus(xtymes(s,xc(k)),y); ++k;);
- R rifvsdebug(xdiv(s,xev1(apv(1+m,1L,1L),"*/"),mode));
+XF2(jtxrem){ // a | w
+ if(!XSGN(a)) R w;
+ R Xfdiv_rXX(w,a); /* a on right side here */
 }
+XF2(jtxgcd){ // a +. w
+ R XgcdXX(a,w);
+}
+XF2(jtxlcm){PROLOG(10100); // a *. w
+ X z= XlcmXX(a,w);
+ if(0>XSGN(a)*XSGN(w))EPILOG(XsubXX(X0,z));
+ EPILOG(z);
+}
+static X jtxexp(J jt,X w,I mode) {ASSERT(0, EWIRR);} // u ^w NB. u is <. or >. or ]
 
-XF2(jtxpow){PROLOG(0097);I c,d,e,r;X m,t,z;
- ARGCHK2(a,w);
- c=XDIG(a); d=XDIG(w); e=AV(w)[0];
- if(c==XPINF||c==XNINF){
-  ASSERT(0<c||d!=XPINF,EVDOMAIN); 
-  R rifvsdebug(vci(!d?1L:0>d?0L:0<c?c:1&e?XNINF:XPINF));
+#define LG2 0.693147180559945286 /* log(2) */
+XF2(jtxpow){PROLOG(10101); // a m&|@^ w // FIXME: m should be a parameter rather than jt->xmod
+ X m= 0; A xmod= jt->xmod;
+ if (xmod) {m= XAV(xmod)[0]; if (!XSGN(m)) m= 0;}
+ if (0 == XSGN(w)) { // a^0  NB. a is irrelevant, check for 1=|m
+  if (m && 1==XLIMBLEN(m) && 1==XLIMB0(m)) {
+   R X0;
+  } else {
+   R X1;
+  }
  }
- if(d==XPINF||d==XNINF){
-  ASSERT(0<=c||d==XNINF,EVDOMAIN); 
-  R rifvsdebug(vci(1==c&&1==AN(a)?1L:!c&&0>d||c&&0<d?XPINF:0L));
+ if (0 == m) { // a^w
+  if (0 == XSGN(a)) { // 0^w
+   if (0<XSGN(w)) R X0; 
+   ASSERT(0==XSGN(w), EWRAT); R X1; // need RAT for infinity
+  } else {
+   if (ISX1(a)) R X1; // special case, w doesn't matter
+   if (-1==XSGN(a) && 1==XLIMB0(a)) { // _1^w
+    R XODDnz(w) ?X_1 :X1;
+   }
+   ASSERT(1==XLIMBLEN(w), EVLIMIT); // a^w too bulky?
+   ASSERT(0<(I)XLIMB0(w), EVLIMIT);
+   ASSERT(0<XSGN(w), EWRAT); // want rational result if w is negative
+   I wi= IgetX(w);
+   ASSERT(GMPMAXBITS > (1+NBITS(a))*wi, EVWSFULL); // GEMP (gmp emergency memory pool) heuristic
+   EPILOG(XpowXU(a, wi)); // a^w
+  } 
+ } else {
+  ASSERT(0<XSGN(w), EWRAT); // want rational result if w is negative
+  mpX(a); mpX(w); mpX(m); mpz_t mpz;
+  jmpz_init(mpz); jmpz_powm(mpz, mpa, mpw, mpm); GEMP0; // m | a ^ w
+  if (0>XSGN(m)) jmpz_fdiv_r(mpz, mpz, mpm); // jmpz_powm ignores sign of m
+  EPILOG(Xmp(z));
  }
- if(1==AN(a)&&(1==c||-1==c))R 1==c||0==(e&1)?iv1:xc(-1L); 
- if(!c){ASSERT(0<=d,EWRAT); R d?iv0:iv1;}
- if(0>d){
-  ASSERT(!jt->xmod,EVDOMAIN); 
-  ASSERT(jt->xmode!=XMEXACT,EWRAT); 
-  r=jt->xmode==XMCEIL; R rifvsdebug(xc(0<c?r:1&e?r-1:r));
+}
+
+XF1(jtxsq){ // *: w
+ R XmulXX(w,w);
+}
+static X jtIrootX(J jt, UI a, X w) { // a %:w NB. optionally with <. or >.
+ PROLOG(0114);
+ ASSERT(1&a||0<=XSGN(w), EWIRR);
+ mpX(w); mpX0(z); I exact= jmpz_root(mpz, mpw, a); GEMP0;
+ if (!exact) switch(jt->xmode){
+   default: ASSERTSYS(0,"xsqrt");
+   case XMEXACT: jmpz_clear(mpz); ASSERT(0,EWIRR);
+   case XMFLR: break;
+   case XMCEIL: jmpz_add_ui(mpz, mpz, 1);
  }
- t=a; z=iv1; m=jt->xmod?XAV(jt->xmod)[0]:0;
- if(!m||1>xcompare(w,xc(IMAX))){
-  ASSERT(m||2>=AN(w),EVLIMIT);
-  RE(e=xint(w));
-  if(m)while(e){if(1&e)RZ(z=xrem(m,xtymes(z,t))); RZ(t=xrem(m,xsq(t))); e>>=1;}
-  else while(e){if(1&e)RZ(z=       xtymes(z,t) ); RZ(t=       xsq(t) ); e>>=1;}
- }else{B b;I n,*u,*v;X e;
-  RZ(e=ca(w)); n=AN(e); v=AV(e);
-  while(n){
-   if(1&*v)RZ(z=xrem(m,xtymes(z,t))); 
-   RZ(t=xrem(m,xtymes(t,t))); 
-   b=1; c=0; u=v+n;
-   DQ(n, d=c+*--u; c=1&d?XBASE:0; *u=d>>1; if(b&=!*u)--n;);  /* e=.<.e%2 */
- }}
- EPILOGNOVIRT(z);
+ R Xmp(z);
 }
 
-XF1(jtxsq){R xtymes(w,w);}
-
-XF1(jtxsqrt){I c,m,n,p,q,*wv;X e,x;
- ARGCHK1(w);
- n=AN(w); wv=AV(w); c=wv[n-1];
- ASSERT(0<=c,EWIMAG);
- if(!(1&n))c=wv[n-2]+c*XBASE;
- m=(1+n)>>1; RZ(x=apvwr(m,0L,0L)); AV(x)[m-1]=(I)sqrt((D)c);
- RZ(e=xc(2L));
- p=m*XBASEN; q=0; while(p){++q; p>>=1;} 
- DQ(1+q, RZ(x=xdiv(xplus(x,xdiv(w,x,XMFLR)),e,XMFLR)););
- p=xcompare(w,xsq(x));
- switch(jt->xmode){
-  case XMEXACT: 
-   if(!p)R rifvsdebug(x); 
-   AV(x)[0]+=p; RZ(x=xstd(x));
-   ASSERT(!xcompare(w,xsq(x)),EWIRR);
-   R rifvsdebug(x);
-  default:     ASSERTSYS(0,"xsqrt");
-  case XMFLR:  if(-1==p){--AV(x)[0]; R xstd(x);}else R rifvsdebug(x);
-  case XMCEIL: if( 1==p){++AV(x)[0]; R xstd(x);}else R rifvsdebug(x);
-}}
-
-static XF2(jtxroot){A q;D x;I an,*av,c,d,r,wn,*wv;X n,n1,p,t,z;
- an=AN(a); av=AV(a); c=av[an-1];
- wn=AN(w); wv=AV(w); d=wv[wn-1]; 
- ASSERT(0<=d,EWIMAG);
- if(1==wn&&((d&~1)==0))R 1==d?iv1:0<=c?iv0:vci(XPINF);
- if(!c&&0<d)R rifvsdebug(vci(XPINF));
- r=xint(a); if(jt->jerr){RESETERR; R iv1;}
- if(2==r)R xsqrt(w);
- x=xlogabs(w)/r;
- if(x<709.78){RZ(q=ceil1(cvt(RAT,scf(exp(x))))); z=XAV(q)[0];}
- else        {RZ(q=cvt(XNUM,scf(jceil(x)))); z=xexp(XAV(q)[0],XMCEIL);}
- RZ(n=xc(r)); RZ(n1=xc(r-1));
- RZ(t=xdiv(w,p=xpow(z,n1),XMFLR));
- RZ(z=xdiv(xplus(t,xtymes(z,n1)),n,XMFLR))
- NOUNROLL while(1){
-  RZ(t=xdiv(w,p=xpow(z,n1),XMFLR));
-  if(1>xcompare(z,t))break;
-  RZ(z=xdiv(xplus(t,xtymes(z,n1)),n,XMFLR))
- }
- if(XMFLR==jt->xmode||!xcompare(w,xtymes(z,p)))R rifvsdebug(z);
- if(XMCEIL==jt->xmode)R rifvsdebug(xplus(z,iv1));
- ASSERT(0,EWIRR);
+XF1(jtxsqrt){ // %: w (optionally with <. or >.)
+ R jtIrootX(jt, 2, w);
 }
 
-D jtxlogabs(J jt,X w){D c;I m,n,*v;
- n=AN(w); m=MIN(n,20/XBASEN); v=n+AV(w);
- c=0.0; DQ(m, c=c*XBASE+(D)*--v;);
- R log(ABS(c))+XBASEN*(n-m)*2.3025850929940457;
+D jtxlogabs(J jt,X w){ // ^.|w  NB. result is type D
+ mpX(w); long exp;
+ D frac= jmpz_get_d_2exp(&exp, mpw); // frac=. t*w%2^exp [ exp=. t*##:|w [ t=. *|w
+ R log(fabs(frac))+exp*0.693147180559945286; // (^.|frac)+exp*(%2^.^1)
+}
+static XF1(jtxlog1){ //  u^.|w  NB. u is <. or >. or (if w=1) ]
+ ASSERT(0<=XSGN(w), EWIMAG);
+ B b= ISX1(w); ASSERT(b||XMEXACT!=jt->xmode,EWIRR);
+ R rifvsdebug(xc((I)xlogabs(w)+(I)(!b&&XMCEIL==jt->xmode)));
+}
+static D jtxlogd1(J jt,X w){ // ^.w NB. result is type D
+ ASSERT(0<=XSGN(w),EWIMAG); R xlogabs(w);
+}
+static Z jtxlogz1(J jt,X w){ // ^.w NB. result is type D
+ Z z; z.re=xlogabs(w); z.im=0>XSGN(w)?PI:0.0; R z;
 }
 
-static XF1(jtxlog1){B b;I c;
- c=XDIG(w); b=1==c&&1==AN(w);
- ASSERT(0<=c,EWIMAG);
- ASSERT(b||jt->xmode!=XMEXACT,EWIRR);
- R rifvsdebug(xc((I)xlogabs(w)+(I )(!b&&jt->xmode==XMCEIL)));
-}
-
-static D jtxlogd1(J jt,X w){ASSERT(0<=XDIG(w),EWIMAG); R xlogabs(w);}
-
-static Z jtxlogz1(J jt,X w){Z z; z.re=xlogabs(w); z.im=0>XDIG(w)?PI:0.0; R z;}
-
-
-static XF2(jtxlog2sub){ASSERT(0,EVNONCE);}
-
-static XF2(jtxlog2){D c,d,x,y;I an,*av,j,k,m,n,wn,*wv;X p,q;
- ARGCHK2(a,w);
- an=AN(a); av=AV(a); c=(D)av[an-1]; if(1<an)c=av[an-2]+c*XBASE;
- wn=AN(w); wv=AV(w); d=(D)wv[wn-1]; if(1<wn)d=wv[wn-2]+d*XBASE;
- if(2<an)R rifvsdebug(xlog2sub(a,w));
- ASSERT(0<=c,EWIMAG);
- if(!c){ASSERT(d!=0,EVDOMAIN); R iv0;}
- if(!d){ASSERT(0<c,EVDOMAIN); R rifvsdebug(vci(XNINF));}
- ASSERT(0<d,EVDOMAIN);
- if(1==c)R rifvsdebug(1==d?iv0:vci(XPINF));
- x=log(c)+XBASEN*(2<an?an-2:0)*2.3025850929940457;
- y=log(d)+XBASEN*(2<wn?wn-2:0)*2.3025850929940457;
- m=n=(I)(y/x+(I )(an<wn));
- RZ(p=q=xpow(a,xc(m))); j=k=xcompare(p,w);
- if     (0<j){--m; RZ(p=xdiv(p,a,XMEXACT)); j=xcompare(p,w); if(0<j)R rifvsdebug(xlog2sub(a,w));}
- else if(0>j){++n; RZ(q=xtymes(p,a));       k=xcompare(q,w); if(0>k)R rifvsdebug(xlog2sub(a,w));}
- ASSERT(jt->xmode!=XMEXACT||!j||!k,EWIRR); 
- R rifvsdebug(xc(!j?m:!k?n:jt->xmode==XMCEIL?n:m));
+static XF2(jtxlog2){
+ ASSERT(0<XSGN(a), EVNONCE); ASSERT(!ISX1(a), EVNONCE);
+ ASSERT(0<XSGN(w), EVNONCE);
+ mpX(a); mpX(w);
+ long ae; D am= jmpz_get_d_2exp(&ae, mpa);
+ long we; D wm= jmpz_get_d_2exp(&we, mpw);
+ D lg= (LG2*we+log(wm))/(LG2*ae+log(am)); // estimate log
+ I e= (I)(lg+0.5); // round to nearest integer
+ X t= XpowXU(a,e); // test estimate
+ I c= icmpXX(t,w); // compare
+ if (!c) R XgetI(e);  // exact match, we're done
+ ASSERT(XMEXACT!=jt->xmode, EWIRR);
+ if (c>0) R XgetI(e-(XMFLR==jt->xmode)); // our estimate was high
+ else R XgetI(e+(XMCEIL==jt->xmode)); // our estimate was low
 }
 
 F2(jtxlog2a){A z; GAT0(z,XNUM,1L,0L); XAV(z)[0]=rifvsdebug(xlog2(XAV(a)[0],XAV(w)[0])); RNE(z);}
-F2(jtxroota){A z; GAT0(z,XNUM,1L,0L); XAV(z)[0]=rifvsdebug(xroot(XAV(a)[0],XAV(w)[0])); RNE(z);}
 
-XF1(jtxfact){I n;
- n=AV(w)[0];
- if(n==XPINF||n==XNINF)R vci(XPINF);
- RE(n=xint(w)); 
- if(0>n)R rifvsdebug(vci(n&1?XPINF:XNINF));
- R rifvsdebug(xev1(apv(n,1L,1L),"*/"));
+XF2(jtxroota){ // a %: w (optionally with <. or >.)
+ PROLOG(0115);
+ X z0, a0= XAV(a)[0], w0= XAV(w)[0];
+ if (0==XSGN(a0)) {
+  if (0==XSGN(w0)) {
+   z0= X0;
+  } else if (ISX1(w0)) {
+   z0= X1;
+  } else ASSERT(0, EWIRR);
+ } else {
+  // ASSERT(0<XSGN(w0)||1&XLIMB0(a0), EWIMAG);
+  ASSERT(0<XSGN(w0), EWIMAG); // test/gx132.ijs wants imaginary cube roots
+  I ia0= IgetXor(a0, ASSERT(0, EWIRR)); mpX(w0); mpX0(z0); // really want EWFL here
+  I exact= jmpz_root(mpz0, mpw0, ia0); GEMP0;
+  if (!exact) switch(jt->xmode) {
+    case XMEXACT: ASSERT(0, EWIRR);
+    case XMFLR: if (mpz0->_mp_size<0) jmpz_sub(mpz0, mpz0, mpX1); break;
+    case XMCEIL: if (mpz0->_mp_size>0) jmpz_add(mpz0, mpz0, mpX1); break;
+  }
+  z0= Xmp(z0);
+ }
+ A z;GA(z,XNUM,1L,0L,0L); *XAV(z)= z0;
+ EPILOG(z);
+}
+XF1(jtxfact){ // !w
+ PROLOG(0116);
+ ASSERT(0<=XSGN(w), EWIRR);
+ mpX(w); 
+ ASSERT(1>jmpz_cmp_si(mpw, 1000000), EVWSFULL); // somewhat arbitrary threshold, roughly matches GEMP limit for result
+ mpz_t mpz; jmpz_init(mpz); jmpz_fac_ui(mpz, jmpz_get_si(mpw));
+ EPILOG(Xmp(z));
+}
+F1(jtdigits10){ // "."0@":
+ PROLOG(0117);
+ ARGCHK1(w);
+ // see if a fast case applies
+ if(!AR(w))  // must be an atom
+  switch(CTTZ(AT(w))){  // must be integral or string type
+  case INTX: 
+   if(0<=AV(w)[0]){  // must be nonnegative
+    A z; GATV0(z,INT,SY_64?19:10,1);  // allocate a max-sized string
+    I c= AV(w)[0], *zv= AV(z), *zv0=zv;
+    do{*zv++=c%10;}while(c/=10);  // create digits in reverse order
+    I n= AN(z)= AS(z)[0]= zv-zv0;   // install length
+    zv=zv0; I*v=zv+n-1; DQ(n>>1, c=*zv; *zv++=*v; *v--=c;); /* reverse in place */
+    EPILOG(z);
+   }
+  case RATX: if (!ISQINT(QAV(w)[0])) break;  // if integral, fall through to continue
+  case XNUMX: w= XAV(w)[0];
+  case LITX: ASSERT(ISGMP(w), EVDOMAIN);  // LIT must be a GMP-allocated block (can it ever?)
+   if(0<=XSGN(w)){
+    C*s= SgetX(w);
+    I n= strlen(s); // maybe better to use AN(UNvoidAV1(s))-1 ??
+    A z; GATV0(z,INT,n,1); I*zv= AV(z);
+    DQ(n, zv[i]= s[i]-'0';);  // convert ASCII to integer
+    EPILOG(z);
+   }
+ }
+ // if none of the fast cases applies, do it the long way
+ EPILOG(rank1ex0(thorn1(w),DUMMYSELF,jtexec1));
 }
 
-static XF2(jtxbinp){PROLOG(0098);D m;I i,n;X c,d,p,q,r,s;
- RZ(d=xminus(w,a)); s=1==xcompare(a,d)?d:a; RE(n=xint(s));
- m=xdouble(w);
- if(m<=FLIMAX){
-  RZ(p=less(ravel(factor(apv(n,(I)m,-1L))),zeroionei(0)));
-  RZ(q=less(ravel(factor(apv(n,1L,   1L))),zeroionei(0)));
-  c=over(p,q);
-  d=repeat(v2(AN(p),AN(q)),v2(1L,-1L));
-  A z=xev1(repeat(ev2(c,d,"+//."),nub(c)),"*/");
-  EPILOGNOVIRT(z);
- }else{
-  p=q=iv1; r=w;  
-  for(i=0;i<n;++i){
-   p=xtymes(p,r); r=xminus(r,iv1);  
-   q=xtymes(q,s); s=xminus(s,iv1);
-   d=xgcd(p,q); p=xdiv(p,d,XMEXACT); q=xdiv(q,d,XMEXACT);
-   if(jt->jerr)R 0;
-  }
-  EPILOGNOVIRT(p);
-}}   /* non-negative x,y; x<=y */
+static XF2(jtxbinp){PROLOG(0118);
+ X d;RZ(d=XsubXX(w,a));X s=0<icmpXX(a,d)?d:a; // s =. a <. w-a
+ ASSERT(2>XLIMBLEN(s),EVDOMAIN); // FIXME: do we need additional constraints?
+ X z=XbinXU(w,XSGN(s) ?XLIMB0(s) :0);
+ EPILOGNOVIRT(z);
+}   /* non-negative x,y; x<=y */
 
-XF2(jtxbin){X d,z;
- RZ(d=xminus(w,a));
- switch(4*(I )(0>XDIG(a))+2*(I )(0>XDIG(w))+(I )(0>XDIG(d))){
+XF2(jtxbin){X d,z;PROLOG(0119);
+ RZ(d=XsubXX(w,a));
+ switch(4*(I)(0>XSGN(a))+2*(I)(0>XSGN(w))+(I)(0>XSGN(d))){
   default:             ASSERTSYS(0,"xbin");
   case 2: /* 0 1 0 */  /* Impossible */
   case 5: /* 1 0 1 */  /* Impossible */
   case 1: /* 0 0 1 */ 
   case 4: /* 1 0 0 */ 
-  case 7: /* 1 1 1 */  R iv0;
+  case 7: /* 1 1 1 */  R X0;
   case 0: /* 0 0 0 */  R rifvsdebug(xbinp(a,w));
   case 3: /* 0 1 1 */  
-   z=xbinp(a,xminus(a,xplus(w,iv1)));           R rifvsdebug(AV(a)[0]&1?negate(z):z);
+   z=xbinp(a,XsubXX(a,XaddXX(w,X1))); RZ(z);    EPILOG(rifvsdebug(AV(a)[0]&1?XnegX(z):z));
   case 6: /* 1 1 0 */  
-   z=xbinp(xminus(xc(-1L),w),xminus(xc(-1L),a)); R rifvsdebug(AV(d)[0]&1?negate(z):z);
+   z=xbinp(XsubXX(X_1,w),XsubXX(X_1,a)); RZ(z); EPILOG(rifvsdebug(AV(d)[0]&1?XnegX(z):z));
  }
 }
 
@@ -417,31 +290,43 @@ static A jtpiev(J jt,I n,X b){A e;I ek,i,n1=n-1;X bi,e0,e1,*ev,t;
  }
  ev[i]=rifvsdebug(xtymes(e0,xtymes(XCUBE(e1),bi)));
  RE(e); R e;
-}
+} /* used in jtxpi (related to the denominator of the chudnovsky algorithm) */
 
-static XF1(jtxpi){A e;B p;I i,n,n1,sk;X a,b,c,d,*ev,k,f,m,q,s,s0,t;
+static XF1(jtxpi){
+ PROLOG(0120);
  ARGCHK1(w);
- if(!XDIG(w))R iv0;
+ if(!XSGN(w))R X0;
  ASSERT(jt->xmode!=XMEXACT,EVDOMAIN);
- RZ(a=xc(545140134L));
- RZ(b=XCUBE(xc(640320L)));
- RZ(c=xc(13591409L));
- RZ(d=xplus(xc(541681608L),xtymes(xc(10L),xc(600000000L))));
- n1=(13+AN(w)*XBASEN)/14; n=1+n1;
- RZ(e=piev(n,b)); ev=XAV(e); m=ev[n1];
- f=iv0; s0=iv1; sk=1;
- for(i=p=0;;++i,p^=1){
-  s=xtymes(s0,xplus(c,xtymes(a,xc(i))));
-  t=xdiv(xtymes(s,m),ev[i],XMEXACT);
-  f=p?xminus(f,t):xplus(f,t);
+ X a;RZ(a=XgetI(545140134L));
+ X b;RZ(b=XCUBE(XgetI(640320L)));
+ X c;RZ(c=XgetI(13591409L));
+ X d;RZ(d=XaddXX(XgetI(541681608L),XmulXX(XgetI(10L),XgetI(600000000L))));
+ long bits; mpX(w); jmpz_get_d_2exp(&bits, mpw);
+ I n1=1+bits/47, n=1+n1; // 47 = <.2^.b%12^3
+ A e;RZ(e=piev(n,b)); X*ev=XAV(e), m=ev[n1];
+ X f=X0, s0=X1; I sk=1;
+ for(I i=0, p=0;;++i,p^=1){
+  X s=XmulXX(s0,XaddXX(c,XmulXX(a,XgetI(i))));
+  X t=xdiv(XmulXX(s,m),ev[i],XMEXACT);
+  f=p?XsubXX(f,t):XaddXX(f,t);
   if(i==n1)break;
-  DO(6, s0=xtymes(s0,xc(sk++));); RE(s0);  /* s0 = ! 6*i */
+  DO(6, s0=XmulXX(s0,xc(sk++));); RE(s0);  /* s0 = ! 6*i */
  }
- f=xtymes(d,f);
- q=xpow(xc(10L),xc(14*n1));
- k=xtymes(xtymes(a,m),xsqrt(xtymes(b,xsq(q))));
- R rifvsdebug(xdiv(xtymes(k,w),xtymes(f,q),jt->xmode));
+ f=XmulXX(d,f);
+ X q=XpowXU(XgetI(10L),14*n1);
+ X k=XmulXX(XmulXX(a,m),xsqrt(XmulXX(b,xsq(q))));
+ EPILOG(rifvsdebug(xdiv(XmulXX(k,w),XmulXX(f,q),jt->xmode)));
 }    /* Chudnovsky Bros. */
+
+// what AN(w) would have been, in older versions of J
+I jtoldsize(J jt, X w){PROLOG(0121);
+ C mode= jt->xmode; jt->xmode= XMCEIL;
+ X z= xlog2(XgetI(10000), XabsX(w));
+ jt->xmode= mode;
+ EPILOGNORET(z);
+ I z0= ISX0(z) ?1 :XLIMB0(z);
+ R MAX(1,z0);
+}
 
 APFX( plusXX, X,X,X, xplus ,,HDR1JERR)
 APFX(minusXX, X,X,X, xminus,,HDR1JERR)
@@ -461,44 +346,279 @@ AMONPS( expX, X,X, , *z=  rifvsdebug(xexp(*x,jt->xmode)); , HDR1JERR)
 AMONPS( logX, X,X, , *z= rifvsdebug(xlog1(*x)); , HDR1JERR)
 AMONPS(logXD, D,X, , *z=xlogd1(*x); , HDR1JERR)
 AMON(logXZ, Z,X, *z=xlogz1(*x);)
-AMONPS( absX, X,X, , *z=   rifvs(mag(*x)); , HDR1JERR)
+AMONPS( absX, X,X, , *z=   XabsX(*x); , HDR1JERR)
 AMONPS(factX, X,X, , *z= rifvsdebug(xfact(*x)); , HDR1JERR)
 AMONPS( pixX, X,X, , *z=   rifvsdebug(xpi(*x)); , HDR1JERR)
 
+// Modular functions
 
-F1(jtdigits10){A z;B b=0;I c,m,n,*v,*zv,*zv0;X x;
- ARGCHK1(w);
- if(!AR(w))switch(CTTZ(AT(w))){
-  case INTX:  b=0<=AV(w)[0]; break;
-  case XNUMX: x=XAV(w)[0]; n=AN(x); v=AV(x); b=0<=v[n-1]; break;
-  case RATX:  x=XAV(w)[0]; n=AN(x); v=AV(x); b=0<=v[n-1]&&equ(iv1,QAV(w)->d);
+#if SY_64
+#define XMOD 3037000499    /* <. %: _1+2^63 */
+#define doubletype unsigned __int128
+#else
+#define XMOD 46340      /* <. %: _1+2^31 */
+#define doubletype uint64_t
+#endif
+#define modn(x) ({UI t; doubletype tt; tt=(doubletype)(x)*(doubletype)nrecip; t=tt>>BW; t=(x)-t*n; if(unlikely(t>=n))t-=n; t;})
+ // x%m using mrecip.  x*mrecip is truncated, which gives the remainder.  mrecip may be 2^-64 low, so the remainder may be x*m/2^64 high, i. e. m^3/2^64.  This is never more than m too high, so a single correction suffices
+ // we expect the correction to be rare so we use a branch
+
+// w is an atom, either INT or XNUM, result is w(mod n) always nonnegative.  n is > 1
+static UI modarg(A w, UI n, UI nrecip){UI z;
+ I wsign;  // holds sign of w
+ if(AT(w)&INT){
+  wsign=IAV(w)[0];  // fetch value
+  z=ABS(wsign); if(unlikely(z>=n))z=z%n;  // modulus of ABS(w)
+ }else{
+  // XNUM arg.  First thing is to take its modulus, which we do here since n is small
+  X wx=XAV(w)[0]; wsign=XSGN(wx); RZ(wsign)  // sign/size of w, if 0 modulus is 0
+  I wlimbs=ABS(wsign); UI *wdig=&XLIMB0(wx);  // get # limbs and a pointer to the least significant
+  UI modBW=0-n*nrecip;  // this is 2^BW(mod n)
+  z=0;  // modulus inherited from higher digits, and result
+  DQ(wlimbs, z=(z*modBW)+wdig[i]%n; z=modn(z);)
  }
- if(!b)R rank1ex0(thorn1(w),DUMMYSELF,jtexec1);
- m=INT&AT(w)?(SY_64?19:10):XBASEN*AN(x);
- GATV0(z,INT,m,1); zv=zv0=AV(z);
- if(INT&AT(w)){c=AV(w)[0]; *zv++=c%10; while(c/=10)*zv++=c%10;}
- else{
-  DQ(n-1, c=*v++; DQ(XBASEN, *zv++=c%10; c/=10;););
-  c=*v++; if(c||1==n)*zv++=c%10; while(c/=10)*zv++=c%10;
+ if(unlikely(wsign<0))z=n-z;  // if w neg, correct to complementary modulus
+ R z;
+} 
+
+// modular inverse of a(mod n).  0<=a<n, and n is a small integer.  nrecip is 2^64/n rounded down
+// code from RosettaCode
+static I mod_inv(I a, I n){
+ I t = 0;  I nt = 1;  I r = n;  I nr = a;
+ while(nr!=0) {
+  I q = r/nr;
+  I tmp = nt;  nt = t - q*nt;  t = tmp;
+  tmp = nr;  nr = r - q*nr;  r = tmp;
  }
- AN(z)=AS(z)[0]=n=zv-zv0; 
- zv=zv0; v=zv0+n-1; DQ(n>>1, c=*zv; *zv++=*v; *v--=c;); /* reverse in place */
- RETF(z);
-}    /* "."0@": w */
+ if(unlikely(r>1))return -1;  /* No inverse */
+ t+=REPSGN(t)&n;  // correct for overshoot
+ return t;
+}
+
+// modular add on extendeds, one atom
+static DF2(jtmodopextadd){A z;PROLOG(000);
+ ASSERT(!((AT(a)|AT(w))&(NOUN&~XNUM)),EVDOMAIN)  // must test here if empty args
+ X n=XAV(FAV(self)->fgh[2])[0]; X xa=XAV(a)[0], xw=XAV(w)[0];  // modulus (possibly negative) and the atomic ops
+ X xz=XmodXX(XaddXX(xa,xw),n);   // perform modular power - using inverse if negative power.  We take the inverse twice, which sucks
+ if(unlikely(XSGN(n)<0&&XSGN(xz)>0))xz=XsubXX(xz,n); // mod ignores sign of n; if n negative, move result to range -n.._1
+ GAT0(z,XNUM,1,0); XAV0(z)[0]=xz; EPILOG(z);  // return atomic XNUM
+}
+
+// modular subtract on extendeds, one atom
+static DF2(jtmodopextsub){A z;PROLOG(000);
+ ASSERT(!((AT(a)|AT(w))&(NOUN&~XNUM)),EVDOMAIN)  // must test here if empty args
+ X n=XAV(FAV(self)->fgh[2])[0]; X xa=XAV(a)[0], xw=XAV(w)[0];  // modulus (possibly negative) and the atomic ops
+ X xz=XmodXX(XsubXX(xa,xw),n);   // perform modular power - using inverse if negative power.  We take the inverse twice, which sucks
+ if(unlikely(XSGN(n)<0&&XSGN(xz)>0))xz=XsubXX(xz,n); // mod ignores sign of n; if n negative, move result to range -n.._1
+ GAT0(z,XNUM,1,0); XAV0(z)[0]=xz; EPILOG(z);  // return atomic XNUM
+}
+
+// modular multiply on extendeds, one atom
+static DF2(jtmodopexttimes){A z;PROLOG(000);
+ ASSERT(!((AT(a)|AT(w))&(NOUN&~XNUM)),EVDOMAIN)  // must test here if empty args
+ X n=XAV(FAV(self)->fgh[2])[0]; X xa=XAV(a)[0], xw=XAV(w)[0];  // modulus (possibly negative) and the atomic ops
+ if(unlikely(icmpXX(xa,n)>0))xa=XmodXX(xa,n); if(unlikely(icmpXX(xw,n)>0))xw=XmodXX(xw,n);  // take moduli before product.  extra work if x is (unlikely) neg, but we don't want the abs
+ X xz=XmodXX(XmulXX(xa,xw),n);   // perform modular multiply
+ if(unlikely(XSGN(n)<0&&XSGN(xz)>0))xz=XsubXX(xz,n); // mod ignores sign of n; if n negative, move result to range -n.._1
+ GAT0(z,XNUM,1,0); XAV0(z)[0]=xz; EPILOG(z);  // return atomic XNUM
+}
+
+// modular reciprocal/divide on extendeds, one atom.  Bivalent. 0%0=0
+static DF2(jtmodopextdiv){A z;PROLOG(000);
+ ASSERT(!((AT(a)|AT(w))&(NOUN&~XNUM)),EVDOMAIN)  // must test here if empty args
+ self=AT(w)&VERB?w:self;  // if monad, take self from w
+ X xw=XAV(AT(w)&VERB?a:w)[0], n=XAV(FAV(self)->fgh[2])[0];  // divisor and modulus (possibly negative)
+ xw=XinvertXX(xw,n); // take inverse of divisor, returning 0 if coprime
+ X xz;  // will hold result
+ if(!(AT(w)&VERB)){xz=XAV(a)[0]; if(unlikely(icmpXX(xz,n)>0))xz=XmodXX(xz,n); if(XSGN(xz)!=0){ASSERT(xw!=0,EVDOMAIN) xz=XmodXX(XmulXX(xz,xw),n);}}else{ASSERT(xw!=0,EVDOMAIN) xz=xw;}   // perform multiply and modulus if dyad
+ if(unlikely(XSGN(n)<0&&XSGN(xz)>0))xz=XsubXX(xz,n); // mod ignores sign of n; if n negative, move result to range -n.._1
+ GAT0(z,XNUM,1,0); XAV0(z)[0]=xz; EPILOG(z);  // return atomic XNUM
+}
+
+// modular power on extendeds, one atom
+static DF2(jtmodopextexp){A z;PROLOG(000);
+ ASSERT(!((AT(a)|AT(w))&(NOUN&~XNUM)),EVDOMAIN)  // must test here if empty args
+ X n=XAV(FAV(self)->fgh[2])[0]; X xa=XAV(a)[0], xw=XAV(w)[0];  // modulus (possibly negative) and the atomic ops
+ if(unlikely(icmpXX(xa,n)>0))xa=XmodXX(xa,n);  // take modulus of a
+ // if power is negative, take the modular inverse of the base
+ if(XSGN(xw)<0){ASSERT((xa=XinvertXX(xa,n))!=0,EVDOMAIN) xw=XabsX(xw);}  // verify inverse exists
+ X xz=XpowmXXX(xa,xw,n);   // perform modular power - using inverse if negative power.
+ if(unlikely(XSGN(n)<0&&XSGN(xz)>0))xz=XsubXX(xz,n); // jmpz_powm ignores sign of n; if n negative, move result to range -n.._1
+ GAT0(z,XNUM,1,0); XAV0(z)[0]=xz; EPILOG(z);  // return atomic XNUM
+}
+
+// modular operation on extendeds (function for one atom is in self)
+// Convert args to XNUM and call rankex to loop over atoms
+static DF1(jtmodopext1){if(likely(AN(w)!=0)){if(!(AT(w)&XNUM))RZ(w=cvt(XMODETOCVT(2)|XNUM,w))} R rank1ex0(w,self,FAV(self)->localuse.lu0.modatomfn);}   // (2) means exact conversion only
+static DF2(jtmodopext2){if(likely((-AN(a)&-AN(w))<0)){if(!(AT(a)&XNUM))RZ(a=cvt(XMODETOCVT(2)|XNUM,a)) if(!(AT(w)&XNUM))RZ(w=cvt(XMODETOCVT(2)|XNUM,w))} R rank2ex0(a,w,self,FAV(self)->localuse.lu0.modatomfn);}   // (2) means exact conversion only
+
+// modular add with small modulus, one atom.  a and w are either INT or XNUM.  Result is XNUM if modulus is
+static DF2(jtmodopintadd){PROLOG(000);
+ ASSERT(!((AT(a)|AT(w))&(NOUN&~(INT|XNUM))),EVDOMAIN)  // must test here if empty args
+ // fetch n from h and nrecip from self
+ X hx0=XAV(FAV(self)->fgh[2])[0];  // the one and only limb of the modulus
+ I nsign=XSGN(hx0); UI n=XLIMB0(hx0); UI nrecip=FAV(self)->localuse.lu1.mrecip;
+ // fetch x(mod n) and y(mod n)
+ UI x=modarg(a,n,nrecip), y=modarg(w,n,nrecip);  // multiplicands
+ UI z=x+y; z=modn(z);   // add and take modulus
+ // correct for negative n
+ A zzz; RZ(zzz=sc(z-(REPSGN(nsign&-z)&n)));  // if m neg, move result to range -m+1..0
+ // if modulus was XNUM, make result extended
+ if(unlikely(AT(FAV(self)->fgh[1])&XNUM+RAT))zzz=cvt(XNUM,zzz);
+ EPILOG(zzz)
+}
+
+// modular subtract with small modulus, one atom.  a and w are either INT or XNUM.  Result is XNUM if modulus is
+static DF2(jtmodopintsub){PROLOG(000);
+ ASSERT(!((AT(a)|AT(w))&(NOUN&~(INT|XNUM))),EVDOMAIN)  // must test here if empty args
+ // fetch n from h and nrecip from self
+ X hx0=XAV(FAV(self)->fgh[2])[0];  // the one and only limb of the modulus
+ I nsign=XSGN(hx0); UI n=XLIMB0(hx0); UI nrecip=FAV(self)->localuse.lu1.mrecip;
+ // fetch x(mod n) and y(mod n)
+ UI x=modarg(a,n,nrecip), y=modarg(w,n,nrecip);  // multiplicands
+ UI z=n+x-y; z=modn(z);   // subtract and take modulus (keep intermediates positive)
+ // correct for negative n
+ A zzz; RZ(zzz=sc(z-(REPSGN(nsign&-z)&n)));  // if m neg, move result to range -m+1..0
+ // if modulus was XNUM, make result extended
+ if(unlikely(AT(FAV(self)->fgh[1])&XNUM+RAT))zzz=cvt(XNUM,zzz);
+ EPILOG(zzz)
+}
 
 
-#define DXBODY(exp)  DECLG;A y=sv->fgh[2],z;I m=jt->xmode; jt->xmode=XMFLR; z=exp; jt->xmode=m; R z
-#define DX1(f,exp)   DF1(f){DXBODY(exp);} 
-#define DX2(f,exp)   DF2(f){DXBODY(exp);}
-#define XT(w)        tymes(y,w)
+// modular multiply with small modulus, one atom.  a and w are either INT or XNUM.  Result is XNUM if modulus is
+static DF2(jtmodopinttimes){PROLOG(000);
+ ASSERT(!((AT(a)|AT(w))&(NOUN&~(INT|XNUM))),EVDOMAIN)  // must test here if empty args
+ // fetch n from h and nrecip from self
+ X hx0=XAV(FAV(self)->fgh[2])[0];  // the one and only limb of the modulus
+ I nsign=XSGN(hx0); UI n=XLIMB0(hx0); UI nrecip=FAV(self)->localuse.lu1.mrecip;
+ // fetch x(mod n) and y(mod n)
+ UI x=modarg(a,n,nrecip), y=modarg(w,n,nrecip);  // multiplicands
+ UI z=x*y; z=modn(z);   // multiply and take modulus
+ // correct for negative n
+ A zzz; RZ(zzz=sc(z-(REPSGN(nsign&-z)&n)));  // if m neg, move result to range -m+1..0
+ // if modulus was XNUM, make result extended
+ if(unlikely(AT(FAV(self)->fgh[1])&XNUM+RAT))zzz=cvt(XNUM,zzz);
+ EPILOG(zzz)
+}
 
-static DX1(postmult1, XT(CALL1(g1,  w,gs)))
-static DX2(postmult2, XT(CALL2(g2,a,w,gs)))
+// modular divide/reciprocal with small modulus, one atom.  a and w are either INT or XNUM.  Result is XNUM if modulus is
+// bivalent
+static DF2(jtmodopintdiv){PROLOG(000);
+ ASSERT(!((AT(a)|AT(w))&(NOUN&~(INT|XNUM))),EVDOMAIN)  // bivalent must test here if empty args
+ self=AT(w)&VERB?w:self;  // if monad, take self from w
+ // fetch n from h and nrecip from self
+ X hx0=XAV(FAV(self)->fgh[2])[0];  // the one and only limb of the modulus
+ I nsign=XSGN(hx0); UI n=XLIMB0(hx0); UI nrecip=FAV(self)->localuse.lu1.mrecip;
+ // fetch [x(mod n)] and y(mod n)
+ UI y=modarg(!(AT(w)&VERB)?w:a,n,nrecip);
+ // Take modular inverse of y
+ y=mod_inv(y,n); // modular inverse, ~0 if inverse not defined
+ UI z;  // will hold result
+ if(!(AT(w)&VERB)){z=modarg(a,n,nrecip); if(z!=0){ASSERT((I)y>=0,EVDOMAIN); z*=y; z=modn(z);}}else{ASSERT((I)y>=0,EVDOMAIN) z=y;}   // multiply and take modulus if dyad 0%0=0
+ // correct for negative n
+ A zzz; RZ(zzz=sc(z-(REPSGN(nsign&-z)&n)));  // if m neg, move result to range -m+1..0
+ // if modulus was XNUM, make result extended
+ if(unlikely(AT(FAV(self)->fgh[1])&XNUM+RAT))zzz=cvt(XNUM,zzz);   // cvt is slow
+ EPILOG(zzz)
+}
 
-static DX1(premult1, CALL1(g1,      XT(w),gs))
-static DX2(premult2, CALL2(g2,XT(a),XT(w),gs))
 
-static DX1(ydiv1, CALL2(g2,y,    w,gs))
-static DX2(ydiv2, CALL2(g2,XT(a),w,gs))
+// modular power with small integer modulus, one atom.  a and w are either INT or XNUM.  Result is XNUM if modulus is
+static DF2(jtmodopintexp){PROLOG(000);
+ ASSERT(!((AT(a)|AT(w))&(NOUN&~(INT|XNUM))),EVDOMAIN)  // must test here if empty args
+ // if w is XNUM, transfer to extended code
+ if(AT(w)&XNUM){if(!(AT(a)&XNUM))RZ(a=cvt(XNUM,a)) R jtmodopextexp(jt,a,w,self);}
+ // fetch n from h and nrecip from self
+ X hx0=XAV(FAV(self)->fgh[2])[0];  // the one and only limb of the modulus
+ I nsign=XSGN(hx0); UI n=XLIMB0(hx0); UI nrecip=FAV(self)->localuse.lu1.mrecip;
+ // fetch x(mod n) and y
+ UI x=modarg(a,n,nrecip); I y=IAV(w)[0];  // the base and exponent
+ if(y<0){
+  // Negative y.  Take x=modular inverse x^_1(mod n).
+  ASSERT((I)(x=mod_inv(x,n))>=0,EVDOMAIN)
+  y=-y;  // use positive power of modular inverse
+ }
+ // take modular power by repeated squaring
+ UI z=1;  // init x^0
+ while(y){UI zz=z*x; zz=modn(zz); x*=x; x=modn(x); z=y&1?zz:z; y>>=1;}  //  repeated square/mod
+ // correct for negative n
+ A zzz; RZ(zzz=sc(z-(REPSGN(nsign&-z)&n)));  // if m neg, move result to range -m+1..0
+ // if modulus was XNUM, make result extended
+ if(unlikely(AT(FAV(self)->fgh[1])&XNUM+RAT))zzz=cvt(XNUM,zzz);
+ EPILOG(zzz)
+}
 
-static DX1(ysqrt, CALL1(g1,tymes(w,XT(y)),gs))
+// modular operation with small integer modulus (function for one integer atom is in self)
+// convert arg(s) to integral and call the function through the rank loop
+// if an arg is empty skip the conversion.  We have to check each atom's type then
+static DF1(jtmodopint1){if(likely(AN(w)!=0)){if(!(AT(w)&INT+XNUM))RZ(w=cvt(AT(w)&RAT?XNUM:INT,w))} R rank1ex0(w,self,FAV(self)->localuse.lu0.modatomfn);}
+static DF2(jtmodopint2){if(likely((-AN(a)&-AN(w))<0)){if(!(AT(a)&INT+XNUM))RZ(a=cvt(AT(a)&RAT?XNUM:INT,a)) if(!(AT(w)&INT+XNUM))RZ(w=cvt(AT(w)&RAT?XNUM:INT,w))} R rank2ex0(a,w,self,FAV(self)->localuse.lu0.modatomfn);}
+
+// entry point to execute monad/dyad %. m. n after the noun argument(s) are supplied
+static DF2(jtmodularexplicitx){F2PREFIP;  // this stands in place of jtxdefn, which inplaces
+ // the only reason we need this routine is to reformat any error to avoid exposing internals
+ A z=jtxdefn(jt,a,w,self);   // the imp must be in an explicit def
+ // if there was an error, save the error code and recreate the error at this level, to cover up details inside the script
+ if(unlikely(jt->jerr)){I e=jt->jerr; RESETERR; jsignal(e);}
+ R z;
+}
+
+// entry point for monad and dyad %. m. n (type=0) and -/ . * m. n (type=1)
+static A jtmodularexplicit(J jt,A a,A w,I type){
+ // Apply Md_j_ to the input arguments, creating a derived verb to do the work
+ A xadv; ASSERT(xadv=jtfindnameinscript(jt,"~addons/dev/modular/modular.ijs",type?"Mdet_j_":"Md_j_",ADV),EVNONCE);
+ A derivvb; RZ(derivvb=jtunquote((J)((I)jt|JTXDEFMODIFIER),w,xadv,xadv));
+ // If the returned verb has VXOPCALL set, that means we are in debug and a namerefop has been interposed for Foldr_j_.  We don't want that - get the real verb
+ if(unlikely(FAV(derivvb)->flag&VXOPCALL))derivvb=FAV(derivvb)->fgh[2];  // the verb is saved in h of the reference
+ // Modify the derived verb to go to our preparatory stub.  We require that the continuation be at jtxdefn because we call bivalently and with flags
+ ASSERT(FAV(derivvb)->valencefns[1]==jtxdefn,EVSYSTEM);
+ FAV(derivvb)->valencefns[0]=jtmodularexplicitx;   // monad always defined
+ FAV(derivvb)->valencefns[1]=type?jtvalenceerr:(AF)jtmodularexplicitx;  // dyad defined only for %.
+ // For display purposes, give the compound the spelling of the original
+ FAV(derivvb)->id=CMDOT;
+ R derivvb;
+}
+
+// index is (fn#,extended)
+static AF modoptbl[][2]={ {jtmodopintexp,jtmodopextexp} , {jtmodopinttimes,jtmodopexttimes} , {jtmodopintdiv,jtmodopextdiv} , {jtmodopintadd,jtmodopextadd} , {jtmodopintsub,jtmodopextsub} };
+// Modular arithmetic u m. n
+F2(jtmdot){F2PREFIP;A z=0;
+ ASSERT(AT(a)&VERB,EVDOMAIN)  // u must be a verb
+ // Verify that n is an integer and create a XNUM form for it
+ ASSERT(AT(w)&NOUN,EVDOMAIN) ASSERT(AR(w)==0,EVRANK)  // n must be a noun atom
+ // Handle the forms that use external libraries
+ I type=-1; type=FAV(a)->id==CDOMINO?0:type; type=FAV(a)->valencefns[0]==jtdet?1:type;
+ if(type>=0)R jtmodularexplicit(jt,a,w,type);
+ A h=w;  // XNUM form of w
+ if(!(AT(w)&XNUM))RZ(h=cvt(XNUM,w));   // convert to XNUM
+ I nrecip=0;  // will hold reciprocal of abs(n), init to invalid
+ UI n=2;  // init integer value of modulus to 'not special'
+ // If n is small enough to use integer ops, take its reciprocal
+ X hx0=XAV(h)[0];  // the atom as an X
+ ASSERT(XSGN(hx0)!=0,EVDOMAIN)  // modulus cannot be 0
+ if(ABS(XSGN(hx0))==1){
+  n=XLIMB0(hx0);  // absolute value of modulus
+  if(BETWEENC(n,2,XMOD)){nrecip=((UI)IMIN/n); nrecip=(nrecip<<1)+((((UI)IMIN-nrecip*n)<<1)>=n);}  // if n small enough, 2^64%m, possibly low by as much as 2^-64
+ }
+ // Verify that u is a supported verb, and point to its functions
+ AF fn1=nrecip==0?jtmodopext1:jtmodopint1, fn2=nrecip==0?jtmodopext2:jtmodopint2;  // top-level verbs monad/dyad, and the verb for atoms
+ I fnx=sizeof(modoptbl)/sizeof(modoptbl[0]); fnx=FAV(a)->id==CEXP?0:fnx;  fnx=FAV(a)->id==CSTAR?1:fnx; fnx=FAV(a)->id==CDIV?2:fnx;  // convert verb id to table index
+ fnx=FAV(a)->id==CPLUS?3:fnx;  fnx=FAV(a)->id==CMINUS?4:fnx;
+ ASSERT(fnx!=sizeof(modoptbl)/sizeof(modoptbl[0]),EVDOMAIN)   // u must be supported
+ fn1=(0b100&(1<<fnx))?fn1:jtvalenceerr;  // if u doesn't support monad, take that valence away
+
+ // u is valid.  If n is _1, 0, or 1, modulus is degenerate and we just use a constant result
+ if(unlikely(n<2)){R qq(zeroionei(0),zeroionei(0));}  // return 00"0
+
+ // Create the result function.  h points to the original n as XNUM, lu0 points to the function for one atom, lu1 is the reciprocal of n if valid
+ fdefallo(z)
+ // we mark the compound as NAMELESS to avoid lookup overhead
+ fdeffillall(z,VF2NAMELESS,CMDOT,VERB, fn1,fn2, a,w,h,VASGSAFE, 0,0,0,fffv->localuse.lu0.modatomfn=modoptbl[fnx][nrecip==0],FAV(z)->localuse.lu1.mrecip=nrecip);
+ R z;
+}
+
+B jtxquad(J jt,E *z,X W){
+ mpX(W); mpX0(z); D h=jmpz_get_d(mpW); jmpz_set_d(mpz,h); jmpz_sub(mpz,mpW,mpz); D l=jmpz_get_d(mpz);  // high & low parts as D
+ D th,tl; TWOSUMBS1(h,l,th,tl) *z=CANONE1(th,tl);   // if jmpz_get_d rounds correctly, h and l will both overlap.  In case not, we make sure they do.  convert to canonical form
+ R 1;
+}

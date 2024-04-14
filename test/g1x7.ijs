@@ -1,5 +1,7 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g1x7.ijs'
+prolog './g1x7.ijs'
 NB. 1!:7 ----------------------------------------------------------------
+
+0 0$0 [ 'read only permissions leak to containing directory under wsl -- OS issue'
 
 write =: 1!:2
 mkdir =: 1!:5
@@ -10,24 +12,31 @@ erase =: 1!:55
 
 unix  =: (9!:12 '') e. 5 7
 nn    =: unix{3 9
+wsl   =: 1 e. 'WSL' E. ":2!:0 ::0: 'cat /proc/version'
+wslhack =: (nn$0 0,wsl) +. ]
+
+
 
 test  =: 3 : ('((,nn)-:$y) *. *./y e."_1 nn$''rwx'',.''-''')
 
-d =. <'brandnew'
+brandnew =. 'brandnew',(":2!:6''),'_',":3&T.''
+erase ::1: ((brandnew,'/')&,)&.> {."1[ 1!:0<brandnew,'/*'
+erase ::1: <brandnew
+d =. <brandnew
 mkdir d
 test perm d
 erase d
 
-f =. <jpath (UNAME-:'Android'){::'~temp/foogoo5.x';'~bin/foogoo5.x'
+f =. <jpath ((UNAME-:'Android'){::'~temp/';'~bin/'),'foogoo5.x',(":2!:6''),'_',":3&T.''
 'foo upon thee' write f
 test perm f
 
 (nn$'r--') perm f
-(nn$'r--') = perm f
+wslhack (nn$'r--') = perm f
 (nn$'rw-') perm f
-(nn$'rw-') = perm f
+wslhack (nn$'rw-') = perm f
 h =. open f
-(nn$'rw-') = perm h
+wslhack (nn$'rw-') = perm h
 close h
 
 h =. open f
@@ -76,6 +85,9 @@ perm =: 1!:7
 
 'length error'      -: 'wx'  perm etx <jpath '~temp/foo.x'
 
-4!:55 ;:'close d erase f h mkdir nn open perm test unix write '
+4!:55 ;:'brandnew close d erase f h mkdir nn open perm test unix write wsl wslhack'
 
+
+
+epilog''
 

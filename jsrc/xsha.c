@@ -1,11 +1,11 @@
-/* Copyright 1990-2006, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Xenos: SHA calculation                                                  */
 
 #ifdef ANDROID
 #include <endian.h>
-#elif defined(__MACH__)
+#elif defined(__APPLE__)
 #include <machine/endian.h>
 #else
 #include <sys/types.h>
@@ -52,17 +52,21 @@ F1(jtshasum1)
   R shasum2(sc(1),w);
 }
 
-F2(jtshasum2)
+DF2(jtshasum2)
 {
   I n;
   A z;
   UC *v;
-  F2RANK(0,1,jtshasum2,DUMMYSELF);  // do rank loop if necessary
+  F2RANK(0,1,jtshasum2,self);  // do rank loop if necessary
   RZ(a=vi(a));
   n=AN(w);
   v=UAV(w);
   ASSERT(!n||AT(w)&LIT,EVDOMAIN);
   I s=AV(a)[0];
+
+  // sha1 and sha256 routines use sse instructions, since there are no avx versions of the relevant instructions
+  // see comment about vzeroupper in io.c
+  ZEROUPPER;
 
   /*
   1    SHA1

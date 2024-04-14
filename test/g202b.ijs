@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g202b.ijs'
+prolog './g202b.ijs'
 NB. ^: with boxed right argument ----------------------------------------
 
 (>:   ^:(i.1000)  1     ) -: >:   ^:(<1000)  1
@@ -38,6 +38,12 @@ spleak '>:&.>^:(<1000) <1 '
 'domain error' -: >:^:(<2j5) etx 1
 'domain error' -: >:^:(<2r5) etx 1
 
+
+f=: 1 : '] [ echo@(m ; < )'
+x=: 2 : 'u^:(1:`(n f))'
+test=: 1 (< 3 2 $ 0 0 0 1 1 2)} 1 $. 2 3 ; 0 1 ; 0
+sbok=: {{try. 1 [ $.<0 catch. 0 end. }}''
+1:^:sbok 'nonce error' -: (4&$. x 'mm') etx test
 
 NB. {&x^:n with boxed n -------------------------------------------------
 
@@ -105,7 +111,10 @@ test"0 ] 10^i.4
 'limit error' -: {&1 2 3 0 4^:a: etx 0
 'limit error' -: {&1 2 3 0 4^:a: etx 0 1
 
-4!:55 ;:'boxed_rec f indexlim r randomfile rec rec1 spleak'
+4!:55 ;:'boxed_rec f indexlim r randomfile rec rec1 sbok spleak'
 4!:55 ;:'test x x2288 y2288'
 
+
+
+epilog''
 

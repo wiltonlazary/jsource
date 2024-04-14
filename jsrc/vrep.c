@@ -1,9 +1,10 @@
-/* Copyright 1990-2008, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Verbs: a#"r w                                                           */
 
 #include "j.h"
+#include "ve.h"
 
 
 #define REPF(f)         A f(J jt,A a,A w,I wf,I wcr)
@@ -14,7 +15,7 @@ static REPF(jtrepzdx){A p,q,x;P*wp;
  if(ISSPARSE(AT(w))){wp=PAV(w); x=SPA(wp,e);}
  else x=jt->fill&&AN(jt->fill)?jt->fill:filler(w);
  RZ(p=repeat(ravel(rect(a)),ravel(stitch(IX(wcr?AS(w)[wf]:1),num(-1)))));
- RZ(IRS2(w,x,0L,wcr,0L,jtover,q));
+ RZ(IRS2(w,x,NOEMSGSELF,wcr,0L,jtover,q));
  R IRS2(p,q,0L,1L,wcr+!wcr,jtfrom,x);
 }    /* (dense complex) # (dense or sparse) */
 
@@ -58,18 +59,24 @@ static REPF(jtrepbdx){A z;I c,k,m,p;
  // We retain the old block as long as the new one is at least half as big, without looking at total size of the allocation,
  // This could result in a very small block's remaining in a large allocation after repeated trimming.  We will accept the risk.
  // Accept only DIRECT blocks so we don't have to worry about explicitly freeing uncopied cells
+#if C_AVX2 || EMU_AVX2
  I exactlen;  // will be 1 if overstore is not allowed on copy
- if(!ASGNINPLACESGN(SGNIF((I)jtinplace,JTINPLACEWX)&(m-2*p)&(-(AT(w)&DIRECT)),w)) {
+#endif
+ if(!ASGNINPLACESGN(SGNIF(jtinplace,JTINPLACEWX)&(m-2*p)&(-(AT(w)&DIRECT)),w)) {
   // normal non-in-place copy
     // no overflow possible unless a is empty; nothing  moved then, and zn is 0
   GA00(z,AT(w),zn,AR(w)); MCISH(AS(z),AS(w),AR(w)) // allocate result
   zvv=voidAV(z);  // point to the output area
   // if blocks abandoned, pristine status can be transferred to the result, because we know we are not repeating any cells
   AFLAGORLOCAL(z,PRISTFROMW(w))  // result pristine if inplaceable input was - w prist cleared later
+#if C_AVX2 || EMU_AVX2
   exactlen=0;  // OK to overstore when copying to new buffer
+#endif
   n=0;  // cannot skip prefix of 1s if not inplace
  }else{
   z=w; // inplace
+  // We are going to change the type/shape/rank of the virtual block.  If it is UNINCORPABLE (meaning it will be reused), create a new clone.  We will still inplace the data area
+  if(AFLAG(z)&AFUNINCORPABLE){RZ(z=clonevirtual(z));}
   AN(z)=zn;  // Install the correct atom count
   // see how many leading values of the result are already in position.  We don't need to copy them in the first cell
   UI *avv=IAV(a); for(n=0;n<((m-1)>>LGSZI);++n)if(avv[n]!=VALIDBOOLEAN)break;  // n ends pointing to a word that is known not all valid, because there MUST be a 0 somewhere
@@ -79,7 +86,9 @@ static REPF(jtrepbdx){A z;I c,k,m,p;
   // Convert skipcount to bytes, and advance wvv to point to the first cell that may move
   n+=CTTZI(nextwd^VALIDBOOLEAN)>>LGBB;  // complement; count original 1s, add to n.  m cannot be 0 so there must be a valid 0 bit in nextwd
   zvv=wvv=(C*)wvv+k*n;  // step input over items left in place; use that as the starting output pointer also
+#if C_AVX2 || EMU_AVX2
   exactlen=!!(k&(SZI-1));  // if items are not multiples of I, require exact len.  Since we skip an unchanged prefix, we will seldom have address contention during the copy
+#endif
   // since the input is abandoned and no cell is ever duplicated, pristinity is unchanged
  }
  AS(z)[wf]=p;  // move in length of item axis, #bytes per item of cell
@@ -90,7 +99,7 @@ static REPF(jtrepbdx){A z;I c,k,m,p;
   
  while(--c>=0){
   // at top of loop n is biased by the number of leading bytes to skip. wvv points to the first byte to process
-#if ((C_AVX2&&SY_64) || EMU_AVX)
+#if C_AVX2 || EMU_AVX2
   C *avv=CAV(a)+n; n=m-n;   // prime the pipeline for top of loop.
   __m256i i1=_mm256_set1_epi8(1);
   __m256i bitpipe00,bitpipe01,bitpipe10,bitpipe11;  // place to read in booleans and packed bits
@@ -188,15 +197,78 @@ static REPF(jtrepbsx){A ai,c,d,e,g,q,x,wa,wx,wy,y,y1,z,zy;B*b;I*dv,*gv,j,m,n,*u,
  R z;
 }    /* (sparse boolean) #"r (dense or sparse) */
 
-static REPF(jtrepidx){A y;I j,m,p=0,*v,*x;
+static REPF(jtrepidx){A y;I j,m,p=0,*v,*x;A z; 
  F2PREFIP;ARGCHK2(a,w);
- RZ(a=vi(a)); x=AV(a);
- m=AS(a)[0];
- DO(m, ASSERT(0<=x[i],EVDOMAIN); p+=x[i]; ASSERT(0<=p,EVLIMIT););  // add up total # result slots
- GATV0(y,INT,p,1); v=AV(y); 
- DO(m, j=i; DQ(x[j], *v++=j;););  // fill index vector with all the indexes
- A z; R IRS2(y,w,0L,1L,wcr,jtfrom,z);
+ RZ(a=vi(a)); x=IAV(a);
+ m=AS(a)[0]; if(unlikely(m==0))RETF(RETARG(w));
+#if 0  // when the integer reductions get faster
+ mininsI(1,m,1,x,&p,jt); ASSERT(p>=0,EVDOMAIN);  // verify all values >=0
+ ASSERT(EVOK==plusinsI(1,m,1,x,&p,jt),EVLIMIT);  // get total number of result, error if overflow
+#else
+ I anylt0=0, anyofl=0; UI dlct=(m+3)>>2; I backoff=(-m)&3;
+#define COMP1(i) p+=xx[i]; anylt0|=xx[i]; if(i&1)anyofl|=p;  // looking for overflow every other time is enough, leaves branch slot
+ I *xx=x-backoff; switch(backoff){do{case 0: COMP1(0) case 1: COMP1(1) case 2: COMP1(2) case 3: COMP1(3) xx+=4;}while(--dlct);}   \
+ ASSERT(anylt0>=0,EVDOMAIN) ASSERT(anyofl>=0,EVLIMIT);
+#endif
+ if(unlikely(ISSPARSE(AT(w)))){
+  GATV0(y,INT,p,1); v=AV(y); 
+  DO(m, j=i; DQ(x[j], *v++=j;););  // fill index vector with all the indexes
+  R IRS2(y,w,0L,1L,wcr,jtfrom,z);
+ }else{I itemsize, ncells, zn, j;  // # atoms in an item (then bytes), #cells to process, #atoms in result
+  // non-sparse code.  copy the repeated items directly
+  PROD(itemsize,wcr-1,AS(w)+wf+1) PROD(ncells,wf,AS(w)) DPMULDE(itemsize*ncells,p,zn) // itematoms*ncells cannot overflow in valid w unless p=0
+  I itembytes=itemsize<<bplg(AT(w));  // #bytes in item
+#if C_AVX2 || EMU_AVX2
+  itemsize=itembytes==SZI?itemsize:0; itemsize=(p>>2)>m?itemsize:0;  // repurpose itemsize to # of added items to leave space for wide stores   TUNE  use word code if average # repeats > 4
+#else
+#define itemsize 0
+#endif
+  // If we are moving 8-byte items, we extend the allocation so that we can overstore up to 4 words.  This allows us to avoid remnant handling
+  GA00(z,AT(w),zn+(itemsize<<LGNPAR),AR(w)+!wcr); MCISH(AS(z),AS(w),AR(z)) AS(z)[wf]=p; AN(z)=zn;  // allo result, copy shape but replace the lengthened axis, which may be added
+  C *zv=CAV(z);  // output fill pointer
+  C *wv=CAV(w);  // input item pointer, increments over input cells
+  for(;ncells;--ncells){  // for each result cell
+   // make x[j] copies of item wv[j]
+   if(itembytes==SZI){
+    if(itemsize){
+#if C_AVX2 || EMU_AVX2
+     for(j=0;j<m;++j){  // for each repeated item
+      __m256i wd=_mm256_set1_epi64x(((I*)wv)[j]);  // the word to replicate, in each lane
+      I wdstomove=x[j];  // # repeats
+      // we can overstore 4 words, so we write out one copy forthwith.  We then copy 2 blocks at a time.  We may repeat the first address to get in sync
+      // start with a store to allow aligning the output pointer.  Advance zv1 to a store boundary, but never past the end-of-area+1.  Decr count
+//      _mm256_storeu_si256((__m256i*)zv1,wd);  // first store, which may be overwritten
+      I wdadj=NPAR-(((I)zv>>LGSZI)&(NPAR-1));  // #words to end-of-block
+      _mm256_maskstore_epi64((I*)zv,_mm256_loadu_si256((__m256i*)(validitymask+4-wdadj)),wd);  // first store, which may be overwritten
+      C *zv1=zv;  // local store pointer, which may overwrite
+      zv+=wdstomove*SZI;  // advance the real store pointer to the next valid output location for the next loop
+      wdstomove-=wdadj; wdadj=wdstomove<0?0:wdadj;  wdstomove=wdstomove<0?0:wdstomove; zv1+=wdadj<<LGSZI;  // advance to align, unless that would go past end
+      // move the rest of the data, aligned unless no more valid words.  We may overwrite
+      _mm256_storeu_si256((__m256i*)zv1,wd);  // aligned store, which may be overwritten in full
+      zv1+=((wdstomove+(NPAR-1))&NPAR)<<LGSZI;  // if 'incrementing addr' (i. e. odd # stores needed), increment for the stores
+      C *zvend=zv1+(((wdstomove+(NPAR-1))>>(LGNPAR+1))*2*NPAR*SZI);  // number of pairs to store AFTER the first store.  repct 0->0, 1-4->0, 5-8->1 (repeating addr), 9-12->1 (incrementing addr)...
+      NOUNROLL while(zv1!=zvend){
+       _mm256_storeu_si256((__m256i*)zv1,wd); _mm256_storeu_si256((__m256i*)(zv1+NPAR*SZI),wd); zv1+=2*NPAR*SZI;   // write a pair.  Probably misaligned & thus slow
+      }
+     }
+#endif
+    }else{  // short runs on average.  loop seems to be fast as is
+     for(j=0;j<m;++j){  // for each repeated item
+      I wx=((I*)wv)[j]; DONOUNROLL(x[j], *(I*)zv=wx; zv+=SZI;)  // copy the atom
+     }
+    }
+    wv+=m*SZI;  // advance I types all at once
+   }else{
+    JMCDECL(endmask) JMCSETMASK(endmask,itembytes,0)
+    for(j=0;j<m;++j){  // for each repeated item
+     DO(x[j], JMCR(zv,wv,itembytes,0,endmask) zv+=itembytes;) wv+=itembytes;
+    }
+   }
+  }
+ }
+ RETF(z);
 }    /* (dense  integer) #"r (dense or sparse) */
+#undef itemsize
 
 static REPF(jtrepisx){A e,q,x,y;I c,j,m,p=0,*qv,*xv,*yv;P*ap;
  F2PREFIP;ARGCHK2(a,w);
@@ -252,27 +324,31 @@ static B jtrep1sa(J jt,A a,I*c,I*d){A x;B b;I*v;
 static REPF(jtrep1s){A ax,e,x,y,z;B*b;I c,d,cd,j,k,m,n,p,q,*u,*v,wr,*ws;P*wp,*zp;
  F2PREFIP;ARGCHK2(a,w);
  if((AT(a)&(SPARSE+CMPX))==(SPARSE+CMPX))R rep1d(denseit(a),w,wf,wcr);
- RE(rep1sa(a,&c,&d)); cd=c+d;
+ RE(rep1sa(a,&c,&d)); cd=c+d;   // c=#repeats, d=#skips, cd=stride between repeats
  if(!ISSPARSE(AT(w)))R rep1d(d?jdot2(sc(c),sc(d)):sc(c),w,wf,wcr);  // here if dense w
  wr=AR(w); ws=AS(w); n=wcr?ws[wf]:1; DPMULDE(n,cd,m)
- wp=PAV(w); e=SPA(wp,e); ax=SPA(wp,a); y=SPA(wp,i); x=SPA(wp,x);
+ wp=PAV(w); e=SPA(wp,e); ax=SPA(wp,a); y=SPA(wp,i); x=SPA(wp,x);  // y is nonsparse indexes, x is values, a is axes, e sparse element 
  GASPARSE(z,AT(w),1,wr+!wcr,ws); AS(z)[wf]=m; zp=PAV(z);
  RE(b=bfi(wr,ax,1));
  if(wcr&&b[wf]){    /* along sparse axis */
-  u=AS(y); p=u[0]; q=u[1]; u=AV(y);
+  u=AS(y); p=u[0]; q=u[1]; u=AV(y);  // p=# nonsparse rows, q=#axes  u->start of indexes
   RZ(x=repeat(sc(c),x));
-  RZ(y=mkwris(repeat(sc(c),y)));
-  if(p&&1<c){
-   j=0; DO(wf, j+=b[i];); v=j+AV(y);
-   if(AN(ax)==1+j){u+=j; DO(p, m=cd**u; u+=q; DO(c, *v=m+i; v+=q;););}
-   else{A xx;I h,i,j1=1+j,*uu;
-    GATV0(xx,INT,j1,1); uu=AV(xx);
-    k=0; DO(j1, uu[i]=u[i];);
-    for(i=0;i<p;++i,u+=q)
-     if(ICMP(uu,u,j1)||i==p-1){
-      h=(I )(i==p-1)+i-k; k=i; m=cd*uu[j]; 
-      DO(j1, uu[i]=u[i];);
-      DO(h, DO(c, *v=m+i; v+=q;););
+  RZ(y=mkwris(repeat(sc(c),y)));   // repeat the rows of x and y
+  if(p&&1<c){   // if there is something to do
+   j=0; DO(wf, j+=b[i];); v=j+AV(y);  // j=# sparse axes in frame, v -> first index in cell
+   if(AN(ax)==1+j){u+=j; DO(p, m=cd**u; u+=q; DO(c, *v=m+i; v+=q;););}  // if replicating the last sparse axis, simply turn each index into an interval of indexes
+   else{A xx;I h,i,j1=1+j,*uu;   // replicating interior axis.  For each replicated index, we must count the number of nonsparse values that share the prefix.  j1 is index of the first sparse axis in the replicated cell
+    // v has replicated index lists
+    GATV0(xx,INT,j1,1); uu=AV(xx);  // allocate vector that will hold the prefix, i. e. the sparse axes
+    k=0; DO(j1, uu[i]=u[i];);   // initialize uu to the sparse indexes in the first row of input indexes.  k is start of matching area
+    for(i=0;;++i,u+=q)   // for each input row...
+     if(i==p||ICMP(uu,u,j1)){   // if we hit end-of-input or there is a change in the prefix...
+      // when there is a change in index or we run off the end of the indexes, we have found the end+1 of the region of indexes that share a prefix.
+      // The region starts at k and runs to i-1.  I don't think this region-finding is necessary.
+      h=i-k; k=i; m=cd*uu[j];   // m is the remapped start of the indexes for he replicated area
+      DO(h, DO(c, *v=m+i; v+=q;););  // remap the area
+      if(i==p)break;  // stop after end-of-input
+      DO(j1, uu[i]=u[i];);  // reinit with the nonmatching next prefix
      } 
     RZ(xx=grade1(y));
     RZ(x=from(xx,x));
@@ -311,7 +387,7 @@ F2(jtrepeat){A z;I acr,ar,wcr,wf,wr;
   }
  }
  if(((1-acr)|(acr-ar))<0){z=rank2ex(a,w,DUMMYSELF,MIN(1,acr),wcr,acr,wcr,jtrepeat); PRISTCLRF(w) RETF(z);}  // multiple cells - must lose pristinity; loop if multiple cells of a
- ASSERT((-acr&-wcr)>=0||(AS(a)[0]==AS(w)[wf]),EVLENGTH);
+ ASSERT((-acr&-wcr)>=0||(AS(a)[0]==AS(w)[wf]),EVLENGTH);  // require agreement if neither cell is an atom
  z=(*repfn)(jtinplace,a,w,wf,wcr);
  // mark w not pristine, since we pulled from it
  PRISTCLRF(w)

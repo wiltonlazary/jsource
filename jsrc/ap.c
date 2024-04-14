@@ -1,4 +1,4 @@
-/* Copyright 1990-2011, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Adverbs: Prefix and Infix                                               */
@@ -248,18 +248,18 @@ AHDRP(nandpfxB,B,B){pscangt(m,d,n,z,x,0xa);R EVOK;}
 #define TYMESP1(x) if(unlikely(__builtin_mul_overflow((x),t,&t)))R EWOV;
 #define ftz(ft1,offset) ft1(*(I*)((C*)x+(offset))) *(I*)((C*)z+(offset))=t;
 // m is #cells, n is #items per cell, d is #atoms in item
-#define PREFIXOVF(f,neut,ft1)  \
- AHDRR(f,I,I){I i, parity;                          \
+#define PREFIXOVF(f,neut,ft1,dcls)  \
+ AHDRR(f,I,I){I i;                          \
   UI dlct=(n+3)>>2; I backoff=(-n)&3;  \
   if(d==1){ \
-   DQ(m, parity=0;\
+   DQ(m, dcls\
    UI dlct0=dlct; x-=backoff; z-=backoff; I t=neut; switch(backoff){do{case 0: ft1(x[0]) z[0]=t; case 1: ft1(x[1]) z[1]=t; case 2: ft1(x[2]) z[2]=t; case 3: ft1(x[3]) z[3]=t; x+=4; z+=4; }while(--dlct0);}   \
    ) R EVOK;  \
   }        \
   I xstride1=d*SZI; I xstride3=3*xstride1;  \
   x=(I*)((C*)x-backoff*xstride1); z=(I*)((C*)z-backoff*xstride1); /* backoff for all cells */ \
   DQ(m,  \
-   DQ(d, parity=0; \
+   DQ(d, dcls \
     UI dlct0=dlct; I t=neut; switch(n&3){do{case 0: ftz(ft1,0) case 3: ftz(ft1,xstride1) case 2: ftz(ft1,2*xstride1) case 1: ftz(ft1,xstride3) x=(I*)((C*)x+4*xstride1); z=(I*)((C*)z+4*xstride1); }while(--dlct0);}   \
     x=(I*)((C*)x-4*xstride1*dlct)+1; z=(I*)((C*)z-4*xstride1*dlct)+1;  /* preserve backoff */  \
    )  \
@@ -268,9 +268,9 @@ AHDRP(nandpfxB,B,B){pscangt(m,d,n,z,x,0xa);R EVOK;}
  R EVOK;  \
  }
 
-PREFIXOVF( pluspfxI, 0, PLUSP1) 
-PREFIXOVF(minuspfxI, 0, MINUSP1) 
-PREFIXOVF(tymespfxI, 1, TYMESP1)
+PREFIXOVF( pluspfxI, 0, PLUSP1,) 
+PREFIXOVF(minuspfxI, 0, MINUSP1, I parity=0;) 
+PREFIXOVF(tymespfxI, 1, TYMESP1,)
 
 
 PREFICPFX( pluspfxO, D, I,  PLUS   )
@@ -347,6 +347,10 @@ AHDRP(fn,D,D){I i; \
 PREFIXNAN( pluspfxZ, Z, Z,  zplus, plusZZ  )
 PREFIXPFX( pluspfxX, X, X,  xplus, plusXX ,HDR1JERR; )
 PREFIXPFX( pluspfxQ, Q, Q,  qplus, plusQQ ,HDR1JERR; )
+static OP1XYZ(plus,I,I,I2,pfxplus)
+PREFIXPFX( pluspfxI2, I, I2,  pfxplus, plus1II2I , R EVOK; )
+static OP1XYZ(plus,I,I,I4,pfxplus)
+PREFIXPFX( pluspfxI4, I, I4,  pfxplus, plus1II4I , R EVOK; )
 
 PREFIXPFX(tymespfxD, D, D,  TYMES, tymesDD ,R EVOK;  )
 PREFIXPFX(tymespfxZ, Z, Z,  ztymes, tymesZZ ,R EVOK;)
@@ -363,7 +367,7 @@ PREALTNAN(  divpfxD, D, D,  DIVPA  )
 PREALTNAN(  divpfxZ, Z, Z,  DIVPZ  )
 
 PREFIXPFX(  maxpfxI, I, I,  MAX , maxII   ,R EVOK;)
-#if C_AVX  // not better in emulation
+#if C_AVX2 // not better in emulation
 PREFIXPFXAVX2(maxpfxD,infm,MAX,maxDD,_mm256_max_pd,R EVOK;)
 #else
 PREFIXPFX(  maxpfxD, D, D,  MAX , maxDD   ,R EVOK;)
@@ -373,7 +377,7 @@ PREFIXPFX(  maxpfxQ, Q, Q,  QMAX, maxQQ   ,R EVOK;)
 PREFIXPFX(  maxpfxS, SB,SB, SBMAX, maxSS  ,R EVOK;)
 
 PREFIXPFX(  minpfxI, I, I,  MIN, minII    ,R EVOK;)
-#if C_AVX  // not better in emulation
+#if C_AVX2 // not better in emulation
 PREFIXPFXAVX2(minpfxD,inf,MIN,minDD,_mm256_min_pd,R EVOK;)
 #else
 PREFIXPFX(  minpfxD, D, D,  MIN, minDD    ,R EVOK;)
@@ -406,8 +410,8 @@ static DF1(jtgprefix){A h,*hv,z,*zv;I m,n,r;
  SETIC(w,n); 
  h=VAV(self)->fgh[2]; hv=AAV(h); m=AN(h);
  GATV0(z,BOX,n,1); zv=AAV(z); I imod=0;
- DO(n, imod=(imod==m)?0:imod; RZ(zv[i]=df1(h,take(sc(1+i),w),hv[imod])); ++imod;);
- R ope(z);
+ DO(n, imod=(imod==m)?0:imod; RZ(zv[i]=df1(h,take(sc(1+i),w),C(hv[imod]))); ++imod;);
+ R jtopenforassembly(jt,z);
 }    /* g\"r w for gerund g */
 
 
@@ -443,7 +447,7 @@ static A jtifxi(J jt,I m,A w){A z;I d,j,k,n,p,*x;
 
 // Entry point for infix.  a is x, w is y, fs points to u
 static DF2(jtinfix){PROLOG(0018);DECLF;A x,z;I m; 
- PREF2(jtinfix); // Handle looping over rank.  This returns here for each cell (including this test)
+ F2RANK(0,RMAX,jtinfix,self); // Handle looping over rank.  This returns here for each cell (including this test)
  // The rest of this verb handles a single cell
  // If length is infinite, convert to large integer
  // kludge - test for ==ainf should be replaced with a test for value; will fail if _ is result of expression like {._
@@ -479,11 +483,11 @@ static DF2(jtginfix){A h,*hv,x,z,*zv;I d,m,n;
  h=VAV(self)->fgh[2]; hv=AAV(h); d=AN(h);
  if(SETIC(x,n)){
   GATV0(z,BOX,n,1); zv=AAV(z);
-  DO(n, RZ(zv[i]=df1(h,seg(from(sc(i),x),w),hv[i%d])););
-  R ope(z);
+  DO(n, RZ(zv[i]=df1(h,seg(from(sc(i),x),w),C(hv[i%d]))););
+  R jtopenforassembly(jt,z);
  }else{A s;
   RZ(s=AR(w)?shape(w):ca(iv0)); AV(s)[0]=ABS(m);
-  RZ(df1(x,reshape(s,filler(w)),*hv));
+  RZ(df1(x,reshape(s,filler(w)),C(*hv)));
   R reshape(over(zeroionei(0),shape(x)),x);
 }}
 
@@ -496,9 +500,8 @@ static DF2(jtginfix){A h,*hv,x,z,*zv;I d,m,n;
 // prefix and infix: prefix if a is mark
 static DF2(jtinfixprefix2){F2PREFIP;PROLOG(00202);A fs;I cger[128/SZI];
    I wt;
- 
- ARGCHK1(w);
- PREF2IP(jtinfixprefix2);  // handle rank loop if needed
+  ARGCHK1(w);
+ F2RANKIP(0,RMAX,jtinfixprefix2,self);  // handle rank loop if needed
  wt=AT(w);
  if(unlikely(ISSPARSE(wt))){
   // Use the old-style non-virtual code for sparse types
@@ -696,9 +699,9 @@ static DF1(jtpscan){A z;I f,n,r,t,wn,wr,*ws,wt;
  I d,m; PROD(m,f,ws); PROD(d,r-1,ws+f+1);   // m=#scans, d=#atoms in a cell of each scan
  if((t=atype(adocv.cv))&&TYPESNE(t,wt))RZ(w=cvt(t,w));  // convert input if necessary
  // if inplaceable, reuse the input area for the result
- if(ASGNINPLACESGN(SGNIF((I)jtinplace,JTINPLACEWX)&SGNIF(adocv.cv,VIPOKWX),w))z=w; else GA(z,rtype(adocv.cv),wn,wr,ws);
+ if(ASGNINPLACESGN(SGNIF(jtinplace,JTINPLACEWX)&SGNIF(adocv.cv,VIPOKWX),w))z=w; else GA(z,rtype(adocv.cv),wn,wr,ws);
  I rc=((AHDRPFN*)adocv.f)(d,n,m,AV(w),AV(z),jt);
- if(255&rc){jsignal(rc); R (rc>=EWOV)?IRS1(w,self,r,jtpscan,z):0;} else R adocv.cv&VRI+VRD?cvz(adocv.cv,z):z;
+ if(unlikely((255&~EVNOCONV)&rc)){jsignal(rc); R (rc>=EWOV)?IRS1(w,self,r,jtpscan,z):0;} else R (adocv.cv&VRI+VRD)&&rc!=EVNOCONV?cvz(adocv.cv,z):z;
 }    /* f/\"r w atomic f main control */
 
 static DF2(jtinfixd){A z;C*x,*y;I c=0,d,k,m,n,p,q,r,*s,wr,*ws,wt,zc; 
@@ -770,7 +773,7 @@ static A jtmovsumavg(J jt,I m,A w,A fs,B avg){A z;
 }
 
 static DF2(jtmovavg){I m,j;
- PREF2(jtmovavg);
+ F2RANK(0,RMAX,jtmovavg,self);
  RE(m=i0(vib(a)));SETIC(w,j);
  if(0<m&&m<=j&&AT(w)&B01+FL+INT)R movsumavg(m,w,self,1);   // j may be 0
  R jtinfixprefix2(jt,a,w,self);
@@ -899,7 +902,7 @@ static A jtmovbwneeq(J jt,I m,A w,A fs,B eq){A y,z;I c,p,*s,*u,*v,x,*yv,*zv;
 }    /* m 22 b./\w (0=eq) or m 25 b./\ (1=eq); integer w; 0<m */
 
 static DF2(jtmovfslash){A x,z;B b;C id,*wv,*zv;I d,m,m0,p,t,wk,wt,zi,zk,zt;
- PREF2(jtmovfslash);
+ F2RANK(0,RMAX,jtmovfslash,self);
  SETIC(w,p); wt=AT(w);   // p=#items of w
  RE(m0=i0(vib(a))); m=REPSGN(m0); m=(m^m0)-m; m^=REPSGN(m);  // m0=infx x,  m=abs(m0), handling IMIN
  if(m==1)R AR(w)?w:ravel(w);  // 1 f/\ w is always w, except on an atom
@@ -937,10 +940,11 @@ static DF2(jtmovfslash){A x,z;B b;C id,*wv,*zv;I d,m,m0,p,t,wk,wt,zi,zk,zt;
 
 static DF1(jtiota1){I j; R apv(SETIC(w,j),1L,1L);}
 
-F1(jtbslash){A f;AF f1=jtinfixprefix1,f2=jtinfixprefix2;V*v;I flag=FAV(ds(CBSLASH))->flag;
+F1(jtbslash){F1PREFIP;A f;AF f1=jtinfixprefix1,f2=jtinfixprefix2;V*v;I flag=FAV(ds(CBSLASH))->flag;
 ;
  ARGCHK1(w);
- if(NOUN&AT(w))R fdef(0,CBSLASH,VERB, jtinfixprefix1,jtinfixprefix2, w,0L,fxeachv(1L,w), VGERL|flag, RMAX,0L,RMAX);
+ A z; fdefallo(z)
+ if(NOUN&AT(w)){A fixw; RZ(fixw=fxeachv(1L,w)); fdeffill(z,0,CBSLASH,VERB, jtinfixprefix1,jtinfixprefix2, w,0L,fixw, VGERL|flag, RMAX,0L,RMAX); RETF(z);}
  v=FAV(w);  // v is the u in u\ y
  switch(v->id){
   case CSLASH: ;  // never gerund/ which is coded as GRCO
@@ -949,17 +953,16 @@ F1(jtbslash){A f;AF f1=jtinfixprefix1,f2=jtinfixprefix2;V*v;I flag=FAV(ds(CBSLAS
    f2=jtmovfslash; if(FAV(u)->flag&VISATOMIC2){f1=jtpscan; flag|=VASGSAFE|VJTFLGOK1;} break;
   case CPOUND:
    f1=jtiota1; break;
-  case CLEFT: case CRIGHT: case CCOMMA:   
+  case CLEFT: case CRIGHT: case CCOMMA:
    f2=jtinfixd; break;
   case CFORK:  
    if(v->valencefns[0]==(AF)jtmean)f2=jtmovavg; break;
   default:
    flag |= VJTFLGOK1|VJTFLGOK2; break; // The default u\ looks at WILLBEOPENED
  }
- RZ(f=ADERIV(CBSLASH,f1,f2,flag,RMAX,0L,RMAX));
- // Fill in the lvp[1] field: with 0 if not f/\; with the lookup field for f/ if f/\ .
- FAV(f)->localuse.lu1.redfn=v->id==CSLASH?v->localuse.lu1.redfn:0;  // f is nonnull if f/\ .
- R f;
+ fdeffillall(z,0,CBSLASH,VERB,f1,f2,w,0L,0L,flag,RMAX,0L,RMAX,fffv->localuse.lu0.cachedloc=0,FAV(z)->localuse.lu1.redfn=v->id==CSLASH?v->localuse.lu1.redfn:0)
+ // Fill in the lvp[1] field: with 0 if not f/\; with the lookup field for f/ if f/\ .   f is nonnull if f/\ .
+ RETF(z);
 }
 
 A jtascan(J jt,C c,A w){ARGCHK1(w); A z; R df1(z,w,bslash(slash(ds(c))));}

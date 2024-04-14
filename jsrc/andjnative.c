@@ -1,3 +1,8 @@
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
+/* Licensed use only. Any other use is in violation of copyright.          */
+/*                                                                         */
+/* java interface                                                          */
+
 #include "j.h"
 #include "jeload.h"
 #include "com_jsoftware_j_JInterface.h"
@@ -13,7 +18,7 @@
  #define filesepx "\\"
 #else
  #define filesepx "/"
- #ifdef __MACH__
+ #ifdef __APPLE__
   #define JDLLNAME "libj.dylib"
  #else
   #define JDLLNAME "libj.so"
@@ -488,3 +493,19 @@ JNIEXPORT void JNICALL Java_com_jsoftware_j_JInterface_JSetc
   (*env)->ReleaseStringUTFChars(env, jsb, sb);
   (*env)->ExceptionClear(env);
 }
+
+/*
+ * Class:     com_jsoftware_j_JInterface
+ * Method:    JInterrupt
+ * Signature: ()V
+ */
+JNIEXPORT void JNICALL Java_com_jsoftware_j_JInterface_JInterrupt
+(JNIEnv *env, jclass jcls)
+{
+  LOGD("JInterrupt");
+  jeinterrupt();
+  inputId = 0;
+  outputId = 0;
+  wdId = 0;
+}
+

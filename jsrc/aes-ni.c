@@ -1,7 +1,15 @@
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
+/* Licensed use only. Any other use is in violation of copyright.          */
+/*                                                                         */
+/* AES calculation x64 hardware support                                    */
+
 #include "j.h"
 
 #include <stdint.h>
 #include <wmmintrin.h>
+#ifndef __USE_XOPEN2K
+#define __USE_XOPEN2K  // for posix_memalign
+#endif
 #include <stdlib.h>
 
 #define ADD _mm_add_epi32

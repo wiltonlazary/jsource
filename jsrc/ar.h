@@ -1,4 +1,4 @@
-/* Copyright 1990-2008, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Adverbs: f/ defns                                                       */
@@ -9,6 +9,7 @@
 // d=#atoms in an item of a cell of w (thus c=d*n)
 
 
+// pfx is macro to use for atoms, vecfn1 for applying between first 2 rows, vecfn2 for applying between later rows & total
 #define REDUCEPFX(f,Tz,Tx,pfx,vecfn1,vecfnn)  \
  AHDRR(f,Tz,Tx){I i;Tz v;                              \
   if(d==1){x += m*n; z+=m; DQ(m, v=*--x; DQ(n-1, --x; v=pfx(*x,v);); *--z=v;)}  \
@@ -18,6 +19,7 @@
     Tx* RESTRICT y=x; x-=d; if(255&(rc=vecfn1(1,d,x,y,z,jt), rc=rc<0?EWOVIP+EWOVIPMULII:rc))R rc; x-=d;        \
     DQ(n-2,    if(255&(rc=vecfnn(1,d,x,z,z,jt), rc=rc<0?EWOVIP+EWOVIPMULII:rc))R rc; x-=d;);        \
   }}R EVOK;}
+
 
 // used on idempotent verbs, using 2 accumulators
 #define REDUCEPFXIDEM2(f,Tz,Tx,pfx,vecfn)  \
@@ -31,7 +33,7 @@
   }}R EVOK;}
 
 // used on idempotent verbs, using 4 accumulators but using the 256-bit instructions if available
-#if (C_AVX&&SY_64) || EMU_AVX
+#if C_AVX2 || EMU_AVX2
 #define REDUCEPFXIDEM2PRIM256(f,Tz,Tx,pfx,vecfn,prim,identity)  \
  AHDRR(f,Tz,Tx){I i;                              \
   if(d==1){redprim256rk1(prim,identity)}  \

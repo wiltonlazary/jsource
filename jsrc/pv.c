@@ -1,4 +1,4 @@
-/* Copyright 1990-2006, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Parsing: Tacit Verb Translator (13 : )                                  */
@@ -94,49 +94,49 @@ TACT(jtvdyad){A fs,sf,xt,yt;B xl,xr,yl,yr;I xi=-1,yi=-1;TA x,y,z={num(1),0};V*u=
  if(yt=tine(y.t)){yi=tvi(y.t); v=FAV(yt); if(0>yi&&CFORK==v->id){yi=tvi(v->fgh[2]?v->fgh[0]:CP); if(0>yi)yi=tvi(v->fgh[2]?v->fgh[2]:v->fgh[2-1]);}}
  if(fs==ds(CLEFT)){if(xt)z.t=xt; else z.a=x.a; R z;}
  if(0>xi&&0>yi)switch((xt?2:0)+(yt?1:0)){
-  case 0: df2(z.a,x.a,y.a,fs); break;
-  case 1: z.t=folknohfn(x.a,fs,yt); break;
-  case 2: z.t=folknohfn(y.a,sf,xt); break;
-  case 3:
-   xl=xt==LF; xr=xt==RT;
-   yl=yt==LF; yr=yt==RT;
-   if     (xl&&yr)            z.t=fs;
-   else if(xr&&yl)            z.t=sf;
-   else if(xr&&yr&&tmonad)z.t=swap(fs);
-   else z.t=CFORK==u->id&&primitive(yt)?folknohfn(yt,sf,xt):folknohfn(xt,fs,yt);
+ case 0: df2(z.a,x.a,y.a,fs); break;
+ case 1: z.t=folknohfn(x.a,fs,yt); break;
+ case 2: z.t=folknohfn(y.a,sf,xt); break;
+ case 3:
+  xl=xt==LF; xr=xt==RT;
+  yl=yt==LF; yr=yt==RT;
+  if     (xl&&yr)            z.t=fs;
+  else if(xr&&yl)            z.t=sf;
+  else if(xr&&yr&&tmonad)z.t=swap(fs);
+  else z.t=CFORK==u->id&&primitive(yt)?folknohfn(yt,sf,xt):folknohfn(xt,fs,yt);
  }else{B b,c;I i,j,xj,yj;
   i=dcase(xi,u); if(u&&CFORK==u->id){xi=tvi(u->fgh[2]?u->fgh[0]:CP); xj=tvi(u->fgh[2]?u->fgh[2]:u->fgh[2-1]);}else{xi=-1; xj=tvi(xt);}
   j=dcase(yi,v); if(v&&CFORK==v->id){yi=tvi(v->fgh[2]?v->fgh[0]:CP); yj=tvi(v->fgh[2]?v->fgh[2]:v->fgh[2-1]);}else{yi=-1; yj=tvi(yt);}
   z.t=0; b=xj==yj; c=xj==yi;
   switch(DCASE(i,j)){
-   case DCASE(0,2): z.t=folknohfn(x.a,fs,yt); break;
-   case DCASE(2,0): z.t=folknohfn(y.a,sf,xt); break;
-   case DCASE(0,3): z.t=folknohfn(CP,folknohfn(x.a,fs,FGR(v)),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break;
-   case DCASE(0,4): z.t=folknohfn(CP,folknohfn(x.a,fs,v->fgh[2]?v->fgh[1]:v->fgh[1-1]  ),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break;
-   case DCASE(1,2): z.t=folknohfn(xt,fs,yt); break;
-   case DCASE(1,3): 
-   case DCASE(1,4): z.t=folknohfn(xt,folknohfn(LF,fs,FGR(v)),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break;
-   case DCASE(2,1): z.t=folknohfn(xt,fs,yt); break;
-   case DCASE(3,1): z.t=folknohfn(xt,fs,yt); break;
-   case DCASE(4,1): z.t=folknohfn(xt,fs,yt); break;
-   case DCASE(2,2): z.t=folknohfn(xt,fs,yt); break;
-   case DCASE(2,3): z.t=b?folknohfn(CP,folknohfn(RT,    fs,FGR(v)),v->fgh[2]?v->fgh[2]:v->fgh[2-1]):folknohfn(xt,  folknohfn(LF,    fs,FGR(v)),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break;
-   case DCASE(2,4): z.t=b?folknohfn(CP,folknohfn(RT,    fs,v->fgh[2]?v->fgh[1]:v->fgh[1-1]  ),v->fgh[2]?v->fgh[2]:v->fgh[2-1]):folknohfn(xt,  folknohfn(LF,    fs,FGR(v)),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break;
-   case DCASE(3,2): z.t=b?folknohfn(CP,folknohfn(FGR(u),fs,RT    ),yt  ):folknohfn(u->fgh[2]?u->fgh[2]:u->fgh[2-1],folknohfn(FGL(u),fs,RT    ),yt  ); break;
-   case DCASE(3,3): z.t=b?folknohfn(CP,folknohfn(FGR(u),fs,FGR(v)),v->fgh[2]?v->fgh[2]:v->fgh[2-1]):folknohfn(u->fgh[2]?u->fgh[2]:u->fgh[2-1],folknohfn(FGL(u),fs,FGR(v)),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break;
-   case DCASE(3,4): z.t=b?folknohfn(CP,folknohfn(FGR(u),fs,v->fgh[2]?v->fgh[1]:v->fgh[1-1]  ),v->fgh[2]?v->fgh[2]:v->fgh[2-1]):folknohfn(u->fgh[2]?u->fgh[2]:u->fgh[2-1],folknohfn(FGL(u),fs,FGR(v)),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break;
-   case DCASE(4,2): z.t=b?folknohfn(CP,folknohfn(u->fgh[2]?u->fgh[1]:u->fgh[1-1],  fs,RT    ),yt  ):folknohfn(u->fgh[2]?u->fgh[2]:u->fgh[2-1],folknohfn(FGL(u),fs,RT    ),yt  ); break;
-   case DCASE(4,3): z.t=b?folknohfn(CP,folknohfn(u->fgh[2]?u->fgh[1]:u->fgh[1-1],  fs,FGR(v)),v->fgh[2]?v->fgh[2]:v->fgh[2-1]):folknohfn(u->fgh[2]?u->fgh[2]:u->fgh[2-1],folknohfn(FGL(u),fs,FGR(v)),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break;
-   case DCASE(4,4): z.t=b?folknohfn(CP,folknohfn(u->fgh[2]?u->fgh[1]:u->fgh[1-1],  fs,v->fgh[2]?v->fgh[1]:v->fgh[1-1]  ),v->fgh[2]?v->fgh[2]:v->fgh[2-1]):folknohfn(u->fgh[2]?u->fgh[2]:u->fgh[2-1],folknohfn(FGL(u),fs,FGR(v)),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break;
-   case DCASE(0,5):         z.t=folknohfn(v->fgh[2]?v->fgh[0]:CP,folknohfn(x.a,            fs,v->fgh[2]?v->fgh[1]:v->fgh[1-1]),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break; 
-   case DCASE(2,5): if(b||c)z.t=folknohfn(v->fgh[2]?v->fgh[0]:CP,folknohfn(b?RT:LF,        fs,v->fgh[2]?v->fgh[1]:v->fgh[1-1]),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break; 
-   case DCASE(3,5):
-   case DCASE(4,5): if(b||c)z.t=folknohfn(v->fgh[2]?v->fgh[0]:CP,folknohfn(b?FGR(u):FGL(u),fs,v->fgh[2]?v->fgh[1]:v->fgh[1-1]),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break; 
-   case DCASE(5,0):         z.t=folknohfn(u->fgh[2]?u->fgh[0]:CP,folknohfn(y.a,            sf,u->fgh[2]?u->fgh[1]:u->fgh[1-1]),u->fgh[2]?u->fgh[2]:u->fgh[2-1]); break; 
-   case DCASE(5,2): if(b||c)z.t=folknohfn(u->fgh[2]?u->fgh[0]:CP,folknohfn(u->fgh[2]?u->fgh[1]:u->fgh[1-1],           fs,b?RT    :LF        ),yt  ); break; 
-   case DCASE(5,3):
-   case DCASE(5,4): if(b||c)z.t=folknohfn(u->fgh[2]?u->fgh[0]:CP,folknohfn(u->fgh[2]?u->fgh[1]:u->fgh[1-1],           fs,b?FGR(v):FGL(v)    ),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break; 
-   case DCASE(5,5): if(xi==yi&&xj==yj||xi==yj&&xj==yi)
+  case DCASE(0,2): z.t=folknohfn(x.a,fs,yt); break;
+  case DCASE(2,0): z.t=folknohfn(y.a,sf,xt); break;
+  case DCASE(0,3): z.t=folknohfn(CP,folknohfn(x.a,fs,FGR(v)),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break;
+  case DCASE(0,4): z.t=folknohfn(CP,folknohfn(x.a,fs,v->fgh[2]?v->fgh[1]:v->fgh[1-1]  ),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break;
+  case DCASE(1,2): z.t=folknohfn(xt,fs,yt); break;
+  case DCASE(1,3): 
+  case DCASE(1,4): z.t=folknohfn(xt,folknohfn(LF,fs,FGR(v)),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break;
+  case DCASE(2,1): z.t=folknohfn(xt,fs,yt); break;
+  case DCASE(3,1): z.t=folknohfn(xt,fs,yt); break;
+  case DCASE(4,1): z.t=folknohfn(xt,fs,yt); break;
+  case DCASE(2,2): z.t=folknohfn(xt,fs,yt); break;
+  case DCASE(2,3): z.t=b?folknohfn(CP,folknohfn(RT,    fs,FGR(v)),v->fgh[2]?v->fgh[2]:v->fgh[2-1]):folknohfn(xt,  folknohfn(LF,    fs,FGR(v)),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break;
+  case DCASE(2,4): z.t=b?folknohfn(CP,folknohfn(RT,    fs,v->fgh[2]?v->fgh[1]:v->fgh[1-1]  ),v->fgh[2]?v->fgh[2]:v->fgh[2-1]):folknohfn(xt,  folknohfn(LF,    fs,FGR(v)),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break;
+  case DCASE(3,2): z.t=b?folknohfn(CP,folknohfn(FGR(u),fs,RT    ),yt  ):folknohfn(u->fgh[2]?u->fgh[2]:u->fgh[2-1],folknohfn(FGL(u),fs,RT    ),yt  ); break;
+  case DCASE(3,3): z.t=b?folknohfn(CP,folknohfn(FGR(u),fs,FGR(v)),v->fgh[2]?v->fgh[2]:v->fgh[2-1]):folknohfn(u->fgh[2]?u->fgh[2]:u->fgh[2-1],folknohfn(FGL(u),fs,FGR(v)),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break;
+  case DCASE(3,4): z.t=b?folknohfn(CP,folknohfn(FGR(u),fs,v->fgh[2]?v->fgh[1]:v->fgh[1-1]  ),v->fgh[2]?v->fgh[2]:v->fgh[2-1]):folknohfn(u->fgh[2]?u->fgh[2]:u->fgh[2-1],folknohfn(FGL(u),fs,FGR(v)),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break;
+  case DCASE(4,2): z.t=b?folknohfn(CP,folknohfn(u->fgh[2]?u->fgh[1]:u->fgh[1-1],  fs,RT    ),yt  ):folknohfn(u->fgh[2]?u->fgh[2]:u->fgh[2-1],folknohfn(FGL(u),fs,RT    ),yt  ); break;
+  case DCASE(4,3): z.t=b?folknohfn(CP,folknohfn(u->fgh[2]?u->fgh[1]:u->fgh[1-1],  fs,FGR(v)),v->fgh[2]?v->fgh[2]:v->fgh[2-1]):folknohfn(u->fgh[2]?u->fgh[2]:u->fgh[2-1],folknohfn(FGL(u),fs,FGR(v)),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break;
+  case DCASE(4,4): z.t=b?folknohfn(CP,folknohfn(u->fgh[2]?u->fgh[1]:u->fgh[1-1],  fs,v->fgh[2]?v->fgh[1]:v->fgh[1-1]  ),v->fgh[2]?v->fgh[2]:v->fgh[2-1]):folknohfn(u->fgh[2]?u->fgh[2]:u->fgh[2-1],folknohfn(FGL(u),fs,FGR(v)),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break;
+  case DCASE(0,5):         z.t=folknohfn(v->fgh[2]?v->fgh[0]:CP,folknohfn(x.a,            fs,v->fgh[2]?v->fgh[1]:v->fgh[1-1]),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break; 
+  case DCASE(2,5): if(b||c)z.t=folknohfn(v->fgh[2]?v->fgh[0]:CP,folknohfn(b?RT:LF,        fs,v->fgh[2]?v->fgh[1]:v->fgh[1-1]),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break; 
+  case DCASE(3,5):
+  case DCASE(4,5): if(b||c)z.t=folknohfn(v->fgh[2]?v->fgh[0]:CP,folknohfn(b?FGR(u):FGL(u),fs,v->fgh[2]?v->fgh[1]:v->fgh[1-1]),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break; 
+  case DCASE(5,0):         z.t=folknohfn(u->fgh[2]?u->fgh[0]:CP,folknohfn(y.a,            sf,u->fgh[2]?u->fgh[1]:u->fgh[1-1]),u->fgh[2]?u->fgh[2]:u->fgh[2-1]); break; 
+  case DCASE(5,2): if(b||c)z.t=folknohfn(u->fgh[2]?u->fgh[0]:CP,folknohfn(u->fgh[2]?u->fgh[1]:u->fgh[1-1],           fs,b?RT    :LF        ),yt  ); break; 
+  case DCASE(5,3):
+  case DCASE(5,4): if(b||c)z.t=folknohfn(u->fgh[2]?u->fgh[0]:CP,folknohfn(u->fgh[2]?u->fgh[1]:u->fgh[1-1],           fs,b?FGR(v):FGL(v)    ),v->fgh[2]?v->fgh[2]:v->fgh[2-1]); break; 
+  case DCASE(5,5): if(xi==yi&&xj==yj||xi==yj&&xj==yi)
                      if(b||  (v->fgh[2]?v->fgh[1]:v->fgh[1-1])==swapc(v->fgh[2]?v->fgh[1]:v->fgh[1-1]))z.t=folknohfn(u->fgh[2]?u->fgh[0]:CP,folknohfn(u->fgh[2]?u->fgh[1]:u->fgh[1-1],fs,     v->fgh[2]?v->fgh[1]:v->fgh[1-1] ),u->fgh[2]?u->fgh[2]:u->fgh[2-1]);
                      else if((u->fgh[2]?u->fgh[1]:u->fgh[1-1])==swapc(u->fgh[2]?u->fgh[1]:u->fgh[1-1]))z.t=folknohfn(v->fgh[2]?v->fgh[0]:CP,folknohfn(u->fgh[2]?u->fgh[1]:u->fgh[1-1],fs,     v->fgh[2]?v->fgh[1]:v->fgh[1-1] ),v->fgh[2]?v->fgh[2]:v->fgh[2-1]);
                      else                      z.t=folknohfn(u->fgh[2]?u->fgh[0]:CP,folknohfn(u->fgh[2]?u->fgh[1]:u->fgh[1-1],fs,swap(v->fgh[2]?v->fgh[1]:v->fgh[1-1])),u->fgh[2]?u->fgh[2]:u->fgh[2-1]);
@@ -145,7 +145,6 @@ TACT(jtvdyad){A fs,sf,xt,yt;B xl,xr,yl,yr;I xi=-1,yi=-1;TA x,y,z={num(1),0};V*u=
  }
  R z;
 }
-
 TACT(jtvadv ){TA z={0,0}; if(CHK1)df1(z.a,stack[b].a,stack[e].a); R z;}
 
 TACT(jtvconj){TA z={0,0}; if(CHK2)df2(z.a,stack[b].a,stack[e].a,stack[e-1].a); R z;}
@@ -183,23 +182,27 @@ static TACT(jtvmove){A t;TA*u,x,z;
 /* b. replaces n0"_ v1 v2 by n0 v1 v2                  */
 /* c. replaces [: g ] by g, if monad                   */
 
+#define ASGRCOMMON(w,x,s,test) ({A val=(s); test if(AFLAG(w)&RECURSIBLE){if(val)ra(val); if(FAV(w)->fgh[x]!=0){A t=FAV(w)->fgh[x]; FAV(w)->fgh[x]=0; fa(t);} } FAV(w)->fgh[x]=val; FAV(w)->fgh[x];})  // t for audits
+#define ASGR(w,x,s) ASGRCOMMON(w,x,s,RZ(val))
+#define ASGRZ(w,x,s) ASGRCOMMON(w,x,s,)  // no error
+
 static A jtvfinal(J jt,A w,I tmonad,I tsubst,TA *ttab,I *ttabi,I ttabi0){I i;V*u,*v;
  ARGCHK1(w);
  if(!(VERB&AT(w)))R w;
  v=FAV(w);
  if(CFORK!=v->id){i=tvi(w); R 0<=i?jtvfinal(jt,ttab[i].t,tmonad,tsubst,ttab,ttabi,ttabi0):w;}
  I f=!!v->fgh[2];
- RZ(v->fgh[2]=incorp(tine(jtvfinal(jt,f?v->fgh[2]:v->fgh[2-1],tmonad,tsubst,ttab,ttabi,ttabi0))));
- RZ(v->fgh[1]=incorp(tine(jtvfinal(jt,f?v->fgh[1]:v->fgh[1-1],tmonad,tsubst,ttab,ttabi,ttabi0))));
- RZ(v->fgh[0]=incorp(tine(jtvfinal(jt,f?v->fgh[0]:CP,tmonad,tsubst,ttab,ttabi,ttabi0))));
+ ASGR(w,2,incorp(tine(jtvfinal(jt,f?v->fgh[2]:v->fgh[2-1],tmonad,tsubst,ttab,ttabi,ttabi0))));
+ ASGR(w,1,incorp(tine(jtvfinal(jt,f?v->fgh[1]:v->fgh[1-1],tmonad,tsubst,ttab,ttabi,ttabi0))));
+ ASGR(w,0,incorp(tine(jtvfinal(jt,f?v->fgh[0]:CP,tmonad,tsubst,ttab,ttabi,ttabi0))));
  if(VERB&AT(v->fgh[2]?v->fgh[0]:CP)){
   u=FAV(v->fgh[2]?v->fgh[0]:CP); 
-  if(CFCONS==u->id)v->fgh[0]=u->fgh[2];  // must be incorped already
-  else if(CQQ==u->id&&NOUN&AT(u->fgh[0])&&equ(ainf,u->fgh[1]))v->fgh[0]=u->fgh[0];  // must be incorped already
+  if(CFCONS==u->id)ASGR(w,0,u->fgh[2]);  // must be incorped already
+  else if(CQQ==u->id&&NOUN&AT(u->fgh[0])&&equ(ainf,u->fgh[1]))ASGR(w,0,u->fgh[0]);  // must be incorped already
   if(NOUN&AT(v->fgh[2]?v->fgh[0]:CP))RZ(w=folknohfn(v->fgh[2]?v->fgh[0]:CP,v->fgh[2]?v->fgh[1]:v->fgh[1-1],v->fgh[2]?v->fgh[2]:v->fgh[2-1]));
  }
  RZ(w=tine(w));
- if(FAV(w)->id==CFORK&&FAV(FAV(w)->fgh[0])->id==CCAP){FAV(w)->fgh[0]=FAV(w)->fgh[1]; FAV(w)->fgh[1]=FAV(w)->fgh[2]; FAV(w)->fgh[2]=0;}
+ if(FAV(w)->id==CFORK&&AT(FAV(w)->fgh[0])&VERB&&FAV(FAV(w)->fgh[0])->id==CCAP){ASGR(w,0,FAV(w)->fgh[1]); ASGR(w,1,FAV(w)->fgh[2]); ASGRZ(w,2,0);}
  R w;
 }    
 
@@ -235,7 +238,7 @@ F1(jtvtrans){PROLOG(0053);A locsyms,y,z=0;I c,i,ttabi;TA ttab[NTTAB];
   RZ(y=vtokens(w));  // return AM bit0=monad
   I tmonad=AM(y);
   ttabi=c;
-  RZ(locsyms=stcreate(2,40,0L,0L));  // not necessary to set global pointers
+  RZ(locsyms=stcreate(2,40,0L,0L)); AR(locsyms)&=~ARLOCALTABLE;  // not necessary to set global pointers; flag table so we don't switch to locsyms during assignment
   symbis(mnuvxynam[5],num(1),locsyms); if(!tmonad)symbis(mnuvxynam[4],num(1),locsyms); 
   z=jttparse(jt,y,locsyms,tmonad,0==i,ttab,&ttabi,c); RESETERR;
   if(i&&!z)z=colon(num(4-tmonad),w);

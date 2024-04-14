@@ -1,4 +1,4 @@
-/* Copyright 1990-2008, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Verbs: Monadic Atomic                                                   */
@@ -6,6 +6,7 @@
 #include "j.h"
 #include "ve.h"
 #include "vcomp.h"
+#include "va.h"
 
 
 #if BW==64
@@ -22,6 +23,7 @@ static AMON(floorDI,I,D, {D d=tfloor(*x); *z=(I)d; ASSERTWR(d==*z,EWOV);})
 #endif
 static AMON(floorD, D,D, *z=tfloor(*x);)
 static AMON(floorZ, Z,Z, *z=zfloor(*x);)
+static AMON(floorE, E,E, *z=efloor(*x);)
 
 #if BW==64
 static AMONPS(ceilDI,I,D,
@@ -37,16 +39,20 @@ static AMON(ceilDI, I,D, {D d=tceil(*x);  *z=(I)d; ASSERTWR(d==*z,EWOV);})
 #endif
 static AMON(ceilD,  D,D, *z=tceil(*x);)
 static AMON(ceilZ,  Z,Z, *z=zceil(*x);)
+static AMON(ceilE,  E,E, *z=eceil(*x);)
 
 static AMON(cjugZ,  Z,Z, *z=zconjug(*x);)
 
 static AMON(sgnI,   I,I, I xx=*x; *z=REPSGN(xx)|SGNTO0(-xx);)
+static AMON(sgnI2,   I,I2, I xx=*x; *z=(I2)(REPSGN(xx)|SGNTO0(-xx));)
+static AMON(sgnI4,   I,I4, I xx=*x; *z=(I4)(REPSGN(xx)|SGNTO0(-xx));)
 static AMON(sgnD,   I,D, *z=((1.0-jt->cct)<=*x) - (-(1.0-jt->cct)>=*x);)
 static AMONPS(sgnZ,   Z,Z, , if((1.0-jt->cct)>zmag(*x))*z=zeroZ; else *z=ztrend(*x); , HDR1JERR)
+static AMON(sgnE,   I,E, *z=((1.0-jt->cct)<=x->hi) - (-(1.0-jt->cct)>=x->hi);)
 
 static AMON(sqrtI,  D,I, ASSERTWR(0<=*x,EWIMAG); *z=sqrt((D)*x);)
 
-#if (C_AVX&&SY_64) || EMU_AVX
+#if C_AVX2 || EMU_AVX2
 AHDR1(sqrtD,D,D){
  AVXATOMLOOP(1,
  __m256d zero; zero=_mm256_setzero_pd();
@@ -58,7 +64,7 @@ AHDR1(sqrtD,D,D){
   u=_mm256_sqrt_pd(_mm256_blendv_pd(u,comp,neg)); comp=_mm256_sub_pd(zero,u); u=_mm256_blendv_pd(u,comp,neg);  // store sqrt, with sign of the original value
 
  ,
- R (_mm256_movemask_pd(anyneg)&0xf)?EWIMAG:EVOK;  // if there are any negative values, call for a postpass
+ R (!_mm256_testc_pd(zero,anyneg))?EWIMAG:EVOK;  // if there are any negative values, call for a postpass
  )
 }
 
@@ -72,40 +78,101 @@ AHDR1(absD,D,D){
  )
 }
 
+AHDR1(absI,D,D){
+ AVXATOMLOOP(0,
+ __m256d zero=_mm256_setzero_pd();
+ __m256d uneg; __m256d anyneg=zero;
+
+ ,
+  uneg=_mm256_castsi256_pd(_mm256_sub_epi64(_mm256_castpd_si256(zero),_mm256_castpd_si256(u))); u=_mm256_blendv_pd(u,uneg,u); // take abs
+  anyneg=_mm256_or_pd(anyneg,u);  // remember if any overflow
+
+ ,
+ R (!_mm256_testc_pd(zero,anyneg))?EWIMAG:EVOK;  // if there are any negative values, call for a postpass.  Could just convert in place
+ )
+}
+
+
 #else
 static AMONPS(sqrtD,  D,D, I ret=EVOK; , if(*x>=0)*z=sqrt(*x);else{*z=-sqrt(-*x); ret=EWIMAG;}, R ret;)  // if input is negative, leave sqrt as negative
+static AMONPS(absI,   I,I, UI vtot=0; , UI val=*(UI*)x; I nval=(I)((0U-val)); val=nval>0?nval:val; vtot |= val; *z=(I)val; , R (I)vtot<0?EWOV:EVOK;)
 #if BW==64
-static AMON(absD,   I,I, *z= *x&0x7fffffffffffffff;)
+static AMON(absD,   I,I, *z= *x&IMAX;)
 #else
 static AMON(absD,   D,D, *z= ABS(*x);)
 #endif
 #endif
-static AMON(sqrtZ,  Z,Z, *z=zsqrt(*x);)
+static AMONPS(absI2,   I2,I2, I ret=EVOK;  , I2 val=*x; I2 nval; if(unlikely(__builtin_sub_overflow((I2)0,val,&nval)))ret=EVOFLO; val=nval>0?nval:val; *z=val; , R ret;)
+static AMONPS(absI4,   I4,I4, I ret=EVOK;  , I4 val=*x; I4 nval; if(unlikely(__builtin_sub_overflow((I4)0,val,&nval)))ret=EVOFLO; val=nval>0?nval:val; *z=val; , R ret;)
 
+static AMON(sqrtZ,  Z,Z, *z=zsqrt(*x);)
+AMONPS(sqrtE,  E,E, I ret=EVOK; , D l; D h; D rh; D rl; D dh; D dl; D th; D tl; *(UIL*)&l=*(UIL*)&x->lo^(*(UIL*)&x->hi&*(UIL*)&minus0); *(UIL*)&h=*(UIL*)&x->hi&~*(UIL*)&minus0; \
+   rh=sqrt(h); if(rh<1e-100)rl=0; else{TWOPROD1(rh,rh,dh,dl) dl-=l; TWOSUMBS1(dh,-h,th,tl) tl+=dl; TWOSUM1(th,tl,h,l) h/=-2*rh; TWOSUMBS1(rh,h,th,tl) E r; r=CANONE1(th,tl); rh=r.hi; rl=r.lo;} \
+   if(x->hi>=0){z->hi=rh; z->lo=rl;} else{z->hi=-rh; ret=EWIMAG;}, R ret;)  // if input is negative, leave sqrt as negative
 static AMON(expB,   D,B, *z=*x?2.71828182845904523536:1;)
 static AMONPS(expZ, Z,Z, , *z=zexp(*x); , HDR1JERR)
 
 static AMON(logB,   D,B, *z=*x?0:infm;)
 static AMON(logZ,   Z,Z, *z=zlog(*x);)
 
-static AMONPS(absI,   I,I, I vtot=0; , I val=*x; val=(val^REPSGN(val))-REPSGN(val); vtot |= val; *z=val; , R vtot<0?EWOV:EVOK;)
 static AMONPS(absZ,   D,Z, , *z=zmag(*x); , HDR1JERR)
+static AMONPS(absE,   E,E, , {*(UIL*)&z->lo=*(UIL*)&x->lo^(*(UIL*)&x->hi&0x8000000000000000LL); *(UIL*)&z->hi=*(UIL*)&x->hi&0x7fffffffffffffffLL; } , HDR1JERR)  // ABS of high part, & flip low part if hi changed
+
+static AMONPS(negE,   E,E, , {*(UIL*)&z->lo=*(UIL*)&x->lo^0x8000000000000000LL; *(UIL*)&z->hi=*(UIL*)&x->hi^0x8000000000000000LL; } , HDR1JERR)  // ABS of high part, & flip low part if hi changed
+static AMONPS(recipE,   E,E, , {E r; r=RECIPE(*x); r=CANONE1(r.hi,r.lo); z->hi=r.hi; z->lo=r.lo; } , HDR1JERR)  // ABS of high part, & flip low part if hi changed
+#if 0  // used for debugging
+#define f recipE
+#define Tz E
+#define Tx E
+#define debprefix
+#define debsuffix HDR1JERR
+static I f(J RESTRICT jt,I n,Tz* z,Tx* x){I i;
+debprefix
+for(i=0;i<n;++i){
+// stmt here
+E r;E v=*x;
+D zh,one,d,H=1.0/(v).hi;
+TWOPROD1(H,(v).hi,one,d);
+one-=1.0;
+d+=one;
+d*=(v).hi;
+d+=(v).lo;
+d*=H;
+d*=-H;
+TWOSUMBS1(H,d,zh,H);
+r=(E){.hi=zh,.lo=H};
+r=CANONE1(r.hi,r.lo);
+z->hi=r.hi;
+z->lo=r.lo;
+// end stmt
+++z; ++x;
+}
+debsuffix
+}
+#undef f
+#undef Tz
+#undef Tx
+#undef prefix
+#undef suffix
+#endif
 
 static AHDR1(oneB,C,C){mvc(n,z,1,MEMSET01); R EVOK;}
 
-extern AHDR1FN expI, expD, logI, logD;
+extern AHDR1FN expI, expD, expE, logI, logD, logE;
 
 UA va1tab[]={
- /* <. */ {{{ 0,VB}, {  0,VI}, {floorDI,VI+VIP64}, {floorZ,VZ}, {  0,VX}, {floorQ,VX}}},
- /* >. */ {{{ 0,VB}, {  0,VI}, { ceilDI,VI+VIP64}, { ceilZ,VZ}, {  0,VX}, { ceilQ,VX}}},
- /* +  */ {{{ 0,VB}, {  0,VI}, {    0,VD}, { cjugZ,VZ}, {  0,VX}, {   0,VQ}}},
- /* *  */ {{{ 0,VB}, { sgnI,VI+VIPW}, {   sgnD,VI+VIP64}, {  sgnZ,VZ}, { sgnX,VX}, {  sgnQ,VX}}},
- /* ^  */ {{{expB,VD}, { expI,VD}, {   expD,VD+VIPW}, {  expZ,VZ}, { expX,VX}, {  expD,VD+VDD}}},
- /* |  */ {{{ 0,VB}, { absI,VI+VIPW}, {   absD,VD+VIPW}, {  absZ,VD}, { absX,VX}, {  absQ,VQ}}},
- /* !  */ {{{oneB,VB}, {factI,VD}, {  factD,VD}, { factZ,VZ}, {factX,VX}, { factQ,VX}}},
- /* o. */ {{{  0L,0L}, {   0L,0L}, {     0L,0L}, {    0L,0L}, { pixX,VX}, {    0L,0L}}}, // others handled as dyads
- /* %: */ {{{ 0,VB}, {sqrtI,VD}, {  sqrtD,VD+VIPW}, { sqrtZ,VZ}, {sqrtX,VX}, { sqrtQ,VQ}}},
- /* ^. */ {{{logB,VD}, { logI,VD}, {   logD,VD}, {  logZ,VZ}, { logX,VX}, { logQD,VD}}},
+ /* <. */ {{{ 0,VB}, {  0,VI}, {floorDI,VI+VIP64}, {floorZ,VZ}, {  0,VX}, {floorQ,VX}, {0,VI}, {floorE,VUNCH+VIPW}, {  0, VUNCH}, {0, VUNCH}}},
+ /* >. */ {{{ 0,VB}, {  0,VI}, { ceilDI,VI+VIP64}, { ceilZ,VZ}, {  0,VX}, { ceilQ,VX}, {0,VI}, {ceilE,VUNCH+VIPW}, {  0, VUNCH}, {0, VUNCH}}},
+ /* +  */ {{{ 0,VB}, {  0,VI}, {    0,VD}, { cjugZ,VZ}, {  0,VX}, {   0,VQ}, {  0, VUNCH}, {0, VUNCH}, {  0, VUNCH}, {0, VUNCH}}},
+ /* *  */ {{{ 0,VB}, { sgnI,VI+VIPW}, {   sgnD,VI+VIP64}, {  sgnZ,VZ}, { sgnX,VX}, {  sgnQ,VX}, {0,VI}, {sgnE,VI}, {sgnI2,VI}, {sgnI4,VI}}},
+ /* ^  */ {{{expB,VD}, { expI,VD}, {   expD,VD+VIPW}, {  expZ,VZ}, { expX,VX}, {  expD,VD+VDD}, {0,0}, {expE,VUNCH}, { expD,VDD+VD}, { expD,VDD+VD}}},
+ /* |  */ {{{ 0,VB}, { absI,VI+VIPW}, {   absD,VD+VIPW}, {  absZ,VD}, { absX,VX}, {  absQ,VQ}, {0,0}, {absE,VUNCH+VIPW}, { absI2,VUNCH+VIPW}, { absI4,VUNCH+VIPW}}},
+ /* !  */ {{{oneB,VB}, {factI,VD}, {  factD,VD}, { factZ,VZ}, {factX,VX}, {factQ,VQ}, {0,0}, {factD,VD+VDD}, {factD,VD+VDD}, {factD,VD+VDD}}},
+ /* o. */ {{{  0L,0L}, {   0L,0L}, {     0L,0L}, {    0L,0L}, { pixX,VX}, {0L,0L}, {0L,0L}, {0L,0L}, {0L,0L}, {0L,0L}}}, // others handled as dyads
+ /* %: */ {{{ 0,VB}, {sqrtI,VD}, {sqrtD,VD+VIPW}, { sqrtZ,VZ}, {sqrtX,VX}, { sqrtQ,VQ}, {0,0}, {sqrtE,VUNCH}, {sqrtD,VD+VDD+VIPW}, {sqrtD,VD+VDD+VIPW}}},  // most cannot inplace lest CMPX
+ /* ^. */ {{{logB,VD}, { logI,VD}, {   logD,VD}, {  logZ,VZ}, { logX,VX}, { logQD,VD}, {0,0}, {logE,VUNCH}, {logD,VD+VDD}, {logD,VD+VDD}}},
+ /* 10 - (QP only) */ {{{}, {}, {}, {}, {}, {}, {}, {negE,VUNCH+VIPW}}},
+ /* 11 % (QP only) */ {{{}, {}, {}, {}, {}, {}, {}, {recipE,VUNCH+VIPW}}},
 };
 
 
@@ -118,13 +185,13 @@ static A jtva1s(J jt,A w,A self,I cv,VA1F ado){A e,x,z,ze,zx;B c;I n,oprc,t,zt;P
  if(c)RZ(e=cvt(t,x)); n=AN(x); if(oprc==EVOK){GA(zx,zt,n,AR(x),AS(x)); if(n){oprc=((AHDR1FN*)ado)(jt,n, AV(zx),AV(x));}}
  // sparse does not do inplace repair.  Always retry, and never inplace.
  oprc=oprc<0?EWOV:oprc;  //   If a restart is required, turn the result to EWOV (must be floor/ceil)
- if(oprc!=EVOK){
+ if(oprc&(255&~EVNOCONV)){
   jt->jerr=(UC)oprc;  // signal error to the retry code, or to the system
   if(jt->jerr<=NEVM)R 0;
   J jtinplace=(J)((I)jt+JTRETRY);  // tell va1 it's a retry
   RZ(ze=jtva1(jtinplace,e,self)); 
   jt->jerr=(UC)oprc; RZ(zx=jtva1(jtinplace,x,self));   // restore restart signal for the main data too
- }else if(cv&VRI+VRD){RZ(ze=cvz(cv,ze)); RZ(zx=cvz(cv,zx));}
+ }else if(cv&VRI+VRD&&oprc!=EVNOCONV){RZ(ze=cvz(cv,ze)); RZ(zx=cvz(cv,zx));}
  GASPARSE(z,STYPE(AT(ze)),1,AR(w),AS(w)); zp=PAV(z);
  SPB(zp,a,ca(SPA(wp,a)));
  SPB(zp,i,ca(SPA(wp,i)));
@@ -138,15 +205,11 @@ static A jtva1s(J jt,A w,A self,I cv,VA1F ado){A e,x,z,ze,zx;B c;I n,oprc,t,zt;P
 static A jtva1(J jt,A w,A self){A z;I cv,n,t,wt,zt;VA1F ado;
  UA *u=((UA*)((I)va1tab+FAV(self)->localuse.lu1.uavandx[0]));
  F1PREFIP;ARGCHK1(w);
- wt=AT(w); n=AN(w); wt=(I)jtinplace&JTEMPTY?B01:wt;
-#if SY_64
- VA1 *p=&u->p1[(0x0321000054032100>>(CTTZ(wt)<<2))&7];  // from MSB, we need xxx 011 010 001 xxx 000 xxx xxx   101 100 xxx 011 010 001 xxx 000
-#else
- if(ISSPARSE(wt)){wt=AT(SPA(PAV(w),e));}
- VA1 *p=&u->p1[(0x54032100>>(CTTZ(wt)<<2))&7];  // from MSB, we need 101 100 xxx 011 010 001 xxx 000
-#endif
- ASSERT(wt&NUMERIC,EVDOMAIN);
- if(!((I)jtinplace&JTRETRY)){
+ wt=AT(w); n=AN(w);
+ if(unlikely(!(wt&NUMERIC))){ASSERT(AN(w)==0,EVDOMAIN) wt=B01;}  // arg must be numeric.  If it is, keep its type even if empty; if not, fail unless empty, for which treat as boolean
+ VA1 *p=&u->p1[(0x76098054032100>>(CTTZ(wt)<<2))&0xf];  // convert numeric type to 4-bit fn#
+
+ if(likely(!((I)jtinplace&JTRETRY))){
   ado=p->f; cv=p->cv;
  }else{
   I m=REPSGN((wt&XNUM+RAT)-1);   // -1 if not XNUM/RAT
@@ -162,25 +225,33 @@ static A jtva1(J jt,A w,A self){A z;I cv,n,t,wt,zt;VA1F ado;
    case VA1CASE(EWIRR, VA1CLOG-VA1ORIGIN): cv=VD+(VDD&m); ado=m?(VA1F)logD:(VA1F)logXD; break;
    case VA1CASE(EWIMAG,VA1CROOT-VA1ORIGIN): cv=VZ+VZZ;   ado=sqrtZ;                break;  // this case remains because singleton code fails over to it
    case VA1CASE(EWIMAG,VA1CLOG-VA1ORIGIN): cv=VZ+(VZZ&m); ado=m?(VA1F)logZ:wt&XNUM?(VA1F)logXZ:(VA1F)logQZ; break;   // singleton code fails over to this too
+   case VA1CASE(EWRAT,VA1CMIN-VA1ORIGIN): cv=VQ; ado=floorQQ; break;   // must be <. _
+   case VA1CASE(EWRAT,VA1CMAX-VA1ORIGIN): cv=VQ; ado=ceilQQ; break;   // must be >. _
   }
   RESETERR;
  }
- if(ado==0)R w;  // if function is identity, return arg
+ zt=rtype(cv); zt=zt==0?wt:zt;  // Extract output type; if none given, means 'keep same type'
+ if(ado==0){  // the function is an identity function
+  if(((zt^AT(w))&NUMERIC)==0)RCA(w);  // if the argument has the correct type, return the argument
+  GA(z,zt,n,AR(w),AS(w)); RETF(z);  // if not, must be empty, make an appropriate empty and return it
+ }
  if(unlikely((SGNIFSPARSE(AT(w))&-n)<0))R va1s(w,self,cv,ado);  // branch off to do sparse
  // from here on is dense va1
- t=atype(cv); zt=rtype(cv);  // extract required type of input and result
+ t=atype(cv);  // extract required type of input and result
  if(t&~wt){RZ(w=cvt(t,w)); jtinplace=(J)((I)jtinplace|JTINPLACEW);}  // convert input if necessary; if we converted, converted result is ipso facto inplaceable.  t is usually 0
- if(ASGNINPLACESGN(SGNIF((I)jtinplace,JTINPLACEWX)&SGNIF(cv,VIPOKWX),w)){z=w; if(TYPESNE(AT(w),zt))MODBLOCKTYPE(z,zt)}else{GA(z,zt,n,AR(w),AS(w));}
- if(!n){RETF(z);} 
+ if(ASGNINPLACESGN(SGNIF(jtinplace,JTINPLACEWX)&SGNIF(cv,VIPOKWX),w)){z=w; if(TYPESNE(AT(w),zt))MODBLOCKTYPE(z,zt)}else{GA(z,zt,n,AR(w),AS(w)); if(unlikely(zt&CMPX+QP))AK(z)=(AK(z)+SZD)&~SZD;}  // move 16-byte values to 16-byte bdy
+ if(!n){RETF(z);}
  I oprc = ((AHDR1FN*)ado)(jt,n,AV(z),AV(w));  // perform the operation on all the atoms, save result status.  If an error was signaled it will be reported here, but not necessarily vice versa
- if(oprc==EVOK){RETF(cv&VRI+VRD?cvz(cv,z):z);}  // Normal return point: if no error, convert the result if necessary (rare)
+ if(!(oprc&(255&~EVNOCONV))){RETF(cv&VRI+VRD&&oprc!=EVNOCONV?cvz(cv,z):z);}  // Normal return point: if no error, convert the result if necessary (rare)
  else{
   // There was an error.  If it is recoverable in place, handle the cases here
   // positive result gives error type to use for retrying the operation; negative is 1's complement of the restart point (first value NOT stored)
   // integer abs: convert everything to float, changing IMIN to IMAX+1
-  if(ado==absI){A zz=z; if(VIP64){MODBLOCKTYPE(zz,FL)}else{GATV(zz,FL,n,AR(z),AS(z))}; I *zv=IAV(z); D *zzv=DAV(zz); DQ(n, if(*zv<0)*zzv=-(D)*zv;else*zzv=(D)*zv; ++zv; ++zzv;) RETF(zz);}
+  if(ado==absI){A zz=z; if(VIP64){MODBLOCKTYPE(zz,FL)}else{GATV(zz,FL,n,AR(z),AS(z))}; I *zv=IAV(z); D *zzv=DAV(zz); DQ(n, if(unlikely(*zv<0))*zzv=-(D)*zv;else*zzv=(D)*zv; ++zv; ++zzv;) RETF(zz);}
   // float sqrt: reallocate as complex, scan to make positive results real and negative ones imaginary
   if(ado==sqrtD){A zz; GATV(zz,CMPX,n,AR(z),AS(z)); D *zv=DAV(z); Z *zzv=ZAV(zz); DQ(n, if(*zv>=0){zzv->re=*zv;zzv->im=0.0;}else{zzv->im=-*zv;zzv->re=0.0;} ++zv; ++zzv;) RETF(zz);}
+  // QP sqrt: like D but no need to reallocate, just change the result type.  This puns on the fact that E and Z types overlap perfectly
+  if(ado==sqrtE){AT(z)=CMPX; E *zv=EAV(z); DQ(n, if(zv->hi>=0){zv->lo=0.0;}else{zv->lo=-zv->hi;zv->hi=0.0;} ++zv;) RETF(z);}
   // float floor: unconvertable cases are stored with bit 63 and bit 62 unlike; restore the float value by setting bit 62.
   // if bit 0 of oprc is 1, values must be converted to float; if 0, they can be left as int
   if(VIP64&&ado==floorDI){A zz=z;
@@ -197,7 +268,8 @@ static A jtva1(J jt,A w,A self){A z;I cv,n,t,wt,zt;VA1F ado;
 
   // not recoverable in place.  If recoverable with a retry, do the retry; otherwise fail.  Caller will decide; we return error indic
   // we set the error code from the value given by the routine, except that if it involves a restart it must have been ceil/floor that we couldn't restart - that's a EWOV
-  oprc=oprc<0?EWOV:oprc; if(oprc>NEVM)RESETERR; jt->jerr=(UC)oprc;  // if this is going to retry, clear the old error text; but leave the error value
+  oprc=oprc<0?EWOV:oprc;
+  if(oprc<=NEVM){RESETERR; jsignal(oprc);}else jt->jerr=(UC)oprc;  // if real error, set error text; otherwise save error code for analysis
   R 0;
  }
 }
@@ -214,27 +286,32 @@ DF1(jtatomic1){A z;
   // if retryable error, fall through.  The retry will not be through the singleton code
   jtinplace=(J)((I)jtinplace|JTRETRY);  // indicate that we are retrying the operation
  }
- // while it's convenient, check for empty result
- jtinplace=(J)((I)jtinplace+(((SGNTO0(awm1)))<<JTEMPTYX));
- // Run the full dyad, retrying if a retryable error is returned
+ // Run the full op, retrying if a retryable error is returned
  NOUNROLL while(1){  // run until we get no error
   z=jtva1(jtinplace,w,self);  // execute the verb
-  if(z||jt->jerr<=NEVM){RETF(z);}   // return if no error or error not retryable
+  if(likely(z!=0)){RETF(z);}  // normal case is good return
+  if(unlikely(jt->jerr<=NEVM))break;  // if nonretryable error, exit
   jtinplace=(J)((I)jtinplace|JTRETRY);  // indicate that we are retrying the operation
  }
+ // There was an error. format it now
+ jteformat(jt,self,w,0,0);
+ RETF(z);
 }
 
-DF1(jtpix){F1PREFIP; ARGCHK1(w); if(unlikely(XNUM&AT(w)))if(jt->xmode==XMFLR||jt->xmode==XMCEIL)R jtatomic1(jtinplace,w,self); R jtatomic2(jtinplace,pie,w,ds(CSTAR));}
+#define SETCONPTR(n) A conptr=num(n); A conptr2=zeroionei(n); conptr=AT(w)&INT?conptr2:conptr; conptr2=numvr(n); conptr=AT(w)&FL?conptr2:conptr;  // for 0 or 1 only
+DF1(jtnegate){ARGCHK1(w); if(unlikely(AT(w)&QP))R jtva1(jt,w,self); SETCONPTR(0) R minus(conptr,w);}
+DF1(jtrecip ){ARGCHK1(w); if(unlikely(AT(w)&QP))R jtva1(jt,w,self); A conptr=num(1); A conptr2=numvr(1); R divide(AT(w)&XNUM+RAT?conptr:conptr2,w);}
+DF1(jtpix){F1PREFIP; ARGCHK1(w); if(unlikely(XNUM&AT(w)))if(jt->xmode==XMFLR||jt->xmode==XMCEIL)R jtatomic1(jtinplace,w,self); R jtatomic2(jtinplace,AT(w)&QP?pieE:pie,w,ds(CSTAR));}
 
 // special code for x ((<[!.0] |) * ]) y, implemented as if !.0
-#if (C_AVX&&SY_64) || EMU_AVX
+#if C_AVX2 || EMU_AVX2
 DF2(jtdeadband){A zz;
  F2PREFIP;ARGCHK2(a,w);
  I n=AN(w);  // number of atoms to process
   // revert if not the special case we handle: both args FL, not sparse, a is an atom, w is nonempty
  if(unlikely((((AT(a)|AT(w))&(NOUN+SPARSE))&(REPSGN(((I)AR(a)-1)&-n)))!=FL))R jtfolk2(jtinplace,a,w,self);
  // allocate the result area, inplacing w if possible
- if(ASGNINPLACESGN(SGNIF((I)jtinplace,JTINPLACEWX),w)){zz=w;}else{GATV(zz,FL,AN(w),AR(w),AS(w));}
+ if(ASGNINPLACESGN(SGNIF(jtinplace,JTINPLACEWX),w)){zz=w;}else{GATV(zz,FL,AN(w),AR(w),AS(w));}
  // perform the operation
  D *x=DAV(w), *z=DAV(zz);  // input and output pointers
  AVXATOMLOOP(0,  // unroll loop

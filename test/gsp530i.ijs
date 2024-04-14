@@ -1,9 +1,9 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './gsp530i.ijs'
+prolog './gsp530i.ijs'
 NB. } integer indices ----------------------------------------------------
 
 d=: ?11 5 7 3 2$4
 
-f=: 4 : '(x (<"0 y)}d) -: $.^:_1 x y}s'
+f=: 4 : '(x (<"0 y)}d) -: $.^:_1 x (,y)}s'
 h=: 4 : 'x f i=:g s=:(2;y)$.d'
 
 g=: 3 : '(>:?5$5) ?@$ #s'
@@ -21,16 +21,25 @@ g=: 3 : '(>:?3$2) ?@$ #s'
 d=: (?23 5$2) * ?23 5 7 3 2$4
 c=: ; (i.1+r) <"1@comb&.>r=:#$d
 f=: 3 : 0
-assert. (a (<"0 i)}d) -: $.^:_1 a i}s [ a=:h i=:g s=:(2;y)$.d
+assert. (a (<"0 ,i)}d) -: $.^:_1 a (,i)}s [ a=:h i=:,g s=:(2;y)$.d
 1
 )
+fs=: 3 : 0
+assert. (a (<"0 ,i)}d) -: $.^:_1 a (i)}s [ a=:h i=:g s=:(2;y)$.d   NB. This is a bug: f should work
+1
+)
+
+NB. scatter amend
+(4 #"0 ] 1 0 0) -: 1 (1 1$0)} 1$.3 4;0 1 ;0
+(4 #"0 ] 0 0 0) -: 1 (0 0$0)} 1$.3 4;0 1 ;0
+
 
 g=: 3 : '(>:?4$4) ?@$ #d'
 
 h=: 3 : '(}.$d) ?@$ 10'
 ] b=: f&>c
 
-h=: 3 : '(($i),}.$d) ?@$ 10'
+h=: 3 : '(($,i),}.$d) ?@$ 10'
 ] b=: f&>c
 
 g=: 3 : '?#d'          NB. scalar index 
@@ -39,7 +48,7 @@ h=: 3 : '?(}.$d)$5'    NB. dense replacement data
 
 g=: 3 : '?#d'          NB. scalar index
 h=: 3 : '$.?(}.$d)$5'  NB. sparse replacement data
-] b=: f&>c
+] b=: fs&>c  NB.  bug: f should work
 
 s=: $. d=: 1 0 1 0 1 * 10*i.5 3
 (1 2 3 (0)}d) -: 1 2 3 (0)}s
@@ -47,6 +56,11 @@ s=: $. d=: 1 0 1 0 1 * 10*i.5 3
 (1 2 3 (2)}d) -: 1 2 3 (2)}s
 (1 2 3 (3)}d) -: 1 2 3 (3)}s
 (1 2 3 (4)}d) -: 1 2 3 (4)}s
+
+NB. rank-2 m is like <"1 m
+(1 2 3 (_2 ]\2 2 3 1 4 0)}d) -: 1 2 3 (_2 ]\2 2 3 1 4 0)}s
+(1 (_2 ]\2 2 3 1)}d) -: 1 (_2 ]\2 2 3 1)}s
+
 
 
 NB. amend in place -------------------------------------------------------
@@ -111,6 +125,10 @@ x=: ?($i{d)$1000
 s -: d
 (x i}d) -: x i}s
 
+'length error' -: {{ a=: $.,:5
+a=: 0 (,:1 1)} a }} etx ''   NB. formerly failed to ra and crashed
+
+
 'domain error' -: (3 4$'x') 2 0} etx $.i.2 3 4
 'domain error' -: (3 4$<4 ) 2 0} etx $.i.2 3 4
 
@@ -120,6 +138,9 @@ s -: d
 'length error' -: (i.2 3)   2 0} etx $.i.4 3 2
 
 
-4!:55 ;:'a b c d f g h i m r s t x'
+4!:55 ;:'a b c d f fs g h i m r s t x'
 
+
+
+epilog''
 

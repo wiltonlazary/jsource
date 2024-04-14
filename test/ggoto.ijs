@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './ggoto.ijs'
+prolog './ggoto.ijs'
 NB. goto ----------------------------------------------------------------
 
 fc =: 3 : 0
@@ -175,7 +175,59 @@ bod=: (<;._2) 0 : 0
 0 0 0 0 0 0 0 0 0 0 1 1 1 1 1 1 1 0 -: b=: def i.1+#xx=: build 15
 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 1 -: b=: def i.1+#xx=: build 16
 
+NB. Test branching out of control structures
+fc =: {{
+r =. 0
+for. i. 10 do.
+  for. 10 do.
+    r =. >: r
+    goto_spec.
+  end.
+label_spec.
+end.
+r
+}}
+10 = fc ''
+
+fc =: {{
+r =. 0
+for. i. 10 do.
+  r =. >: r
+  select. y
+  case. 0 do.
+  case. 1 do. goto_spec.
+  end.
+label_spec.
+end.
+r
+}}
+10 = fc ''
+10 = fc 0
+10 = fc 1
+
+fc =: {{
+r =. 0
+for. i. 10 do.
+  for. 10 20 do.
+    r =. >: r
+    select. y
+    case. 0 do.
+    case. 1 do. goto_spec.
+    end.
+  end.
+label_spec.
+end.
+r
+}}
+20 = fc 0
+10 = fc 1
+
+
+
 
 4!:55 ;:'b bod build def fc goto i lab xx yy'
 
+
+
+epilog''
 

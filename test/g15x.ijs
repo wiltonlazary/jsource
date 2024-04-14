@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g15x.ijs'
+prolog './g15x.ijs'
 NB. 15!: ----------------------------------------------------------------
 
 NB. runs as noop as winapi.ijs is no longer supported - might be resurrected some day
@@ -113,41 +113,54 @@ test ''
 
 t=: 100 ?@$ 1e6
 t -:      15!:1 (15!:14 <'t'),0,(*/$t),3!:0 t
-t=: 100 4 ?@$ 0
+(15!:14 <'t') = (15!:12 <'t') + 8*SZI
+t=: 100 4 1?@$ 0
 t -: ($t)$15!:1 (15!:14 <'t'),0,(*/$t),3!:0 t
+(15!:14 <'t') = (15!:12 <'t') +10*SZI
 
 'domain error' -: 15!:6  etx <'test'
 'domain error' -: 15!:6  etx ;:'t test'
-'value error' -: 15!:6  etx <u:'test'
-'value error' -: 15!:6  etx u:&.> ;:'t test'
-'value error' -: 15!:6  etx <10&u:'test'
-'value error' -: 15!:6  etx 10&u:&.> ;:'t test'
-'value error' -: 15!:6  etx s:@<"0&.> <'test'
-'value error' -: 15!:6  etx <"0@s: <'test'
+'domain error' -: 15!:6  etx <u:'test'
+'domain error' -: 15!:6  etx u:&.> ;:'t test'
+'domain error' -: 15!:6  etx <10&u:'test'
+'domain error' -: 15!:6  etx 10&u:&.> ;:'t test'
+'domain error' -: 15!:6  etx s:@<"0&.> <'test'
+'domain error' -: 15!:6  etx <"0@s: <'test'
 NB. ??? sometimes ill-formed name
 NB. 'value error' -: 15!:6  etx s:@<"0&.> ;:'t test'
 NB. 'value error' -: 15!:6  etx <"0@s: ;:'t test'
 'domain error' -: 15!:14 etx <'test'
 'domain error' -: 15!:14 etx ;:'t test'
-'value error' -: 15!:14 etx <u:'test'
-'value error' -: 15!:14 etx u:&.> ;:'t test'
-'value error' -: 15!:14 etx <10&u:'test'
-'value error' -: 15!:14 etx 10&u:&.> ;:'t test'
-'value error' -: 15!:14 etx s:@<"0&.> <'test'
-'value error' -: 15!:14 etx <"0@s: <'test'
+'domain error' -: 15!:14 etx <u:'test'
+'domain error' -: 15!:14 etx u:&.> ;:'t test'
+'domain error' -: 15!:14 etx <10&u:'test'
+'domain error' -: 15!:14 etx 10&u:&.> ;:'t test'
+'domain error' -: 15!:14 etx s:@<"0&.> <'test'
+'domain error' -: 15!:14 etx <"0@s: <'test'
 NB. ??? sometimes ill-formed name
 NB. 'value error' -: 15!:14 etx s:@<"0&.> ;:'t test'
 NB. 'value error' -: 15!:14 etx <"0@s: ;:'t test'
 
-NB. 'value error'  -: 15!:6  etx <'undefinedname'
-NB. 'value error'  -: 15!:6  etx ;:'t undefinedname'
-NB. 'value error'  -: 15!:14 etx <'undefinedname'
-NB. 'value error'  -: 15!:14 etx ;:'t undefinedname'
+'value error'  -: 15!:6  etx <'undefinedname'
+'value error'  -: 15!:6  etx ;:'t undefinedname'
+'value error'  -: 15!:14 etx <'undefinedname'
+'value error'  -: 15!:14 etx ;:'t undefinedname'
 
 NB. 0 ~: jt=: 15!:19 ''
 NB. 0 = 15!:20 'nosuchlibrary'
 NB. 0 ~: h=: 15!:20 >IFUNIX{ 'wsock32' ; unxlib 'c'
 NB. 0 ~: h 15!:21 'gethostname'
+
+h =: i. 2 3 4
+i =: 15!:18 h
+i -: h
+0 = 64 | 0 { 13!:_4 i
+h =: 3 4 (15!:18) 'abc'
+h -: 3 4 ($,) 'abc'
+0 = 64 | 0 { 13!:_4 h
+h =: (15!:18) 'abc'
+0 = 64 | 0 { 13!:_4 h
+
 
 4!:55 ;:'CREATE_NEW FILE_BEGIN FILE_CURRENT FILE_END GENERIC_READ '
 4!:55 ;:'GENERIC_WRITE OPEN_EXISTING '
@@ -157,4 +170,7 @@ NB. 0 ~: h 15!:21 'gethostname'
 4!:55 ;:'fopen fread fsetptr fsize fwrite '
 4!:55 ;:'h i jt pc s sbp t test winset'
 
+
+
+epilog''
 

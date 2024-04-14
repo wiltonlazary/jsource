@@ -1,4 +1,4 @@
-/* Copyright 1990-2009, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 // result collection and assembly for modifiers
@@ -27,10 +27,6 @@
 // next flag must match VF2 flags in jtype.h, and must be higher than BOXATOP and lower than all recursible type-flags
 #define ZZFLAGWILLBEOPENEDX 4  // the result will be unboxed by the next primitive, so we can leave virtual blocks in it, as long as they aren't ones we will modify.  Requires BOXATOP also.
 #define ZZFLAGWILLBEOPENED (((I)1)<<ZZFLAGWILLBEOPENEDX)
-#define ZZFLAGHASUNBOXX BOXX  // result contains a nonempty non-box (this must equal BOX)
-#define ZZFLAGHASUNBOX (((I)1)<<ZZFLAGHASUNBOXX)
-#define ZZFLAGHASBOXX (ZZFLAGHASUNBOXX+1)  // result contains a nonempty box (must be one bit above FLAGHASUNBOX)
-#define ZZFLAGHASBOX (((I)1)<<ZZFLAGHASBOXX)
 // next flag must match VF2 flags in jtype.h, and must be higher than BOXATOP, and spacing of VIRTUALBOXED->UNIFORMITEMS must match ZZFLAGWILLBEOPENED->ZZCOUNTITEMS
 #define ZZFLAGCOUNTITEMSX 7  // RA should count the items and verify they are homogeneous (the next primitive is ;)
 #define ZZFLAGCOUNTITEMS (((I)1)<<ZZFLAGCOUNTITEMSX)
@@ -47,7 +43,7 @@
 #define ZZFLAGVIRTAINPLACEX 11 // set if the virtual block for a can be inplaced, based on the iterator context and inplaceability of the input, but ignoring whether the verb inplaces
 #define ZZFLAGVIRTAINPLACE (((I)1)<<ZZFLAGVIRTAINPLACEX)
 
-#define ZZFLAGPRISTINEX AFPRISTINEX  // set if the result is PRISTINE, i. e. boxed and made up entirely of DIRECT inplaceable results
+#define ZZFLAGPRISTINEX AFPRISTINEX  // 24 set if the result is PRISTINE, i. e. boxed and made up entirely of DIRECT inplaceable results.  Immaterial if not boxed
 #define ZZFLAGPRISTINE AFPRISTINE
 
 
@@ -63,7 +59,7 @@
 // Where f is depends on whether the modifier is f@:g or ([: g h)
 #define ZZPARMSNOFS(framelen,ncells) zzframelen=(framelen); zzncells=(ncells);
 #define ZZPARMS(framelen,ncells,valence) ZZPARMSNOFS(framelen,ncells)  \
- if(!ZZASSUMEBOXATOP&&ZZFLAGWORD&ZZFLAGBOXATOP){fs=FAV(fs)->fgh[1]; f##valence=FAV(fs)->valencefns[valence-1];}  // if BOXATOP, we must look back into the verb  ```
+ if(!ZZASSUMEBOXATOP&&ZZFLAGWORD&ZZFLAGBOXATOP){fs=FAV(fs)->fgh[1]; f##valence=FAV(fs)->valencefns[valence-1];}  // if BOXATOP, we must look back into the verb
 
 // user must define ZZINSTALLFRAME(optr) to move frame into optr++ (don't forget to increment optr!)
 
@@ -78,8 +74,11 @@
 // ZZINSTALLFRAME(zzs) code to initialize frame into *zzs++
  A zzbox=0;  // place where we will save boxed inhomogeneous result cells
  I zzresultpri = 0;  // highest priority of boxed result-cells (bit 8=nonempty flag)
+#ifndef ZZASSUMEBOXATOP  // Set in grade - we never do epilog & thus don't need to count items
  I zzcounteditems=0;  // if we count the number of items in the result, this is where we do it
+#endif
  A *zzboxp;  // pointer to next slot in zzbox.  Before zzbox is allocated, this is used to count the number of cells processed.
+ I zznunboxed;  // number of cells written to zz before the first wreck (invalid if no wreck)
  I zzcellp;  // offset (in bytes) of the next homogeneous result cell.  No gaps are left when an inhomogeneous cell is encountered.
  I zzcelllen;  // length in bytes of a homogeneous result cell.
  A zzcellshape;  // INT array holding shape of result-cell, with one extra empty at the end.  SA[] is the data, AR is the valid length, AN is the allocated length.  May be a faux block with nothing else valid
@@ -124,25 +123,20 @@ do{
    ZZFLAGWORD&=((AC(z)>>(BW-AFPRISTINEX))&zzzaflag)|~ZZFLAGPRISTINE;
    // first check the shape
    I zt=AT(z); I zzt=AT(zz); I zr=AR(z); I zzr=AR(zz); I * RESTRICT zs=AS(z); I * RESTRICT zzs=AS(zz)+zzframelen; I zexprank=zzr-zzframelen;
-   // The main result must be recursive if boxed, because it has to get through EPILOG.  To avoid having to pass through the result issuing
-   // ra() on the elements, we ra() each one as it comes along, while we have it in cache.  This leads to some fancy footwork at the end,
-   // if we have to transfer the boxes from zz to a different output block: we want to avoid having to do usecount work then.  To assist
-   // this, we want to be able to know that a result that contains boxes contains ONLY boxes - that way we know there will be no
-   // conversion and no possible error during assembly.  We keep 2 flag bits to indicate the presence of boxed/nonboxed
-   I zzbxm = (zt&BOX)+ZZFLAGHASUNBOX; zzbxm=AN(z)?zzbxm:0; ZZFLAGWORD |= zzbxm;  // accumulate error mask
-     // change in rank/shape: fail
+     // change in rank/shape: a wreck, fail
    zexprank=(zexprank!=zr)?-1:zexprank;  // if zexprank!=zr, make zexprank negative to make sure loop doesn't overrun the smaller shape
    DO(zexprank, zexprank+=zs[i]^zzs[i];)  // if shapes don't match, set zexprank
    if(likely(!((zt&SPARSE) + (zexprank^zr)))){  // if there was no wreck...
-    // rank/shape did not change.  What about the type?
-    if(unlikely(TYPESNE(zt,zzt))){
+    // rank/shape match the items in zz.  We will copy this value as another item in zz, even if there have been earlier wrecks.
+    if(unlikely(TYPESNE(zt,zzt))){  //  What about the type?
      // The type changed.  Convert the types to match.
+     if(unlikely((POSIFHOMO(zzt,zt)&-zzcelllen)<0)){jt->etxinfo->asseminfo.assemwreckt=zt; goto assemblyerror;}  // if incompatible, flag assembly error
      zt=maxtypedne(zt,zzt);  // get larger priority
      if(likely(AN(z)!=0)){I zatomct;
       // nonempty cells. we must convert the actual data.  See which we have to change
       if(zt==zzt){
        // Here the type of z must change.  Just convert it to type zt
-       ASSERT(z=cvt(zt,z),EVDOMAIN);
+       RZ(z=cvt(zt,z));
       }else{I zzatomshift=CTTZ(bpnoun(zzt)); I zexpshift = CTTZ(bpnoun(zt))-zzatomshift;  // convert zz from type zzt to type zt.  shift for size of atom; expansion factor of the conversion, as shift amount
        // here the old values in zz must change.  Convert them.  Use the special flag to cvt that converts only as many atoms as given
 #if !ZZSTARTATEND
@@ -151,7 +145,7 @@ do{
        zatomct=((zzcellp+zzcelllen)>>zzatomshift)-AN(zz);   // get # atoms that have been filled in, not including what we haven't filled yet in this cell
                    // make negative to tell ccvt that the value to change are at the end of the block
 #endif
-       ASSERT(ccvt(zt|NOUNCVTVALIDCT,zz,(A*)&zatomct),EVDOMAIN); zz=(A)zatomct;  // flag means convert only # atoms given in zatomct
+       RZ(ccvt(zt|NOUNCVTVALIDCT,zz,(A*)&zatomct)); zz=(A)zatomct;  // flag means convert only # atoms given in zatomct
        // change the strides to match the new cellsize
        if(zexpshift>=0){zzcelllen<<=zexpshift; zzcellp<<=zexpshift;}else{zzcelllen>>=-zexpshift; zzcellp>>=-zexpshift;}
        // if the new type is recursible, make sure zz is recursive.  This simplifies logic below
@@ -184,28 +178,30 @@ do{
      // if unzappable OR recursible nonrecursive, raise children - even if z is UNINCORPABLE or VIRTUAL.  The children are about to be copied
      // We raise only the children, not the base block.  This converts the children to recursive usecount.  We leave the base block nonrecursive if it started
      // that way.  We may zap it later.  By not making the base recursive, we add 1 to the effective usecount of the children
-     jtra(z,AT(z));   // raise children only and make them recursive
+     jtra(z,AT(z),0);   // raise children only and make them recursive
     }
     // copy the cells, which have been raised if needed.  If we are copying forward, it is OK to copy fullwords
     JMCR(CAV(zz)+zzcellp,AV(z),zzcelllen,ZZSTARTATEND,zzendmask)
-    // Release the result now that we have copied its elements.  We do this rather than calling tpop to save the overhead, on the grounds that
+    // Release the cell result now that we have copied its elements.  We do this rather than calling tpop to save the overhead, on the grounds that
     // any routine that allocated memory should have freed it, so the only thing on the tpop stack should be the result.  We do this only if the
     // result was inplaceable: otherwise the block is protected somewhere else and we can't free it.
     // We free only the z block itself, not its children: children were incorporated above
     // if the value iz zappable, zap it (it may have become zappable, if it turned recursive above).  Free only the root block
     // We should do this for virtual blocks also, to get the full effect of tpop.  When we can zap virtuals we will
-    if(likely(zzoktozap<0)){*AZAPLOC(z)=0; mf(z);}  // free the root block.  If is has descendants their ownership was transferred to zz.
+    if(likely(zzoktozap<0)){*AZAPLOC(z)=0; mf(z);}  // free the root block.  If it has descendants their ownership was transferred to zz.
 #if !ZZSTARTATEND
     zzcellp+=zzcelllen;  // advance to next cell
 #else
     zzcellp-=zzcelllen;  // back up to next cell
 #endif
     // **** z may have been destroyed and must not be used from here on ****
-   }else{  // there was a wreck
+   }else{  // the current cell-result is a wreck
     if(unlikely(ISSPARSE(zt))){
      // we encountered a sparse result.  Ecch.  We are going to have to box all the results and open them.  Remember that fact
      ZZFLAGWORD|=ZZFLAGUSEOPEN;
     }
+    // see if the new results are compatible with the incumbents (provided they are both not empty)
+    if(unlikely((POSIFHOMO(AT(zz),zt)&-zzcelllen&-AN(z))<0)){jt->etxinfo->asseminfo.assemwreckt=zt; goto assemblyerror;}
     do{
      if(ZZFLAGWORD&ZZFLAGBOXALLO){
       // not the first wreck: we have a pointer to the A block for the boxed area
@@ -230,10 +226,11 @@ do{
      }else{I nboxes;
       // first wreck.  Allocate a boxed array to hold the results that mismatch zz
       // use zzboxp to tell how many results have been processed already; allocate space for the rest
+      zznunboxed=(UI)zzboxp>>LGSZI;  // number of boxes filled before first wreck
 #if !ZZSTARTATEND  // going forwards
-      PROD(nboxes,zzframelen,AS(zz)); nboxes -= (zzboxp-(A*)0);   // see how many boxes we need: the number of cells, minus the number of cells processed so far
+      PROD(nboxes,zzframelen,AS(zz)); nboxes -= zznunboxed;    // see how many boxes we need: the number of cells, minus the number of cells processed so far
 #else
-      nboxes = (zzboxp-(A*)0)+1;   // if box-pointer counts down, it already holds the # boxes left to do
+      nboxes = 1 + zznunboxed;   // if box-pointer counts down, it already holds the # boxes left to do
 #endif
       // Allocate the boxed-result area.  Every result that doesn't match zz will be stored here, and we leave zeros for the places that DID match zz,
       // so that we can tell which result-cells come from zz and which from zzbox.
@@ -247,7 +244,7 @@ do{
       zzresultpri=0;  // initialize the result type to low-value
       // init the vector where we will accumulate the maximum shape along each axis.  The AN field holds the allocated size and AR holds the actual size; AS[] is the data
       // We use a faux-A block to catch most of the cases.  The part before AN is not allocated on the stack and we don't refer to it
-      if(AR(zz)-zzframelen<=ZZFAUXCELLSHAPEMAXRANK){zzcellshape=(A)((I)zzfauxcellshape-offsetof(AD,n)); AN(zzcellshape)=ZZFAUXCELLSHAPEMAXRANK+1;} else {GATV0(zzcellshape,INT,AR(zz)-zzframelen+3,0);}
+      if(likely(AR(zz)-zzframelen<=ZZFAUXCELLSHAPEMAXRANK)){zzcellshape=(A)((I)zzfauxcellshape-offsetof(AD,n)); AN(zzcellshape)=ZZFAUXCELLSHAPEMAXRANK+1;} else {GATV0(zzcellshape,INT,AR(zz)-zzframelen+3,0);}
       AR(zzcellshape)=(RANKT)(AR(zz)-zzframelen); MCISH(AS(zzcellshape),AS(zz)+zzframelen,AR(zz)-zzframelen);
       ZZFLAGWORD|=(ZZFLAGBOXALLO);  // indicate we have allocated the boxed area
      }
@@ -278,15 +275,26 @@ do{
      // if the result will be razed next, we will count the items and store that in AM.  We will also ensure that the result boxes' contents have the same type
      // and item-shape.  If one does not, we turn off special raze processing.  It is safe to take over the AM field in this case, because we know this is WILLBEOPENED and
      // (1) will never assemble or epilog; (2) will feed directly into a verb that will discard it without doing any usecount modification
-#if !ZZSTARTATEND  // going forwards
-     A result0=AAV(zz)[0];   // fetch pointer to the first 
+     I diff;  // Will be set to 0 if we are unable to report the # items
+#if PYXES
+     // If the returned result is a pyx, we can't look into it to get its type/len.  We could see if the pyx has been resolved, but we don't
+     if(likely(!(diff=(AT(z)&BOX+PYX)==BOX+PYX))){  // if the result is a pyx that can't be inspected, skip it
 #else
-     A result0=AAV(zz)[AN(zz)-1];  // fetch pointer to first value stored, which is in the last position
+     {
 #endif
-     I* zs=AS(z); I* ress=AS(result0); I zr=AR(z); I resr=AR(result0); //fetch info
-     I diff=TYPESXOR(AT(z),AT(result0))|(MAX(zr,1)^MAX(resr,1)); resr=(zr>resr)?resr:zr;  DO(resr-1, diff|=zs[i+1]^ress[i+1];)  // see if there is a mismatch.  Fixed loop to avoid misprediction
-     ZZFLAGWORD^=(diff!=0)<<ZZFLAGCOUNTITEMSX;  // turn off bit if so 
-     I nitems=zs[0]; nitems=(zr==0)?1:nitems; zzcounteditems+=nitems;  // add new items to count in zz.  zs[0] will never segfault, even if z is empty
+#if !ZZSTARTATEND  // going forwards
+       A result0=AAV(zz)[0];   // fetch pointer to the first 
+#else
+       A result0=AAV(zz)[AN(zz)-1];  // fetch pointer to first value stored, which is in the last position
+#endif
+      // see if the items of the new match the old, and increment the number of items
+      I* zs=AS(z); I* ress=AS(result0); I zr=AR(z); I resr=AR(result0); //fetch info
+      diff=TYPESXOR(AT(z),AT(result0))|(MAX(zr,1)^MAX(resr,1)); resr=(zr>resr)?resr:zr;  DO(resr-1, diff|=zs[i+1]^ress[i+1];)  // see if there is a mismatch.  Fixed loop to avoid misprediction
+#if !ZZASSUMEBOXATOP  // ASSUMEBOXATOP is set only for m@.v, which never checks counteditems
+      I nitems=zs[0]; nitems=(zr==0)?1:nitems; zzcounteditems+=nitems;  // add new items to count in zz.  zs[0] will never segfault, even if z is empty
+#endif
+     }
+     ZZFLAGWORD^=(diff!=0)<<ZZFLAGCOUNTITEMSX;  // turn off bit if we can't say the items are homogeneous
     }
     // Note: by checking COUNTITEMS inside WILLBEOPENED we suppress support for COUNTITEMS in \. which sets WILLBEOPENEDNEVER.  It would be safe to
     // count then, because no virtual contents would be allowed.  But we are not sure that the EPILOG is safe, and this path is now off to the side
@@ -302,7 +310,7 @@ do{
   --zzboxp;
 #endif
   break;  // skip the first-cell processing
- } else{I * RESTRICT is;
+ }else{I * RESTRICT is;
   // Processing the first cell.  Allocate the result area now that we know the shape/type of the result.
   // Get the rank/type to allocate for the presumed result
   // Get the type to allocate
@@ -322,9 +330,10 @@ do{
   AFLAGORLOCAL(zz,(zzt&RECURSIBLE) & ((ZZFLAGWORD&ZZFLAGWILLBEOPENED)-1))  // if recursible type, (viz box), make it recursible.  But not if WILLBEOPENED set. Leave usecount unchanged
   // Install result frame by running user's routine.  zzs must be left pointing to the cell-shape
   ZZINSTALLFRAME(zzs)
-  // Install the result shape.  If we encounter a sparse result,  We are going to have to box all the results and open them.  If the sparse result is the first,
-  // we are going to have a situation where nothing can ever get moved into zz, so we have to come up with a plausible zz to make that happen.  We create a zz with negative shape
-  is = AS(z); zzt=zzt&SPARSE; DQ(zzr, *zzs++=zzt|*is++;);    // copy result shape; but if SPARSE, make it negative to guarantee miscompare
+  // Install the result shape.
+  MCISH(zzs,AS(z),zzr)    // copy result shape
+  if(unlikely(zzt&SPARSE)){zzs[zzr-1]=SPARSE>>1;}  // If we encounter a sparse result,  We are going to have to box all the results and open them.  If the sparse result is the first,
+         // we are going to have a situation where nothing can ever get moved into zz, so we have to come up with a plausible zzs to make that happen.  Sparse cannot be an atom!
   // Set up the pointers/sizes for the rest of the operation
   zzboxp=AAV(zz); zzboxp=ZZASSUMEBOXATOP||ZZFLAGWORD&ZZFLAGBOXATOP?zzboxp:0;  // zzboxp=0 normally (to count stores), but for BOXATOP is the store pointer
 #if !ZZSTARTATEND  // going forwards
@@ -353,15 +362,32 @@ do{
  if(ZZFLAGWORD&ZZFLAGWILLBEOPENED){
   AFLAGORLOCAL(zz,(ZZFLAGWORD&(ZZFLAGWILLBEOPENED|ZZFLAGCOUNTITEMS))<<(AFUNIFORMITEMSX-ZZFLAGCOUNTITEMSX))
   if(ZZFLAGWORD&ZZFLAGCOUNTITEMS)AS(zz)[0]=zzcounteditems;  // Store the # items into shape[0] of result
+#if ANASARGEEMENT
+// Not applicable because Store the # items into shape[0] of result
+  R zz;
+#else
   RETF(zz);
+#endif
  }
 
- ASSERT((ZZFLAGWORD&(ZZFLAGHASUNBOX|ZZFLAGHASBOX))!=(ZZFLAGHASUNBOX|ZZFLAGHASBOX),EVDOMAIN);  // if there is a mix of boxed and non-boxed results, fail
  if(ZZFLAGWORD&ZZFLAGBOXALLO){
   RZ(zz=assembleresults(ZZFLAGWORD,zz,zzbox,zzboxp,zzcellp,zzcelllen,zzresultpri,zzcellshape,zzncells,zzframelen,-ZZSTARTATEND));  // inhomogeneous results: go assemble them
+ }else if(unlikely(0)){
+assemblyerror: ;  // assembly error.  Fill in the information that will be needed for formatting
+  jt->etxinfo->asseminfo.assemframelen=zzframelen;  // length of frame of assembled data
+  jt->etxinfo->asseminfo.assemorigt=AT(zz);  // AT of first result
+  MC(jt->etxinfo->asseminfo.assemshape,AS(zz),zzframelen<<LGSZI);  // frame of assembled data
+#if !ZZSTARTATEND  // going forwards
+  jt->etxinfo->asseminfo.assemwreckofst=(ZZFLAGWORD&ZZFLAGBOXALLO)?(zzboxp-AAV(zzbox))+zznunboxed:(UI)zzboxp>>LGSZI;  // index of (unwritten) inhomo item
+#else
+  jt->etxinfo->asseminfo.assemwreckofst=(ZZFLAGWORD&ZZFLAGBOXALLO)?(zzboxp-AAV(zzbox)):(UI)zzboxp>>LGSZI;  // index of (unwritten) inhomo item
+#endif
+  ASSERT(0,EVASSEMBLY)
  }
+
  // assembly may have added framing fill but it didn't repeat any cells.  If we thought the result was pristine, it is
  AFLAGORLOCAL(zz,ZZFLAGWORD&ZZFLAGPRISTINE)
+
 #undef ZZFLAGWORD
 #undef ZZWILLBEOPENEDNEVER
 #undef ZZSTARTATEND

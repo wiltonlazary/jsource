@@ -1,33 +1,38 @@
-/* Copyright 1990-2006, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Words: Numeric Input Conversion                                         */
 
 #include "j.h"
+#include <ctype.h>
 
-#if (SYS & SYS_LINUX)
+#if (SYS & SYS_UNIX)
 #include <stdlib.h>
 #endif
 
 #define NUMH(f)  B f(J jt,I n,C*s,void*vv)
 
-/* numd    floating point number (double)                      */
-/* numj    complex number                                      */
-/* numx    extended precision integer                          */
-/* nume    extended precision floating point number (not used) */
-/* numr    rational number                                     */
-/* numq    nume or numr                                        */
-/* numbpx  3b12 or 3p12 or 3x12 number                         */
-/*                                                             */
-/* numb    subfunction of numbpx                               */
-/*                                                             */
-/* converts a single number and assigns into result pointer    */
-/* returns 0 if error, 1 if ok                                 */
+// numfd    floating point number (double)
+// numfq    floating point number (quad)
+// numj     complex number
+// numx     extended precision integer
+// nume     extended precision floating point number (not used)
+// numr     rational number
+// numq     nume or numr
+// numbpx   3b12 or 3p12 or 3x12 number
+//
+// numb     subfunction of numbpx
+//
+// converts a single number and assigns into result pointer
+// returns 0 if error, 1 if ok
 
-static NUMH(jtnumd){C c,*t;D*v,x,y;
- if(!(n))R 0;
+static NUMH(jtnumx);
+static NUMH(jtnumi);
+
+static NUMH(jtnumfd){C c,*t;D*v,x,y;
+ if(!n)R 0;
  v=(D*)vv;
- if(((((I)s[0]^'-')-1)&(n-3))<0){   // '-' and n<3
+ if((s[0]=='-')&&n<3){   // '-' and n<3
   if(1==n){*v=inf; R 1;}
   else{
    c=s[1];
@@ -37,15 +42,64 @@ static NUMH(jtnumd){C c,*t;D*v,x,y;
  }
  x=strtod(s,(char**)&t);
  if(t>=s+n){*v=x; R 1;}  // normal return when field consumed
- if(t<s+n-1&&'r'==*t){y=strtod(1+t,(char**)&t); x=y?x/y:0<x?inf:0>x?infm:0;}  // if r in float value, handle the denominator
+ if(t<s+n-1&&'r'==*t){
+  y=strtod(1+t,(char**)&t);
+  if(likely(y)){x=x/y;}  // usual case: nonzero denominator
+  else{ // zero denominator; special case
+   D sign=*(double*)&(IL){(*(IL*)&x)^(*(IL*)&y)}; // sign of result is xor of signs of inputs.  all this faffery for a simple 'xorpd'; oh well
+   if(!x){x=sign;} // produce a zero of the correct sign--since x and y were both 0, the sign bit is the only sig. bit, so 'sign' already has a magnitude of zero
+   else{x=copysign(inf,sign);}}} // produce an infinity of the correct sign
  R t>=s+n?(*v=x,1):0;
 }
+
+static NUMH(jtnumfq){E *v;D sgn=1.0;
+ if(n>=2&&!memcmp(s+n-2,"fq",2))n-=2; // chop 'fq' suffix if present.  compiler open-codes the memcmp
+ if(!n)R 0;
+ v=vv;
+ v->lo=0;
+ if((s[0]=='-')&&n<3){   // '-' and n<3 (_ __ _.)
+  if(1==n){v->hi=inf; R 1;}
+  else{
+   if('-'==s[1]){v->hi=infm; R 1;}
+   else if('.'==s[1]){v->hi=jnan; R 1;}}}
+ if(*s=='-'){sgn=-1.0;s++;n--;}
+ // there is almost certainly a better way to do this.  For now, parse as RAT and then convert to E
+ X r;I ex=0; // result; exponent of 10
+ I i=0;for(;i<n&&BETWEENC(s[i],'0','9');i++); // end of whole part
+ if(!i||!numx(i,s,&r))R 0;
+ if(i<n&&s[i]=='.'){ // skip past .
+  i++;
+  if(i<n&&BETWEENC(s[i],'0','9')){ // fractional part?
+   I fd=0;X fp;
+   I j=i;for(;j<n&&BETWEENC(s[j],'0','9');j++,fd++);
+   if(!numx(j-i,s+i,&fp))R 0;
+   ex=-fd;
+   r=xplus(fp,xtymes(r,xpow(xc(10),xc(fd))));
+   i=j;}}
+ if(i+1<n&&s[i]=='e'){
+  i++;
+  if(s[i]=='+')i++;
+  I tex; if(!numi(n-i,s+i,&tex))R 0;
+  ex+=tex;}
+ else if(i<n){R 0;}
+ // negative exponent; need to make a rational
+ if(ex<0){
+  // underflow
+  if(unlikely(ex<-400)){v->hi=v->lo=0*sgn;R 1;}
+  RZ(qquad(v,qtymes(((Q){.n=r,.d=X1}),((Q){.n=X1,.d=xpow(xc(10),xc(-ex))}))));}
+ else{
+  if(ex){
+   // overflow
+   if(unlikely(ex>400)){v->hi=inf*sgn;R 1;}
+   r=xtymes(r,xpow(xc(10),xc(ex)));}
+  RZ(xquad(v,r));}
+ R 1;}
 
 static NUMH(jtnumj){C*t,*ta;D x,y;Z*v;
  v=(Z*)vv;
  if(t=memchr(s,'j',n))ta=0; else t=ta=memchr(s,'a',n);
- if(!(numd(t?t-s:n,s,&x)))R 0;
- if(t){t+=ta?2:1; if(!(numd(n+s-t,t,&y)))R 0;} else y=0;
+ if(!(numfd(t?t-s:n,s,&x)))R 0;
+ if(t){t+=ta?2:1; if(!(numfd(n+s-t,t,&y)))R 0;} else y=0;
  if(ta){C c;
   c=ta[1];
   if(!(0<=x&&(c=='d'||c=='r')))R 0;
@@ -55,34 +109,32 @@ static NUMH(jtnumj){C*t,*ta;D x,y;Z*v;
  R 1;
 }
 
-static NUMH(jtnumi){I neg;I j;
+static NUMH(jtnumi){UI neg;UI j;  // must be UI to avoid signed overflow
  neg='-'==s[0]; s+=neg; n-=neg; if(!n)R 0;  // extract & skip sign; exit if no digits
  for(;*s=='0';--n,++s);  // skip leading zeros, even down to nothing, which will be 0 value
  if(!(19>=n))R 0;   // 2^63 is 9223372036854775808.  So a 20-digit input must overflow, and the most a
   // 19-digit number can be is a little way into the negative; so testing for negative will be a valid test for overflow
  j=0; DQ(n, I dig=*s++; if(!BETWEENC(dig,'0','9'))R 0; j=10*j+(dig-'0'););
  *(I*)vv=(j^(-neg))+neg;   // if - was coded, take 2's comp, which will leave IMIN unchanged
- R 1+REPSGN(j&(j-neg));  // overflow if negative AND not the case of -2^63, which shows as IMIN with a negative flag
+ R 1+REPSGN((I)(j&(j-neg)));  // overflow if negative AND not the case of -2^63, which shows as IMIN with a negative flag
 }     /* called only if SY_64 */
 
-static NUMH(jtnumx){A y;B b,c;C d;I j,k,m,*yv;X*v;
- v=(X*)vv;
- d=s[n-1]; b='-'==s[0]; c='x'==d||'r'==d; s+=b;
- if('-'==d){if(!(2>=n))R 0; if(!(*v=rifvs(vci(1==n?XPINF:XNINF))))R 0; R 1;}
- n-=b+c; if(!(m=(n+XBASEN-1)/XBASEN))R 0; k=n-XBASEN*(m-1);
- GATV0(y,INT,m,1); yv=m+AV(y);
- DQ(m, j=0; DQ(k, I dig=*s++; if(!BETWEENC(dig,'0','9'))R 0; j=10*j+(dig-'0');); *--yv=b?-j:j; k=XBASEN;);
- if(!(*v=yv[m-1]?y:mkwris(xstd(y))))R 0;  // this stores into the extended result
+static NUMH(jtnumxTEMP) {PROLOG(0098); // n, s, vv NB. n is length of s, we put result in vv
+ GMP;                 // nonce error if libgmp not available
+ n-=s[n-1]=='x';      // if s ends in 'x' make that the end
+ C sav= s[n]; s[n]=0; // store NUL after string, save the character that was there
+ mpz_t mpy; if (jmpz_init_set_str(mpy, s, 10)) {GEMP0; s[n]= sav; R0;}
+ X y= Xmp(y);         // parsed extended integer (if we didn't fail)
+ s[n]= sav;           // restore buffer s to orig state (might be unnecessary)
+ ASSERT(!(AFLAG(y)&AFRO),EVWSFULL); // error if we used an emergency buffer
+ // FIXME: need that EVWSFULL test generically applied in all Xmp contexts
+ *(X*)vv= y; // return the A block for the number
+ R 1;                 // good return
+}
+static NUMH(jtnumx) {
+ if (!jtnumxTEMP(jt, n, s, vv)) R0;
  R 1;
 }
-
-static X jtx10(J jt,I e){A z;I c,m,r,*zv;
- m=1+e/XBASEN; r=e%XBASEN;
- GATV0(z,INT,m,1); zv=AV(z);
- DQ(m-1, *zv++=0;);
- c=1; DQ(r, c*=10;); *zv=c;
- R z;
-}     /* 10^e as a rational number */
 
 static NUMH(jtnume){C*t,*td,*te;I e,ne,nf,ni;Q f,i,*v,x,y;
  v=(Q*)vv;
@@ -99,24 +151,42 @@ static NUMH(jtnume){C*t,*td,*te;I e,ne,nf,ni;Q f,i,*v,x,y;
 
 static NUMH(jtnumr){C c,*t;I m,p,q;Q*v;
  v=(Q*)vv;
- m=(t=memchr(s,'r',n))?t-s:n; if(!(numx(m,s,&v->n)))R 0; v->d=iv1;
- if(t){
-  c=s[n-1]; if(!('r'!=c&&'x'!=c))R 0;
-  if(!(numx(n-m-1,s+m+1,&v->d)))R 0;
-  p=AV(v->n)[0]; q=AV(v->d)[0]; 
-  if(!(p!=XPINF&&p!=XNINF||q!=XPINF&&q!=XNINF))R 0;
-  RE(*v=qstd(*v));
+ if('-'==s[0] && (!s[1] || 'r'==s[1] || '-'==s[1])) { // infinity?
+  I n= 1, j= 1;
+  if ('-'==s[j]) {n=-1; j=2;}
+  if (s[j]) {
+   ASSERT('r'==s[j], EVILNUM); j++;
+   if ('-'==s[j] && isdigit(s[j+1])) {n=-n; j++;}
+   while (isdigit(s[j])) j++;
+   ASSERT(!s[j], EVILNUM);
+  }
+  v->n= 1==n ?X1 :X_1; v->d= X0; R 1;
  }
+ m=(t=memchr(s,'r',n))?t-s:n; if(!(jtnumxTEMP(jt,m,s,&v->n)))R 0; v->d=X1;
+ if(t){
+  c=s[n-1]; if('r'==c||'x'==c)R 0; // '2r' and '2r3x' are invalid
+  C*d= s+m+1;
+  if('-'==d[0]) {
+   if (!d[1] || '-'==d[1] && !d[2]) {*v= Q0; R 1;}
+   if (!jtnumxTEMP(jt,n-m-1,d,&v->d))R 0;
+   RE(*v=qstd(*v));
+   R 1;
+  }
+  if(!(jtnumxTEMP(jt,n-m-1,d,&v->d)))R 0;
+ }
+ RE(*v=qstd(*v));
  R 1;
 }
 
 static NUMH(jtnumq){B b=0;C c,*t;
- t=s; DQ(n, c=*t++; if(c=='e'||c=='.'){b=1; break;});
+ t=s;
+ DQ(n, c=*t++; if(c=='e'||c=='.'){b=1; break;});
  R b?nume(n,s,vv):numr(n,s,vv);
 }
 
 static const Z zpi={PI,0};
 static const C dig[]="0123456789abcdefghijklmnopqrstuvwxyz";
+// set *v to s (of length n) in base b
 static B jtnumb(J jt,I n,C*s,Z*v,Z b){A c,d,y;I k;
  I m=strlen(dig);
  if(!n){*v=zeroZ; R 1;}
@@ -132,7 +202,7 @@ static NUMH(jtnumbpx){B ne,ze;C*t,*u;I k,m;Z b,p,q,*v,x,y;
  v=(Z*)vv;
  if(t=memchr(s,'b',n)){
   // base given
-  if(!(numbpx(t-s,s,&b)))R 0;
+  if(!(numbpx(t-s,s,&b)))R 0;  // convert the base and save it
   ++t; if(ne='-'==*t)++t;  // t->first nonsign digit
   m=k=n+s-t; if(u=memchr(t,'.',m))k=u-t;  // m=total # digits, k=# digits before decimal point
   if(!(m>(1&&u)))R 0;   // assert negative, or ((>1 digit)  or (1 digit) and (there is no decimal point)) i. e. there is at least one non-decimal-point
@@ -174,13 +244,14 @@ static NUMH(jtnumbpx){B ne,ze;C*t,*u;I k,m;Z b,p,q,*v,x,y;
 // If x is not set here, numbers ending in x are ill-formed
 // Example: '1j1 1x' sets j but not x, so 1x is ill-formed
 // Example:  '16b4 1x' similarly, and '4.0 1x' similarly
-/* (n,s) string containing the vector constant                */
+// (n,s) string containing the vector constant
 // returns type bits set in a mask
-/* CMPX:  1 iff contains 1j2 or 1ad2 or 1ar2                     */
-/* LIT:  1 iff has 1b1a or 1p2 or 1x2 (note: must handle 1j3b4) */
-/* XNUM:  1 iff contains 123x                                    */
-/* RAT:  1 iff contains 3r4                                     */
-/* INT: 1 iff integer (but not x)                              */
+// CMPX:  1 iff contains 1j2 or 1ad2 or 1ar2
+// LIT:  1 iff has 1b1a or 1p2 or 1x2 (note: must handle 1j3b4)
+// XNUM:  1 iff contains 123x
+// RAT:  1 iff contains 3r4
+// INT: 1 iff integer (but not x)
+// HP/SP/QP: 1 iff alternate float format (fh/fs/fq)
 
 #define WDDOT (I)0x2e2e2e2e2e2e2e2e  // a word of '.'
 static I jtnumcase(J jt,I n,C*s){B e;C c;I ret;
@@ -196,6 +267,13 @@ static I jtnumcase(J jt,I n,C*s){B e;C c;I ret;
   // if it contains 'b' or 'p', that becomes the type regardless of others
   // (types incompatible with that raise errors later)
   ret=(memchr(s,'j',n)||memchr(s,'a',n)?CMPX:0) + (memchr(s,'b',n)||memchr(s,'p',n)?LIT:0);
+  // if has 'fX', may be alternate float format
+  // consider all instances of f; for example: 2fs 2fq should be HP|QP, and for xfq 2fq, the first one will be an error, but the second should correctly set QP (for x ". y)
+  for(C*t=s;t=memchr(t,'f',n);t++){
+   if(t>s&&t<s+n-1 // match in range (at least one char before and after)
+      &&(BETWEENC(t[-1],'0','9')||unlikely(t>s+1&&t[-1]=='.'&&BETWEENC(t[-2],'0','9')))){ // preceded by digit or digit period (5.fq ok)
+    ret|=t[1]=='h'?HP:t[1]=='s'?SP:t[1]=='q'?QP:0;}}
+  if((ret&(HP|SP|QP))&&memchr(s,'x',n))ret|=LIT;
   if(ret==0){
 #if SY_64
    ret|=INT;  // default to 'nothing seen except integers'
@@ -209,6 +287,9 @@ static I jtnumcase(J jt,I n,C*s){B e;C c;I ret;
    // If any . or e found, or 'x' not at the end, treat as float, with exact modes cleared.  LIT could still be set for 1x2
    // Thus, 4. 1r3 produces float, while 4 1r3 produces rational
    e=s[0]; DO(n, c=e; e=s[i+1]; if(c=='.'||c=='e'||c=='x'&&e){R ret&~(XNUM+RAT+INT);});  // must look at stopper because comma strings have multiple NULs at the end
+   if (XNUM&ret) {
+    e=s[0]; DO(n, c=e; e=s[i+1]; if(!e&&'-'==c){R ret|RAT;});  // x:_ or x:__
+   }
   }
   R ret;
  }
@@ -218,23 +299,25 @@ static I jtnumcase(J jt,I n,C*s){B e;C c;I ret;
 A jtconnum(J jt,I n,C*s){PROLOG(0101);A y,z;B (*f)(J,I,C*,void*),p=1;C c,*v;I d=0,e,k,m,t,*yv;
  if(1==n)                {if(k=s[0]-'0',(UI)k<=(UI)9)R num( k); else R ainf;}  // single digit - a number or _
  else if(2==n&&CSIGN==*s){if(k=s[1]-'0',(UI)k<=(UI)9)R num(-k);}
- RZ(y=mkwris(str(1+n,s))); s=v=CAV(y); s[n]=0;  // s->null-terminated string in new copy, which we will modify
+ RZ(y=mkwris(str(1+n,s))); s=v=CAV(y); s[n]=0;  // s->null-terminated string in (possibly) new copy, which we will modify
  GATV0(y,INT,1+n,1); yv=AV(y);  // allocate area for start/end positions
  C bcvtmask=0;  // bit 1 set to suppress B01, bit 2 to suppress INT
  DO(n, c=*v; c=c==CSIGN?'-':c; c=(c==CTAB)|(c==' ')?C0:c; *v++=c; B b=C0==c; bcvtmask=bcvtmask|(4*(c=='.')+2*((p|b)^1)); yv[d]=i; d+=p^b; p=b;);  // replace _ with -, whitespace with \0; and record start and end positions
    // if we encounter '.', make sure the result is at least FL; if we encounter two non-whitespace in a row, make sure result is at least INT
  yv[d++]=n; m=d>>1;  // append end for last field in case it is missing; m=#fields.  If end was not missing the extra store is harmless
  I tt=numcase(n,s);   // analyze contents of values; returns type flags for chars, as expected except LIT for b
+ ASSERT(!(tt&HP+SP),EVNONCE); // no support for half precision or single precision yet
+ ASSERT(!((tt&QP)&&(tt&LIT)),EVNONCE); // no support for fancy quad-precision yet
  bcvtmask|=(tt&CMPX+LIT)==CMPX?8:0; // flag to force complex if we have j but not b
- f=jtnumd; t=FL;  f=tt&INT?jtnumi:f; t=tt&INT?INT:t;  f=tt&CMPX+LIT?jtnumbpx:f; t=tt&CMPX+LIT?CMPX:t;  f=tt&XNUM?jtnumx:f; t=tt&XNUM?XNUM:t;  f=tt&RAT?jtnumq:f; t=tt&RAT?RAT:t;  // routine to use, and type of result
+ f=jtnumfd; t=FL;  f=tt&QP?jtnumfq:f; t=tt&QP?QP:t;  f=tt&INT?jtnumi:f; t=tt&INT?INT:t;  f=tt&CMPX+LIT?jtnumbpx:f; t=tt&CMPX+LIT?CMPX:t;  f=tt&XNUM?jtnumx:f; t=tt&XNUM?XNUM:t;  f=tt&RAT?jtnumq:f; t=tt&RAT?RAT:t;  // routine to use, and type of result
  k=bpnoun(t);   // size in bytes of 1 result value
  GA0(z,t,m,1!=m); v=CAV(z);
  if(t==INT){  // if we think the values are ints, see if they really are
   DO(m, d=i+i; e=yv[d]; if(!numi(yv[1+d]-e,e+s,v)){t=FL; break;} v+=k;);  // read all values, stopping if a value overflows
-  if(t!=INT){f=jtnumd; if(SZI==SZD){AT(z)=FL;}else{GATV0(z,FL,m,1!=m);} v=CAV(z);}  // if there was overflow, repurpose/allocate the input with enough space for floats
+  if(t!=INT){f=jtnumfd; if(SZI==SZD){AT(z)=FL;}else{GATV0(z,FL,m,1!=m);} v=CAV(z);}  // if there was overflow, repurpose/allocate the input with enough space for floats
  }
  if(t!=INT)DO(m, d=i+i; e=yv[d]; ASSERT(f(jt,yv[1+d]-e,e+s,v),EVILNUM); v+=k;);  // read the values as larger-than-int
- z=bcvt(bcvtmask,z);
+ if(t!=QP)z=bcvt(bcvtmask,z); // never squish QP
  EPILOG(z);
 }
 
@@ -243,7 +326,7 @@ A jtconnum(J jt,I n,C*s){PROLOG(0101);A y,z;B (*f)(J,I,C*,void*),p=1;C c,*v;I d=
  A f(J jt,A a,A w,I n,I m,I c){A z;B b;C d,*u,*uu,*x,*y;I i,j,k,mc,r;T a0,*zv;  \
   i=0; mc=m*c; u=CAV(w); y=u+n; j=c; uu=u+AN(w); if(mc)*(uu-1)=' ';         \
   r=AR(w)-(I )(1==c); r=MAX(0,r);                                               \
-  GA(z,t,mc,r,AS(w)); if(0<r&&1!=c)AS(z)[r-1]=c; zv=(T*)AV(z);            \
+  GA(z,t,mc,r,AS(w)); if(unlikely(t&CMPX+QP))AK(z)=(AK(z)+SZD)&~SZD; if(0<r&&1!=c)AS(z)[r-1]=c; zv=(T*)AV(z);            \
   RZ(a=cvt(t,a)); a0=*(T*)AV(a);                                            \
   while(i<mc){                                                              \
    NOUNROLL while(u<uu&&C0==*u)++u;                                                  \
@@ -410,7 +493,7 @@ F2(jtexec2){A z;B b,p;C d,*v;I at,c,i,k,m,n,r,*s;
  I fillreqd=0;  // will be <0 if lines have different lengths
  if(!r||AS(w)[r-1]){    // skip the count if y is atom, or the last axis of y has dimension 0.   Nothing to count.
   // Calculate w ,"1 0 ' '   to end each (or only) line with delimiter
-  {A t; RZ(w=IRS2(w,chrspace,0L,1L,0L,jtover,t)); makewritable(w);}  // New w will be created
+  {A t; RZ(w=IRS2(w,chrspace,NOEMSGSELF,1L,0L,jtover,t)); makewritable(w);}  // New w will be created
   v=CAV(w); r=AR(w); s=AS(w); n=s[r-1]; PRODX(m,r-1,s,1)  // v->data, m = #lists, n = length of each list
   for(i=0;i<m;++i){I j;
    // b is set when the current character is significant (i. e. not whitespace); p when the previous character was significant

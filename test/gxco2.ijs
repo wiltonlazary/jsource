@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './gxco2.ijs'
+prolog './gxco2.ijs'
 NB. extended precision integers -----------------------------------------
 
 NB. create test data
@@ -39,10 +39,10 @@ x -: y
 f=: }:@":@(<.@o.)
 g=: (<.&# {. [) -: (<.&# {. ])
 
-(10x^ 50) g&f 10x^300 
-(10x^100) g&f 10x^300 
-(10x^150) g&f 10x^300 
-(10x^200) g&f 10x^300
+(10x^ 50) g&f 10x^(QKTEST{300 30)
+(10x^100) g&f 10x^(QKTEST{300 30)
+(10x^150) g&f 10x^(QKTEST{300 30)
+(10x^200) g&f 10x^(QKTEST{300 30)
 
 (o.  1) -: o. 1x
 (o. _2) -: o. _2x
@@ -66,4 +66,7 @@ g=: (<.&# {. [) -: (<.&# {. ])
 
 4!:55 ;:'f g x x1 x2 x3 y y1 y2 y3'
 
+
+
+epilog''
 

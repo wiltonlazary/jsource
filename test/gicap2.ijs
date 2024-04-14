@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './gicap2.ijs'
+prolog './gicap2.ijs'
 NB. x I. y --------------------------------------------------------------
 
 randuni''
@@ -142,7 +142,7 @@ test4=: 1 : 0
  assert. (i.~ -: u~) x
  assert. (i.~ -: u~) x=. /:~ ~. 100   ?@$ 1e6
  assert. (i.~ -: u~) x=. /:~ ~. 100 2 ?@$ 0
- assert. 0 0 0 -: '' I 'abc'
+ assert. 0 0 0 -: '' u 'abc'
  assert. (i.~ -: u~) i.  6 3
  assert. (i.~ -: u~) i. _6 3
  1
@@ -153,10 +153,24 @@ test4=: 1 : 0
 I  test4 0
 I. test4 0
 
+'' (I-:I.) 1 2 3
+'' (I-:I.) 1.5 2.5 __
+'b' (I-:I.) 'abc'
+2 (I-:I.) 1 3 2
+_0.5 (I-:I.) 1 _0.5 __
+(/:~      1e4?@$1e9) (I-:I.) _10   + 500 ?@$ 2e9
+(/:~0.5 + 1e4?@$1e9) (I-:I.) _10   + 500 ?@$ 2e9
+(/:~      1e4?@$1e9) (I-:I.) _10.5 + 500 ?@$ 2e9
+(/:~0.5 + 1e4?@$1e9) (I-:I.) _10.5 + 500 ?@$ 2e9
+(\:~      1e4?@$1e9) (I-:I.) _10   + 500 ?@$ 2e9
+(\:~0.5 + 1e4?@$1e9) (I-:I.) _10   + 500 ?@$ 2e9
+(\:~      1e4?@$1e9) (I-:I.) _10.5 + 500 ?@$ 2e9
+(\:~0.5 + 1e4?@$1e9) (I-:I.) _10.5 + 500 ?@$ 2e9
+
 test5=: 3 : 0
- xx=: 233 ?@$ 1500 
+ xx=: 233 ?@$ 1500
  yy=: 263 ?@$ 3000
- 'domain error' -: xx I. etx yy
+ xx (('domain error';$yy) e.~ <@:($@:I. etx)) yy NB.either domain error, or correct shape
 )
 
 test5"0 i.5 20
@@ -177,4 +191,7 @@ test5"0 i.5 20
 4!:55 ;:'test1 test2 test3 test4 test5'
 4!:55 ;:'x xx y yy'
 randfini''
+
+
+epilog''
 

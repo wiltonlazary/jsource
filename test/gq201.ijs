@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './gq201.ijs'
+prolog './gq201.ijs'
 NB. ^. on extended integers and rational numbers ------------------------
 
 NB. test failed on small ct
@@ -14,10 +14,10 @@ test=: 4 : 0
  1
 )
 
-2  test y=: 2+10 10?@$300
-3  test y
-10 test y
-16 test y
+2  test Y=: 2+10 10?@$300
+3  test Y
+10 test Y
+16 test Y
 
 12345    test 17
 12345678 test 23
@@ -83,6 +83,9 @@ test=: 4 : 0
 
 9!:19 ct
 
-4!:55 ;:'ct phi t test x xx y y1 y2 y3 yy'
+4!:55 ;:'ct phi t test x xx Y y1 y2 y3 yy'
 
+
+
+epilog''
 

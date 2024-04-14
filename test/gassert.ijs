@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './gassert.ijs'
+prolog './gassert.ijs'
 NB. assert --------------------------------------------------------------
 
 ws=: 9!:40 ''
@@ -34,7 +34,7 @@ f=: 3 : 0
 'assertion failure' -: f etx s: ' 1 2 3'
 
 s=: 1 (5!:7) <'f'
-(2{.>s{~<0;1) -: 25 65535
+(2{.>s{~<0;1) -: 25 2
 
 s=: 5!:5 <'f'
 s -: '3 : 0',lf,' assert. y',lf,' 1',lf,')'
@@ -91,4 +91,7 @@ _2 -: f _2
 9!:41 ws
 
 4!:55 ;:'f lf s word ws'
+
+
+epilog''
 

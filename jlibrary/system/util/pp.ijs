@@ -232,7 +232,7 @@ end.
 pplint=: 3 : 0
 dat=. y
 
-'fmt wid rms exp sel'=. Format_j_
+'fmt wid rms exp sel blk'=. 6 {. Format_j_
 if. wid=0 do. spc=. TAB else. spc=. wid#' ' end.
 dat=. dat -. 26{a.
 if. 0 = #dat do. return. end.
@@ -308,6 +308,10 @@ if. exp do.
   msk=. (dat=<,')') < maskexps dat
   dat=. msk (([ # spc"_),]) each dat
 end.
+if. -.blk do.
+  ndx=. I. (maskexps dat) *. ' ' *./ . = &> dat
+  dat=. (<'') ndx} dat
+end.
 dat=. commentline each dat
 dat=. nouns nounx } dat
 dat=. ; dat ,each LF
@@ -355,7 +359,10 @@ case. 'if.' do.
   b=. 0 = +/ dat e. CONTROLM -. ;: 'else. elseif. do.'
   e0=. +/ dat = <'else.'
   e1=. +/ dat = <'elseif.'
-  b=. b *. (2 > e0) *. 0 = e0 *. e1
+  b=. b *. e0 <: 1
+  if. e0 *. e1 do.
+    b=. b *. *./ (dat i. <'else.') > I. dat = <'elseif.'
+  end.
   b=. b *. (+/ dat = <'do.') = 1 + e1
   if. e1 do.
     ix=. I. dat = <'elseif.'

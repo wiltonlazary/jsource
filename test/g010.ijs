@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g010.ijs'
+prolog './g010.ijs'
 NB. < y -----------------------------------------------------------------
 
 test =: 3 : '(0=#$t), (-.t-:y),  y-:>t=.<y'
@@ -17,6 +17,7 @@ test i.0
 test i.0 2 3
 
 IGNOREIFFVI 2000 > 7!:2 '<x' [ x=: i.1e5
+('a';'b') -: [&.>@:(<"0) 'ab'  NB. crashed when virtuals flagged as PRISTINE
 
 
 NB. x<y -----------------------------------------------------------------
@@ -70,4 +71,7 @@ NB. symbol
 
 4!:55 ;:'test x'
 
+
+
+epilog''
 

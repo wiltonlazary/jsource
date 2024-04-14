@@ -1,10 +1,10 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g5x7.ijs'
+prolog './g5x7.ijs'
 NB. 5!:7 ----------------------------------------------------------------
 
 xr=: 5!:7
 
-ww=:     ;:'bblock. tblock. do. if. else.'
-ww=: ww, ;:'end. while. whilst. elseif. try.'  
+ww=:     ;:'bblock. tblock. do. if. while.'
+ww=: ww, ;:'end. else. whilst. elseif. try.'  
 ww=: ww, ;:' catch. break. continue. label. goto.'
 ww=: ww, ;:' return. for. do. break. select.'   
 ww=: ww, ;:' case. fcase. do. end. assert. throw. catchd. catcht. select. break. continue. ? bblock.'              
@@ -22,10 +22,10 @@ chk=: 4 : 0
  assert. 2 = type&> t
  assert. 1 = #@$&> t
  i=. {.&>c
- assert. i e. 1+i.#ww
+ assert. i e. i. 63
  p=. ((<'for_')=4{.&.>t) +. ((<'goto_')=5{.&.>t) +. (<'label_')=6{.&.>t
  assert. (i e. 1 2 33) ~: (((1+t i.&> '.'){.&.> t) e. 2}.ww) +. p
- assert. (1{&>c) e. 65534 65535,i.1+#c
+ assert. (1{&>c) e. i.1+#c
  assert. (2{&>c) e. i.#c
  1
 )
@@ -54,9 +54,9 @@ f1 =: 3 : 0
 
 f1 =: 3 : 0  NB. PPPP
 (+/ % #) y
-(* +)  ( / /)
+(* +)  ( / /) (+/)
 )
-((0;1 65535 0;'(+/%#)y'),:(1;1 65535 1;'(*+)(//)')) -: 1 (5!:7) <'f1'
+((0;1 2 0;'(+/%#)y'),:(1;1 2 1;'(*+)(//)(+/)')) -: 1 (5!:7) <'f1'
 1 chk 1 xr <'f1'
 0 chk 2 xr <'f1'
 
@@ -166,14 +166,16 @@ a3=: /\
 'domain error'  -: 3    (5!:7) etx <'a2'
 'domain error'  -: (<2) (5!:7) etx <'a2'
 
-'domain error'  -:    5!:7  etx <'foo'
+'valence error'  -:    5!:7  etx <'foo'
 'domain error'  -: 1 (5!:7) etx <'ww'
 
 'value error'   -: 2 (5!:7) etx <'nonexistentverb'
 
-'|length error|   y    *"(0)0 0 1,:_ _,7)];.0 x' ([ -: #@[ {. ]) 4 {{y*"(0) 0 0 1,:_ _,7)];.0 x}} eftx 5 6 7  NB. verify error disp puts () around PPPP noun
 
 
 4!:55 ;:'a1 a2 a3 c1 c2 chk f1 f2 f3 f4 f5 mean perm ww xr'
 
+
+
+epilog''
 

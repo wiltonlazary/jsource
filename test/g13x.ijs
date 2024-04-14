@@ -1,5 +1,6 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g13x.ijs'
+prolog './g13x.ijs'
 NB. 13!: ----------------------------------------------------------------
+
 
 original=: 9!:6''
 boxdraw_j_ 1
@@ -27,7 +28,7 @@ foo =: 0$0  NB. will accumulate results executed during suspension
 13!:0 ] 0
 13!:3 'goo 0'
 13!:0 ] 129   NB. Take suspension input from script
-h =: # 13!:13 ''  NB. in case we are in debug, get initial stack size to ignore later
+h =: - # 13!:13 ''  NB. in case we are in debug, get initial stack size to ignore later
 10 = goo 6   NB. suspends
 13!:4 ''  NB. leaves suspension, finishes suspended sentence, tests result
 9 = goo 6
@@ -50,7 +51,7 @@ foo =: foo , (];._2 (0 : 0)) -: ": a: 5}"1 h }. (13!:13)''
 |   |  | | |                               ||+-+|+-+-+| |
 +---+--+-+-+-------------------------------++---+-----+-+
 )
-13!:21''  NB. Into on line with no call
+(13!:23) 13!:21''  NB. Into on line with no call
 foo =: foo , (];._2 (0 : 0)) -: ": a: 5}"1 h }. (13!:13)''
 +---+--+-+-+-------------------------------++---+-----+-+
 |goo|18|1|3|3 : 0 y =. 1 + y goo1 y 3 + y )||+-+|+-+-+|*|
@@ -58,7 +59,7 @@ foo =: foo , (];._2 (0 : 0)) -: ": a: 5}"1 h }. (13!:13)''
 |   |  | | |                               ||+-+|+-+-+| |
 +---+--+-+-+-------------------------------++---+-----+-+
 )
-13!:21''  NB. Into a function
+(13!:23) 13!:21''  NB. Into a function
 foo =: foo , (];._2 (0 : 0)) -: ": a: 5}"1 h }. (13!:13)''
 +----+--+-+-+---------------------------------++---+-----+-+
 |goo1|18|0|3|3 : 0 3 goo2 y 1 + y 4 goo2 y y )||+-+|+-+-+|*|
@@ -70,7 +71,7 @@ foo =: foo , (];._2 (0 : 0)) -: ": a: 5}"1 h }. (13!:13)''
 |    |  | | |                                 ||+-+|+-+-+| |
 +----+--+-+-+---------------------------------++---+-----+-+
 )
-13!:20''  NB. Over a function
+(13!:23) 13!:20''  NB. Over a function
 foo =: foo , (];._2 (0 : 0)) -: ": a: 5}"1 h }. (13!:13)''
 +----+--+-+-+---------------------------------++---+-----+-+
 |goo1|18|1|3|3 : 0 3 goo2 y 1 + y 4 goo2 y y )||+-+|+-+-+|*|
@@ -82,7 +83,7 @@ foo =: foo , (];._2 (0 : 0)) -: ": a: 5}"1 h }. (13!:13)''
 |    |  | | |                                 ||+-+|+-+-+| |
 +----+--+-+-+---------------------------------++---+-----+-+
 )
-13!:22''  NB. Out from the middle of a function
+(13!:23) 13!:22''  NB. Out from the middle of a function
 foo =: foo , (];._2 (0 : 0)) -: ": a: 5}"1 h }. (13!:13)''
 +---+--+-+-+-------------------------------++---+-----+-+
 |goo|18|2|3|3 : 0 y =. 1 + y goo1 y 3 + y )||+-+|+-+-+|*|
@@ -144,15 +145,105 @@ foo =: foo , (];._2 (0 : 0)) -: ": a: 5}"1 h }. (13!:13)''
 )
 13!:3''  NB. clear stops
 13!:4''  NB. get out of suspension
-13!:0 ] 0
+NB. Redefine goo* to test cut-back with error
+goo =: 3 : 0
+goo2 =: 5
+goo2 =: goo1 y
+goo2
+)
+goo1 =: 3 : 0
+y + 1
+)
+
+
+7 -: goo 6
+goo2 -: 7
+
+5 -: goo 'a'
+foo =: foo , goo2 -: 5   NB. In suspension, must add results to foo
+
+foo =: foo , (];._2 (0 : 0)) -: ": a: 5}"1 h }. (13!:13)''
++----+-+-+-+-------------------------------------++---+-----+-+
+|goo1|3|0|3|3 : 0 y + 1 )                        ||+-+|+-+-+|*|
+|    | | | |                                     |||a|||y|a|| |
+|    | | | |                                     ||+-+|+-+-+| |
++----+-+-+-+-------------------------------------++---+-----+-+
+|goo |0|1|3|3 : 0 goo2 =: 5 goo2 =: goo1 y goo2 )||+-+|+-+-+| |
+|    | | | |                                     |||a|||y|a|| |
+|    | | | |                                     ||+-+|+-+-+| |
++----+-+-+-+-------------------------------------++---+-----+-+
+)
+(13!:23) 13!:19''  NB. Cut back from error: resumes sentence with error, not with i. 0 0
+foo =: foo , (];._2 (0 : 0)) -: ": a: 5}"1 h }. (13!:13)''
++---+--+-+-+-------------------------------------++---+-----+-+
+|goo|18|1|3|3 : 0 goo2 =: 5 goo2 =: goo1 y goo2 )||+-+|+-+-+|*|
+|   |  | | |                                     |||a|||y|a|| |
+|   |  | | |                                     ||+-+|+-+-+| |
++---+--+-+-+-------------------------------------++---+-----+-+
+)
+13!:4 ''   NB. finish sentences, test result
+foo =: foo , goo2 -: 5  NB. the sentence is aborted before assignment
+
+NB. Verify task not started during suspension
+1:`{{ while. 1 < 1 T. '' do. 55 T. '' end.
+assert. 1 = 1 T. ''
+foo =: foo , 1.5 < (6!:1'') - (6!:1'') ([  >@:(6!:3 t. ''"0)) 1 1
+foo =: foo , 'stack error' -: 0 T. etx ''   NB. can't create thread during suspension
+i. 0 0
+}}@.(1<{:8&T.'') ''
+
+NB. Verify monad/dyad forms shown in stack
+goo2 =: {{
+2 goo2 y
+:
+x * y
+y + 'a'
+}}"0
+goo2 4
+foo =: foo , (];._2 (0 : 0)) -: ": a: 5}"1 h }. (13!:13)''
++-----+-+-+-+-------------------------------------++-----+-----+-+
+|goo2>|3|1|3|3 : 0 x * y y + 'a' )                ||+-+-+|+-+-+|*|
+|     | | | |                                     |||2|4|||x|2|| |
+|     | | | |                                     ||+-+-+|+-+-+| |
+|     | | | |                                     ||     ||y|4|| |
+|     | | | |                                     ||     |+-+-+| |
++-----+-+-+-+-------------------------------------++-----+-----+-+
+|goo2 |0|0|3|3 : 0"0 2 goo2 y : x * y y + 'a' )   ||+-+-+|     | |
+|     | | | |                                     |||2|4||     | |
+|     | | | |                                     ||+-+-+|     | |
++-----+-+-+-+-------------------------------------++-----+-----+-+
+|goo2>|0|0|3|3 : 0 2 goo2 y )                     ||+-+  |+-+-+| |
+|     | | | |                                     |||4|  ||y|4|| |
+|     | | | |                                     ||+-+  |+-+-+| |
++-----+-+-+-+-------------------------------------++-----+-----+-+
+|goo2 |0|0|3|3 : 0"0 2 goo2 y : x * y y + 'a' )   ||+-+  |     | |
+|     | | | |                                     |||4|  |     | |
+|     | | | |                                     ||+-+  |     | |
++-----+-+-+-+-------------------------------------++-----+-----+-+
+|goo1 |3|0|3|3 : 0 y + 1 )                        ||+-+  |+-+-+|*|
+|     | | | |                                     |||a|  ||y|a|| |
+|     | | | |                                     ||+-+  |+-+-+| |
++-----+-+-+-+-------------------------------------++-----+-----+-+
+|goo  |0|1|3|3 : 0 goo2 =: 5 goo2 =: goo1 y goo2 )||+-+  |+-+-+|*|
+|     | | | |                                     |||a|  ||y|a|| |
+|     | | | |                                     ||+-+  |+-+-+| |
++-----+-+-+-+-------------------------------------++-----+-----+-+
+)
+
+
+
+13!:0 ] 0  NB. Revert suspension input back to prompt
 13!:0 [1
 i. 0 0 [ 9!:7 original
-foo   NB. Test results of stack checks
+foo   NB. Test results of stack/result checks
 
 foo       =: foo_loc1_
 foo_loc1_ =: foo_loc2_ /
 foo_loc2_ =: foo_loc3_ ~
 foo_loc3_ =: +
+
+(i. 0 0) -: 13!:23 i. 2
+(i. 0 2) -: (i. 0 2) 13!:23 a:
 
 commute =: ~
 
@@ -186,9 +277,11 @@ f1 =: 3 : '+/'
 f2 =: 3 : '('
 
 13!:0 [1
-'domain error' -:   (3 : '%y' ) etx 'asdf'
+'domain error' -:   f =: (3 : '%y' ) etx 'asdf'
 'domain error' -: % (1 : 'u y') etx 'asdf'
 13!:0 [0
+
+'rank error' -: 13!:0 etx ''
 
 f =: % 1 : 'u y'
 'domain error' -: f etx 'asdf'
@@ -200,12 +293,15 @@ f=: 3 : 'try. 13!:8 y catch. 13!:11 $0 end.'
 10  -: f 256
 3  -: f 0
 
-13!:8 :: 1: x=: (- 35&=) >: ?255  NB. Make sure we don't try to create ETHROW (35), which does not honor adverse
+13!:8 :: 1: x=: (3:^:(e.&35 15 38 39 40 41)) >: ?255  NB. Make sure we don't try to create EVTHROW (35) or EVEXIT (15), which do not honor adverse, of the internal signals that are remapped
 x -: 13!:11 ''
 
 'length error' -: 13!:11 etx 'junkfoo'
 'length error' -: 13!:12 etx 'junkfoo'
 
+f=: 3 : '''my error'' assert 0'
+'assertion failure' -: f etx 0
+'|my error' ([ -: #@[ {. ]) 13!:12''  NB. User's error is stored even in adverse
 
 NB. stops ---------------------------------------------------------------
 
@@ -224,19 +320,14 @@ h=: 2 3&+@sum
 
 'value error: junkfoo' -: fex 'junkfoo'
 
-'length error: fex'    -: fex '2 3+4 5 6'
-'domain error: fex'    -: fex '+/1;2 3'
-'domain error: sum'    -: fex 'sum ''asdf'''
-'noun result was required: g'      -: fex 'f 0'
-'length error: f'      -: fex 'f 2 3 4'
-'domain error: sum'    -: fex 'h ''asdf'''
-'length error: h'      -: fex 'h i.3 4'
-
-'length error: fex'    -: fex '2 3+4 5 6'
+'domain error'    ([ -: #@[ {. ]) fex '+/1;2 3'
+'domain error'    ([ -: #@[ {. ]) fex 'sum ''asdf'''
+'noun result was required'      ([ -: #@[ {. ]) fex 'f 0'
+'domain error'    ([ -: #@[ {. ]) fex 'h ''asdf'''
 
 f=: 3 : 0
  abc=. 'abc'
- ". :: 0: 'abc,',y
+ ".&([ 9!:59@0) :: 0: 'abc,',y  NB. We want to see the full message
  13!:12 ''
 )
 
@@ -252,7 +343,7 @@ f=: 3 : 0
 NB. 13!:13  -------------------------------------------------------------
 
 mean=: sum % #
-sum =: [: +/ ".@('t=:13!:13 $0'&[) ] ]
+sum =: [: +/ ".@('t=:2 {. 13!:13 $0'&[) ] ]
 
 13!:0 ]1
 1: mean x=: ?4 5$100
@@ -284,7 +375,7 @@ sum =: [: +/ ".@('t=:13!:13 $0'&[) ] ]
 (7{"1 t) -: 2$<0 2$a:             NB. locals
 (8{"1 t) e. ' ';'*'               NB. * if begins suspension
 
-sum=: 3 : ('z=.+/y';'t=: 13!:13 $0';'z')
+sum=: 3 : ('z=.+/y';'t=: 2 {. 13!:13 $0';'z')
 
 13!:0 ]1
 1: mean"1 x
@@ -337,10 +428,42 @@ m;n;x;y
 
 13!:0 ]0
 
+{{
+if. 3 = 4!:0<'eformat_j_' do. f =. eformat_j_ f. else. f =. '' end.
+4!:55<'eformat_j_'
+assert. *./ ('spelling error';'(invalid character in sentence, codepoint 160)') (>@[ +./@:E. ])"0 _ ". eftx 'aa',(160{a.),'44'  NB. Contains nonbreaking space
+if. 3 = 4!:0<'f' do. eformat_j_ =: f f. end.
+1
+}} ''
 
+NB. ------------ eformat ---------------------------------------------------
 
+1 e. '(0)' E. 4 {{y*"(0) 0 0 1,:_ _,7)];.0 x}} eftx 5 6 7  NB. verify error disp puts () around PPPP noun
+
+f =: 1:`(-: ". eftx)@.(3 = 4!:0 <'eformat_j_')  NB. check verbose msgs only if defined
+
+'|length error in f, executing dyad +|shapes 2 and 3 do not conform|   2 3    +4 5 6'    f '2 3+4 5 6'
+'|length error in f, executing dyad +"1|shapes 2 3 and 4 5 6 do not conform|   (i.2 3)    +"1 i.4 5 6'    f '(i. 2 3)+"1 i.4 5 6'
+'|length error in f, executing dyad +"1 1|<frames> do not conform in shapes 2<3> and 2 3<6>|   (i.2 3)    +"1 i.2 3 6'    f '(i. 2 3)+"1 i.2 3 6'
+
+'|length error in f, executing dyad $|extending an empty array requires fill|   2 3    $$0' f '2 3 $ $0'
+'|domain error in f, executing dyad $|x has nonintegral value (2.5) at position 0|   2.5 3    $$0' f '2.5 3 $ $0'
+'|domain error in f, executing dyad $|x has invalid value (_1) at position 1|   2 _1    $$0' f '2 _1 $ $0'
+
+'|index error in f, executing dyad {|x is 4; too long for y, whose length is only 3|   (2+2)    {i.3' f '(2 + 2) { i. 3'
+
+'|domain error in f, assembling results for monad 3 : ..."0|First results were numeric, but result for cell (1 3) was character|       {{(9|y) {:: (<"0 i. 7) , <''a''}}"0 i.3 4' f '{{ (9|y) {:: (<"0 i. 7) , <''a'' }}"0 i. 3 4'
+
+g =: {{ y + 5 }}
+'|valence error in g|explicit definition has no dyadic valence|   2     g 3' f '2 g 3'
+g =: {{ y + x }}
+'|valence error in g|explicit definition has no monadic valence|       g 3' f 'g 3'
+'|valence error in f|[: must be part of a capped fork|   5.7    ([:;]<@(+/\);.2)i.5' f '5.7 ([:;]<@(+/\);.2) i. 5'
 
 4!:55 ;:'commute conj f f1 f2 fac foo expa fexpa '
 4!:55 ;:'g goo goo1 goo2 goo3 h h1 mean sum t x original '
 
+
+
+epilog''
 

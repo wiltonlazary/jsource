@@ -1,4 +1,4 @@
-/* Copyright 1990-2008, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Format: ": Monad boxed unicode                                          */
@@ -420,8 +420,8 @@ A RoutineA(J jt,A w,A prxthornuni){A z;I n,t,q,q1,b=0; UC* wv;
  }
 }
 
-A RoutineB(J jt,A w,A prxthornuni){A z;I n,t,q,b=0; UC* wv; US* c2v; C4* c4v;
- ARGCHK1(w); ASSERT(1>=AR(w),EVRANK); n=AN(w); t=AT(w); wv=UAV(w);
+A RoutineB(J jt,A w,A prxthornuni){A z;I n,t,q,b=0; US* c2v; C4* c4v;
+ ARGCHK1(w); ASSERT(1>=AR(w),EVRANK); n=AN(w); t=AT(w);
  ASSERT(t&C2T,EVDOMAIN);
  if(!n) {GATV(z,C2T,n,AR(w),AS(w)); R z;}; // empty C2T list 
  q=wtousize(USAV(w),n);

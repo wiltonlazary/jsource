@@ -1,4 +1,4 @@
-/* Copyright 1990-2016, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Conjunctions: Explicit Definition : and Associates                      */
@@ -22,60 +22,90 @@
 #define DDEND (US)('}'+256*'}')  // digraph for end DD
 #define DDSEP 0xa  // ASCII value used to mark line separator inside 9 : string.  Must have class CU so that it ends a final comment
 
-#define BASSERT(b,e)   {if(unlikely(!(b))){jsignal(e); i=-1; z=0; continue;}}
-#define BZ(e)          if(unlikely(!(e))){i=-1; z=0; continue;}
+#define BASSERT(b,e)   {if(unlikely(!(b))){jsignal(e); z=0; goto bodyend;}}
+#define BZ(e)          {if(unlikely(!(e))){z=0; goto bodyend;}}
 
-#if SY_64
-#define CWSENTX (cwgroup>>32)  // .sentx
-#else
-#define CWSENTX (cw[i].ig.indiv.sentx)
-#endif
+// obsolete #if SY_64
+// obsolete #define CWSOURCEX (tcesx>>32)  // .sentx
+// obsolete #else
+// obsolete #define CWSOURCEX (cw[i].ig.indiv.sentx)
+// obsolete #endif
+#define CWCTX 16  // position of CWCT in flags reg
+#define OBCW (NPGpysfmtdl>>CWCTX)   // out-of-bounds value, ~(#stored cw-1) = -(#stored cw-1)-1 = -#storedcw
+#define CNSTOREDCW (NPGpysfmtdl>>CWCTX)  // negative of # stored CWs, used for indexing components
 
 // sv->h is the A block for the [2][4] array of saved info for the definition; hv->[4] boxes of info for the current valence;
 // line-> box 0 - tokens; x->box 1 - A block for control words; n (in flag word)=#control words; cw->array of control-word data, a CW struct for each
-#define LINE(sv)       {A x; \
-                        hv=AAV(sv->fgh[2])+4*((nG0ysfctdl>>6)&1);  \
-                        line=AAV(hv[0]); x=hv[1]; nG0ysfctdl&=-65536; nG0ysfctdl|=(AN(x)<<16); cw=(CW*)AV(x);}
+// obsolete #define LINE(sv)       {A x; \
+// obsolete                         hv=AAV(sv->fgh[2])+4*((NPGpysfmtdl>>6)&1);  \
+// obsolete                         line=AAV(hv[0]); x=hv[1]; NPGpysfmtdl&=65535; NPGpysfmtdl|=(AN(x)<<16); cw=(CW*)AV(x);}
+#define LINE(sv) {A x=AAV(sv->fgh[2])[HN*((NPGpysfmtdl>>6)&1)+0]; cwsent=CWBASE(x);  NPGpysfmtdl&=((I)1<<CWCTX)-1; NPGpysfmtdl|=-(CWNC(x)<<CWCTX);}
 
 // Parse/execute a line, result in z.  If locked, reveal nothing.  Save current line number in case we reexecute
 // If the sentence passes a u/v into an operator, the current symbol table will become the prev and will have the u/v environment info
 // If the sentence fails, we go into debug mode and don't return until the user releases us
 #if NAMETRACK
 #define SETTRACK mvc(sizeof(trackinfo),trackinfo,1,iotavec-IOTAVECBEGIN+' '); wx=0; \
- wlen=sprintf(trackinfo,"%d: ",cw[i].source); wx+=wlen; trackinfo[wx++]=' '; \
+ wlen=sprintf(trackinfo,"%d: ",CWSOURCE(cwsent,CNSTOREDCW,ic)); wx+=wlen; trackinfo[wx++]=' '; \
  AK(trackbox)=(C*)queue-(C*)trackbox; AN(trackbox)=AS(trackbox)[0]=m; trackstg=unparse(trackbox); \
  wlen=AN(trackstg); wlen=wlen+wx>sizeof(trackinfo)-1?sizeof(trackinfo)-1-wx:wlen; MC(trackinfo+wx,CAV(trackstg),wlen); wx+=wlen; \
  trackinfo[wx]=0;  // null-terminate the info
 #else
 #define SETTRACK
 #endif
-#define parseline(z) {C attnval=*JT(jt,adbreakr); A *queue=line+CWSENTX; I m=(cwgroup>>16)&0xffff; \
- SETTRACK \
- if(likely(!attnval)){if(likely(!(nG0ysfctdl&16)))z=PARSERVALUE(parsea(queue,m));else {thisframe->dclnk->dcix=i; z=PARSERVALUE(parsex(queue,m,cw+i,callframe));}}else{jsignal(EVATTN); z=0;} }
 
-/* for_xyz. t do. control data   */
-typedef struct{
+#define PUSHTRYSTK ((jt->uflags.trace&TRACEDB)|((jt->emsgstate&EMSGSTATETRAPPING)>>(EMSGSTATETRAPPINGX-TRACEPMX)))  // value to save before a push
+#define POPTRYSTK(v) {jt->uflags.trace=(jt->uflags.trace&~TRACEDB)|((v)&TRACEDB); jt->emsgstate=(jt->emsgstate&~EMSGSTATETRAPPING)|(((v)<<(EMSGSTATETRAPPINGX-TRACEPMX))&EMSGSTATETRAPPING);}   // restore value saved before push
+#define POPIFTRYSTK if(unlikely(NPGpysfmtdl&4)){--tdv; POPTRYSTK(tdv->trap) if(likely(tdv->ndx==0))NPGpysfmtdl&=~4;}  // pop within try. stack; if pop to empty, clear flag
+#define NOUNERR(t,tic,ob)  /* if ob set, check out of bounds & change ic */ \
+    /* Signal post-exec error*/ \
+    {t=pee(cwsent,CWTCESX2(cwsent,tic),EVNONNOUN,NPGpysfmtdl<<(BW-2),jt->sitop->dclnk); \
+    /* go to error loc; if we are in a try., send this error to the catch.  z may be unprotected, so clear it, to 0 if error shows, mtm otherwise */ \
+    if(ob){ic=CWGO(cwsent,CNSTOREDCW,tic); IFNOTOB(unlikely){ RESETERR; z=mtm; cv=forpopgoto(jt,cv,ic,1); POPIFTRYSTK}else z=0;} \
+    goto nextline;}
+#define CHECKNOUN(ob) if (unlikely(!(NOUN&AT(t))))NOUNERR(t,tic,ob)   /* error, T block not creating noun */ \
+
+// obsolete  I m=(tcesx>>16)&0xffff;
+
+// run one line.  If we see break request, accept it as ATTN but promote it to BREAK in other cores if debug off
+// if debug mode/perfmon, call parsex which will check for stops and go into suspension on error; turn off debug mode if user clears it
+// Check for non-noun, but not if this is a modifier and the input to the next sentence (=this result) may make it to the function result
+// We refetch tcesx to have this cw and the next
+// popstmt is used to call tpop if the tpop stack is not empty; asgstmt is issued after the parse, where a variable can be invalidated to prevent it from being saved over calls
+#define parseline(z,popstmt,asgstmt) {tcesx=CWTCESX2(cwsent,ic); if(old!=jt->tnextpushp){popstmt} S attnval=__atomic_load_n((S*)JT(jt,adbreakr),__ATOMIC_ACQUIRE); A *queue=&cwsent[(tcesx>>32)&TCESXSXMSK]; I m=(tcesx-(tcesx>>32))&TCESXSXMSK; \
+ SETTRACK \
+ if(likely(!(attnval+(NPGpysfmtdl&128+16))))z=parsea(queue,m);else {if(jt->sitop)jt->sitop->dclnk->dcix=~ic; z=parsex(queue,m,CWSOURCE(cwsent,CNSTOREDCW,ic),(NPGpysfmtdl&128+16)?jt->sitop->dclnk:0); if(!(jt->uflags.trace&TRACEDB))NPGpysfmtdl&=~2;} \
+ {asgstmt} if(likely(z!=0)){I zasgn=PARSERASGN(z); z=PARSERVALUE(z); if(unlikely(!((AT(z)|zasgn)&NOUN))){if(!(NPGpysfmtdl&8)||(tcesx&TCESXCECANT)) \
+   if(jtdeprecmsg(jt,~7,"(007) noun result was required\n")==0)NOUNERR(z,ic,0); \
+ }} /* puns that ASGN flag is a NOUN type.  Err if can't be result, or if this is not a modifier */ \
+ }
+// obsolete  if(likely(z!=0)){I zasgn=PARSERASGN(z); z=PARSERVALUE(z); if(unlikely(!((AT(z)|zasgn)&NOUN))){if(!(AT(self)&ADV+CONJ)||((UI)(i+1)<(UI)(CNSTOREDCW)&&cw[i+1].tcesx&TCESXCECANT))
+
+// for./select. control structure
+typedef struct CDATA {
+ A fchn;  // pointer to next allocated block in stack, 0 if end of stack
+ struct CDATA *bchn;  // pointer to previous allocated block, possibly the local block.  0 in the local block itself
  A t;  // iteration array for for_xyz., select. value, or nullptr for for.
- A item;  // if for_xyz, the sorta-virtual block we are using to hold the value
+ A item;  // if for_xyz, the virtual block we are using to hold the value
  I j;  // iteration index
  I niter;  // for for. and for_xyz., number of iterations (number of items in T block)
  I itemsiz;  // size of an item of xyz, in bytes
  I4 w; // cw code for the structure
- LX itemsym;  // symbol number of xyz, 0 for for.
- LX indexsym;  // symbol unmber of xyz_index, 0 for for.
+ LX itemsym;  // symbol number of xyz, 0 for for. or select.
+ LX indexsym;  // symbol number of xyz_index, 0 for for. or select.
+ S i;  // ~cw index of the start of the structure
+ S go;  // ~cw index of the end. of the structure
 } CDATA;
 
-#define WCD            (sizeof(CDATA)/sizeof(I))
-
-typedef struct{I4 d,t,e,b;} TD;  // line numbers of catchd., catcht., end. and try.
-#define WTD            (sizeof(TD)/sizeof(I))
+typedef struct{I4 b,e;C ndx; C trap;} TD;  // ~cw#s of try., end.; index of entry; emsgstate flag for trapping
 #define NTD            17     /* maximum nesting for try/catch */
 
 // called from for. or select. to start filling in the entry
-static B forinitnames(J jt,CDATA*cv,I cwtype,A line){
+static B forinitnames(J jt,CDATA*cv,I cwtype,A line,I i, I go){  // i and go are ~cw#s
  cv->j=-1;                               /* iteration index     */
  cv->t=0;  // init no selector value/iterator list
  cv->w=cwtype;  // remember type of control struct
+ cv->i=i, cv->go=go;  // remember start/end line#s of control struct
  if(cwtype==CFOR){
   // for for_xyz., get the symbol indexes for xyz & xyz_index
   I k=AN(line)-5;  /* length of item name; -1 if omitted (for.; for_. not allowed) */
@@ -83,8 +113,8 @@ static B forinitnames(J jt,CDATA*cv,I cwtype,A line){
    // We need a string buffer for "xyz_index".  Use the stack if the name is short
    C ss[20], *s; if(unlikely(k>(I)(sizeof(ss)-6))){GATV0(x,LIT,k+6,1); s=CAV1(x);}else s=ss;  // s point to buffer
    MC(s,CAV(line)+4,k);  MC(s+k,"_index",6L);  // move "xyz_index" into *s
-   cv->itemsym=(probeislocal(nfs(k,s)))-JT(jt,sympv);  // get index of symbol in table, which must have been preallocated
-   L *indexl; cv->indexsym=(indexl=probeislocal(nfs(k+6,s)))-JT(jt,sympv);
+   cv->itemsym=(probeislocal(nfs(k,s)))-SYMORIGIN;  // get index of symbol in table, which must have been preallocated
+   L *indexl; cv->indexsym=(indexl=probeislocal(nfs(k+6,s)))-SYMORIGIN;
    if(unlikely(k>(I)(sizeof(ss)-6))){ACINITZAP(x); fr(x);}  // remove tpop and free, now that we're done.  We may be in a loop 
    // Make initial assignment to xyz_index, and mark it readonly
    // Since we remove the readonly at the end of the loop, the user might have changed our value; so if there is
@@ -101,50 +131,52 @@ static B forinitnames(J jt,CDATA*cv,I cwtype,A line){
 
 // called to init the iterator for for.
 static B jtforinit(J jt,CDATA*cv,A t){A x;C*s,*v;I k;
- ASSERT(t!=0,EVCTRL);
+ ASSERT(t!=0,EVEMPTYDD);
  SETIC(t,cv->niter);                            /* # of items in t     */
  if(likely(cv->indexsym!=0)){
   // for_xyz.   protect iterator value and save it; create virtual item name
   ASSERT(!ISSPARSE(AT(t)),EVNONCE)
-  rifv(t);  // it would be work to handle virtual t, because you can't just ra() a virtual, as virtuals are freed only from the tpop stack.  So we wimp out & realize.
+  rifv(t);  // it would be work to handle virtual t, because you can't just ra() a virtual, as virtuals are freed only from the tpop stack.  So we wimp out & realize.  note we can free from a boxed array now
   ra(t) cv->t=t;  // if we need to save iteration array, do so, and protect from free
   // create virtual block for the iteration.  We will store this in xyz.  We have to do usecount by hand because
-  // true virtual blocks are freed only by tpop, and we will be freeing this in unstackcv, either normally or at end-of-definition
+  // true virtual blocks are freed only by tpop or from free of a boxed array, and we will be freeing this in unstackcv, either normally or at end-of-definition
   // We must keep ABACK in case we create a virtual block from xyz.
   // We store the block in 2 places: cv and symp.val.  We ra() once for each place
   // If there is an incumbent value, discard it
-  L *asym=&JT(jt,sympv)[cv->itemsym]; A val=asym->val;  // stored reference address; incumbent value there
+  L *asym=&SYMORIGIN[cv->itemsym]; A val=asym->val;  // stored reference address; incumbent value there
   fa(val); asym->val=0; asym->valtype=0;   // free the incumbent if any, clear val in symbol in case of error
   // Calculate the item size and save it
-  I isz; I r=AR(t)-1; r=r<0?0:r; PROD(isz,r,AS(t)+1); I tt=AT(t); cv->itemsiz=isz<<bplg(tt); // rank of item; number of bytes in an item
-  // Allocate a sorta-virtual block.  Zap it, fill it in, make noninplaceable.  Point it to the item before the data, since we preincrement in the loop
-  A svb; GA(svb,tt,isz,r,AS(t)+1); // one item
-  AK(svb)=(CAV(t)-(C*)svb)-cv->itemsiz; ACINITZAP(svb); ACINIT(svb,2); AFLAGINIT(svb,(tt&RECURSIBLE)|AFVIRTUAL); ABACK(svb)=t;  // We DO NOT raise the backer because this is sorta-virtual
+  I isz; I r=AR(t)-((UI)AR(t)>0); PROD(isz,r,AS(t)+1); I tt=AT(t); cv->itemsiz=isz<<bplg(tt); // rank of item; number of bytes in an item
+  // Allocate a virtual block.  Zap it, fill it in, make noninplaceable.  Point it to the item before the data, since we preincrement in the loop
+  A *pushxsave = jt->tnextpushp; jt->tnextpushp=&asym->val; A svb=virtual(t,0,r); jt->tnextpushp=pushxsave;  // since we can't ZAP a virtual, allocate this offstack to take ownership
+  RZ(svb) AK(svb)=(CAV(t)-(C*)svb)-cv->itemsiz; ACINIT(svb,2); AN(svb)=isz; MCISH(AS(svb),AS(t)+1,r)  // AC=2 since we store in symbol and cv
   // Install the virtual block as xyz, and remember its address
-  cv->item=asym->val=svb; asym->valtype=ATYPETOVALTYPE(tt);  // save in 2 places, commensurate with AC of 2
+  cv->item=svb; asym->valtype=ATYPETOVALTYPE(tt);  // save in 2 places (already in asym->val), commensurate with AC of 2
  }
  R 1;
 }    /* for. do. end. initializations */
 
-// A for/select. block is ending.   Free the iteration array.  Don't delete any names.  Mark the index as no longer readonly (in case we start the loop again)
-// if assignvirt is set (normal), the xyz value is realized and reassigned if it is still the svb.  Otherwise it is freed and the value expunged.
-static B jtunstackcv(J jt,CDATA*cv,I assignvirt){
+// A for/select. block is ending.   Free the iteration array.  Don't delete any names.  Mark the index as no longer readonly (in case we start the loop again).
+// If assignvirt is set (normal), the xyz value is realized and reassigned if it is still the svb.  Otherwise it is freed and the value expunged.
+// result is address of cv after stack popped
+static CDATA* jtunstackcv(J jt,CDATA*cv,I assignvirt){
  if(cv->w==CFOR){
   if(cv->t){  // if for_xyz. that has processed forinit ...
-   JT(jt,sympv)[cv->indexsym].flag&=~LREADONLY;  // xyz_index is no longer readonly.  It is still available for inspection
+   SYMORIGIN[cv->indexsym].flag&=~LREADONLY;  // set xyz_index is no longer readonly.  It is still available for inspection
    // If xyz still points to the virtual block, we must be exiting the loop early: the value must remain, so realize it
-   A svb=cv->item;  // the sorta-virtual block for the item
-   if(unlikely(JT(jt,sympv)[cv->itemsym].val==svb)){A newb;
+   A svb=cv->item;  // the virtual block for the item
+   if(unlikely(SYMORIGIN[cv->itemsym].val==svb)){A newb;   // loop did not complete, and xyz has not been reassigned
     fa(svb);   // remove svb from itemsym.val.  Safe, because it can't be the last free
-    if(likely(assignvirt!=0)){RZ(newb=realize(svb)); ACINITZAP(newb); ra00(newb,AT(newb)); JT(jt,sympv)[cv->itemsym].val=newb; JT(jt,sympv)[cv->itemsym].valtype=ATYPETOVALTYPE(AT(newb)); // realize stored value, raise, make recursive, store in symbol table
-    }else{JT(jt,sympv)[cv->itemsym].val=0; JT(jt,sympv)[cv->itemsym].valtype=0;}  // after error, we needn't bother with a value
+    if(likely(assignvirt!=0)){RZ(newb=realize(svb)); ACINITZAP(newb); ra00(newb,AT(newb)); SYMORIGIN[cv->itemsym].val=newb; SYMORIGIN[cv->itemsym].valtype=ATYPETOVALTYPE(AT(newb)); // realize stored value, raise, make recursive, store in symbol table
+    }else{SYMORIGIN[cv->itemsym].val=0; SYMORIGIN[cv->itemsym].valtype=0;}  // after error, we needn't bother with a value
    }
-   // Decrement the usecount to account for being removed from cv - this is the final free of the svb
-   fr(svb);  // MUST NOT USE fa() so that we don't recur and free svb's current contents in cv->t
+   // Decrement the usecount to account for being removed from cv - this is the final free of the svb, unless it is a result.  Since this is a virtual block, free the backer also
+   if(AC(svb)<=1)fa(ABACK(svb)); fr(svb);  // MUST NOT USE fa() for svb so that we don't recur and free svb's current contents in cv->t - svb is virtual
   }
  }
  fa(cv->t);  // decr the for/select value, protected at beginning.  NOP if it is 0
- R 1;
+ cv=cv->bchn;  // go back to previous stack level
+ R cv;
 }
 
 // call here when we find that xyz_index has been aliased.  We remove it, free it, and replace it with a new block.  Return 0 if error
@@ -156,33 +188,21 @@ static A swapitervbl(J jt,A old,A *valloc){
  R old;
 }
 
-static void jttryinit(J jt,TD*v,I i,CW*cw){I j=i,t=0;
- v->b=(I4)i;v->d=v->t=0;
- while(t!=CEND){
-  j=(j+cw)->go;  // skip through just the control words for this try. structure
-  switch(t=(j+cw)->ig.indiv.type){
-   case CCATCHD: v->d=(I4)j; break;
-   case CCATCHT: v->t=(I4)j; break;
-   case CEND:    v->e=(I4)j; break;
-  }
- }
-}  /* processing on hitting try. */
-
-// tdv points to the try stack or 0 if none; tdi is index of NEXT try. slot to fill; i is goto line number
+// tdv points to the try stack or 0 if none; tdv is NEXT try. slot to fill; i is goto line number
 // if there is a try stack, pop its stack frames if they don't include the line number of the goto
-// result is new value for tdi
-// This is called only if tdi is nonzero & therefore we have a stack
-static I trypopgoto(TD* tdv, I tdi, I dest){
- NOUNROLL while(tdi&&!BETWEENC(dest,tdv[tdi-1].b,tdv[tdi-1].e))--tdi;  // discard stack frame if structure does not include dest
- R tdi;
+// result is new value for tdv
+// This is called only if we have a stack  All line numbers are complements.
+static TD *trypopgoto(J jt, TD* tdv, I dest){
+ NOUNROLL while(tdv->ndx&&!BETWEENC(~dest,~tdv[-1].b,~tdv[-1].e)){--tdv; POPTRYSTK(tdv[0].trap)}  // discard stack frame if structure does not include dest
+ R tdv;
 }
 
-#define CHECKNOUN if (unlikely(!(NOUN&AT(t)))){   /* error, T block not creating noun */ \
-    /* Signal post-exec error*/ \
-    t=pee(line,&cw[ti],EVNONNOUN,nG0ysfctdl<<(BW-2),callframe); \
-    /* go to error loc; if we are in a try., send this error to the catch.  z may be unprotected, so clear it, to 0 if error shows, mtm otherwise */ \
-    i = cw[ti].go; if (i<SMAX){ RESETERR; z=mtm; if (nG0ysfctdl&4){if(!--tdi){jt->uflags.us.cx.cx_c.db=(UC)(nG0ysfctdl>>8); nG0ysfctdl^=4;} } }else z=0; \
-    break; }
+// pop for/select frames that don't include i.  assignvirt is passed on to unstackcv.  All line numbers are complements.
+static CDATA* forpopgoto(J jt, CDATA *cv, I i, I assignvirt){
+ while(cv){if(BETWEENC(~i,~cv->i,~cv->go))break; cv=unstackcv(cv,assignvirt);}  // process the for/select stack.  If we branch out of a structure, pop it
+ R cv;
+}
+
 
 // Return next line to execute, in case debug changed it
 // If debug is running we have to check for a new line to run, after any execution with error or on any line in case the debugger interrupted something
@@ -190,7 +210,9 @@ static I trypopgoto(TD* tdv, I tdi, I dest){
 static I debugnewi(I i, DC thisframe, A self){
  if(thisframe){DC siparent;  // if we can take debug input
   // debug mode was on when this execution started.  See if the execution pointer was changed by debug.
-  if((siparent=thisframe->dclnk)&&siparent->dctype==DCCALL&&self==siparent->dcf){   // if prev stack frame is a call to here
+  // The newline info is in the parent of this frame, which may be up the stack if there are parse lines
+  for(siparent=thisframe;siparent&&siparent->dctype!=DCCALL;siparent=siparent->dclnk);  // search up to find call to here
+  if(siparent&&self==siparent->dcf){   // if prev stack frame is a call to here
    if(siparent->dcnewlineno){  // the debugger has asked for a jump
     i=siparent->dcix;  // get the jump-to line
     siparent->dcnewlineno=0;  // reset semaphore
@@ -198,17 +220,30 @@ static I debugnewi(I i, DC thisframe, A self){
    siparent->dcix=i;  // notify the debugger of the line we are on, in case we stop  
   }
  }
+ if(i<0)i=CWMAX;  // convert out-of-bounds to positive ob
  R i;  // return the current line, possibly modified
 }
 
-// Processing of explicit definitions, line by line
-DF2(jtxdefn){F2PREFIP;PROLOG(0048);
- RE(0);
- A *line;   // pointer to the words of the definition.  Filled in by LINE
- CW *cw;  // pointer to control-word info for the definition.  Filled in by LINE
- UI nG0ysfctdl;  // flags: 1=locked 2=debug(& not locked) 4=tdi!=0 8=cd!=0 16=thisframe!=0 32=symtable was the original (i. e. !AR(symtab)&ARLSYMINUSE)
-             // 64=call is dyadic 128=0    0xff00=original debug flag byte (must be highest bit)  0xffff0000=#cws in the definition
- DC callframe=0;  // pointer to the debug frame of the caller to this function (only if it's named), but 0 if we are not debugging
+#define TEQ5(tcesx,val) (((tcesx)&(0x1f<<TCESXTYPEX))==((val)<<TCESXTYPEX))  // 5-bit type = val
+#define TXOR5(tcesx,val) (((tcesx)&(0x1f<<TCESXTYPEX))^((val)<<TCESXTYPEX))  // 5-bit type ^ val
+#define TXOR5EXCL(tcesx,val,excl) (((tcesx)&(((excl)^0x1f)<<TCESXTYPEX))^(((val)&~(excl))<<TCESXTYPEX))  // 5-bit type ^ val, ignoring excluded bits
+#define TEQ6(tcesx,val) (((UI4)(tcesx)>>TCESXTYPEX)==(val))  // 6-bit type = val
+#define TXORTOP5(tcesx,val) (((UI4)(tcesx)>>(TCESXTYPEX+1))^((val)>>1))  // 6-bit type ^ val, ignoring LSB
+#define FLAGGEDNOTRACE(x) ((UC)((UI4)(x)>>(TCESXTYPEX+5))>(UC)jt->uflags.trace)  // 32 flag set in tcesx
+
+#define IFOB(likelihood) if(likelihood(ic<=OBCW))  // true if i has gone off the end of the defn)
+#define IFNOTOB(likelihood) if(likelihood(ic>OBCW))  // true if i has not gone off the end of the defn)
+// Processing of explicit definitions, line by line.  Bivalent, called as y vb vb or x y vb.  If JTXDEFMODIFIER is set,
+// it's a modifier, called as u adv adv or u v conj
+DF2(jtxdefn){
+ V *sv=FAV(self); I sflg=sv->flag;   // pointer to definition, and flags therefrom
+ F2PREFIP;PROLOG(0048);
+ ARGCHK2(a,w);
+ A * RESTRICT cwsent;   // Base pointer, to both the cw data (going down) and the sentence words (going up)  Filled in by LINE
+// obsolete  A *line;   // pointer to the words of the definition.  Filled in by LINE
+// obsolete CW *cw;  // pointer to control-word info for the definition.  Filled in by LINE
+ I NPGpysfmtdl;  // flags: 1=locked 2=debug set(& not locked) 4=tdv->ndx!=0 8 unused 16=(parser frame allocated) 32=symtable was the original (i. e. !AR(symtab)&ARLSYMINUSE)
+             // 64=call is dyadic 128=pm is running    0xff00=(flags byte: mostly debug, but bit 1 from trapping)   >>16=-(#cws in the definition including sentinel)=~#cws
 #if NAMETRACK
  // bring out the name, locale, and script into easy-to-display name
  C trackinfo[256];  // will hold name followed by locale
@@ -216,61 +251,40 @@ DF2(jtxdefn){F2PREFIP;PROLOG(0048);
  UI wx=0, wlen; A trackstg;   // index/len we will write to; unparsed line
  forcetomemory(&trackinfo);
 #endif
-
- TD*tdv=0;  // pointer to base of try. stack
- I tdi=0;  // index of the next open slot in the try. stack
- CDATA*cv;  // pointer to the current entry in the for./select. stack
+ TD* tdv=0;  // pointer to base of try. stack.  We could keep the try. stack on the C stack but it's a waste of 5 cachelines
+ CDATA cdata,*cv=0;  // pointer to the current entry in the for./select. stack
+ cdata.fchn=0;  // init no blocks allocated
 
  A locsym;  // local symbol table to use
 
- nG0ysfctdl=((I)(a!=0)&(I)(w!=0))<<6;   // avoid branches, and relieve pressure on a and w
- DC thisframe=0;   // if we allocate a parser-stack frame, this is it
- {A *hv;  // will hold pointer to the precompiled parts
-  V *sv=FAV(self); I sflg=sv->flag;   // fetch flags, which are the same even if VXOP is set
-  A u,v;  // pointers to args
-  // If this is adv/conj, it must be (1/2 : n) executed with no x or y.  Set uv then, and undefine x/y
-  u=AT(self)&ADV+CONJ?a:0; v=AT(self)&ADV+CONJ?w:0;
-  a=AT(self)&ADV+CONJ?0:a; w=AT(self)&ADV+CONJ?0:w;    // leave x and y undefined in modifier execution
-  nG0ysfctdl|=SGNTO0(-(jt->glock|(sflg&VLOCK)));  // init flags: 1=lock bit, whether from locked script or locked verb
-  // If this is a modifier-verb referring to x or y, set u, v to the modifier operands, and sv to the saved modifier (f=type, g=compiled text).  The flags don't change
-  if(unlikely((sflg&VXOP)!=0)){u=sv->fgh[0]; v=sv->fgh[2]; sv=VAV(sv->fgh[1]);}
-  // Read the info for the parsed definition, including control table and number of lines
-  LINE(sv);
+ A z=mtm;  // last B-block result; will become the result of the execution. z=0 is treated as an error condition inside the loop, so we have to init the result to i. 0 0
+// obsolete  A *hv;  // will hold pointer to the precompiled parts
+ A u,v;  // pointers to args
+ {  // for name scope only
+  NPGpysfmtdl=(w!=self?64:0);  // set if dyad, i. e. dyadic verb or any conjunction.
+  if(likely(((I)jtinplace&JTXDEFMODIFIER)==0)){
+   // we are executing a verb.  It may be an operator
+    w=NPGpysfmtdl&64?w:a; a=NPGpysfmtdl&64?a:0;  // a w self = [x] y verb
+   if(unlikely((sflg&VXOP)!=0)){u=sv->fgh[0]; v=sv->fgh[2]; sv=FAV(sv->fgh[1]);}else u=v=0;  // If operator, extract u/v.  flags don't change
+  }else{
+   // modifier. it must be (1/2 : n) executed with no x or y.  Set uv then, and undefine x/y
+   v=NPGpysfmtdl&64?w:0; u=a; a=w=0; NPGpysfmtdl|=8; // a w self = u [v] mod; remember that we are a modifier
+  }
+  NPGpysfmtdl|=SGNTO0(-(jt->glock|(sflg&VLOCK)));  // init flags: 1=lock bit, whether from locked script or locked verb
+  LINE(sv);  // Read the info for the parsed definition, including control table and number of lines
+  // If the verb contains try., allocate a try-stack area for it.  Remember debug/trapping state coming in so we can restore on exit
+  if(unlikely(sflg&VTRY1+VTRY2)){A td; GAT0(td,LIT,(NTD+1)*sizeof(TD),1); tdv=(TD*)AV(td); tdv[0].ndx=0; NPGpysfmtdl|=PUSHTRYSTK<<8;}
+
   // Create symbol table for this execution.  If the original symbol table is not in use (rank unflagged), use it;
   // otherwise clone a copy of it.  We have to do this before we create the debug frame
-  locsym=hv[3];  // fetch pointer to preallocated symbol table
-  ASSERT(locsym!=0,EVDOMAIN);  // if the valence is not defined, give valence error
-  if(likely(!(AR(locsym)&ARLSYMINUSE))){AR(locsym)|=ARLSYMINUSE;nG0ysfctdl|=32;}  // remember if we are using the original symtab
+  locsym=AAV(sv->fgh[2])[HN*((NPGpysfmtdl>>6)&1)+3];  // fetch pointer to preallocated symbol table
+  ASSERT(locsym!=0,EVVALENCE);  // if the valence is not defined, give valence error
+  if(likely(!(__atomic_fetch_or(&AR(locsym),ARLSYMINUSE,__ATOMIC_ACQ_REL)&ARLSYMINUSE))){NPGpysfmtdl|=32;}  // remember if we are using the original symtab
   else{RZ(locsym=clonelocalsyms(locsym));}
-  if(unlikely((jt->uflags.us.cx.cx_c.db | (sflg&(VTRY1|VTRY2))))){
-   // special processing required
-   // if we are in debug mode, the call to this defn should be on the stack (unless debug was entered under program control).  If it is, point to its
-   // stack frame, which functions as a flag to indicate that we are debugging.  If the function is locked we ignore debug mode
-   if(!(nG0ysfctdl&1)&&jt->uflags.us.cx.cx_c.db){
-    if(jt->sitop&&jt->sitop->dctype==DCCALL){   // if current stack frame is a call
-     nG0ysfctdl|=2;   // set debug flag if debug requested and not locked (no longer used)
-     if(sv->flag&VNAMED){
-      callframe=jt->sitop;  // if this is a named (rather than anonymous call like 3 : 0"1), there is a tight link with the caller.  Indicate that
-     }
-     // If we are in debug mode, and the current stack frame has the DCCALL type, pass the debugger
-     // information about this execution: the local symbols and the control-word table
-     if(self==jt->sitop->dcf){  // if the stack frame is for this exec
-      jt->sitop->dcloc=locsym; jt->sitop->dcc=hv[1];  // install info about the exec
-      // Use this out-of-the-way place to ensure that the compiler will not try to put for. and try. stuff into registers
-      forcetomemory(&tdi); forcetomemory(&tdv); forcetomemory(&cv); 
-     }
-    }
-
-    // With debug on, we will save pointers to the sentence being executed in the stack frame we just allocated
-   }
-
-   // If the verb contains try., allocate a try-stack area for it.  Remember debug state coming in so we can restore on exit
-   if(sv->flag&VTRY1+VTRY2){A td; GAT0(td,INT,NTD*WTD,1); tdv=(TD*)AV(td); nG0ysfctdl |= jt->uflags.us.cx.cx_c.db<<8;}
-  }
-  // End of unusual processing
   SYMPUSHLOCAL(locsym);   // Chain the calling symbol table to this one
+  // Symbols may have been allocated, and we have pushed the symbol table.  DO NOT TAKE ERROR RETURNS AFTER THIS POINT: use BASSERT, GAE, BZ
 
-  // assignsym etc should never be set here; if it is, there must have been a pun-in-ASGSAFE that caused us to mark a
+  // zombieval should never be set here; if it is, there must have been a pun-in-ASGSAFE that caused us to mark a
   // derived verb as ASGSAFE and it was later overwritten with an unsafe verb.  That would be a major mess; we'll invest
   // in preventing it - still not a full fix, since invalid inplacing may have been done already
   CLEARZOMBIE
@@ -286,321 +300,399 @@ DF2(jtxdefn){F2PREFIP;PROLOG(0048);
   // not tying up a backer that could have been freed otherwise (we do have to raise the usecount); (2) if the input
   // has been abandoned, we do not need to raise the usecount here: we can just mark the arg non-inplaceable, usecount 1 and take advantage
   // of assignment in place here - in this case we must flag the name to suppress decrementing the usecount on reassignment or final free.  In
-  // both cases we know the block will be freed by the caller.
+  // both cases we know the block will be freed by the caller.  Since we may revert the value to abandoned inplace to allow it to be free,
+  // we must not modify AM.
   // Virtual abandoned blocks are both cases at once.  That's OK.
+  // To simplify value stacking, we ensure that any recursible block is recursive.  This is guaranteed by ra() for non-abandoned blocks
   UI4 yxbucks = *(UI4*)LXAV0(locsym);  // get the yx bucket indexes, stored in first hashchain by crelocalsyms
-  L *sympv=JT(jt,sympv);  // bring into local
+  L *sympv=SYMORIGIN;  // bring into local
   L *ybuckptr = &sympv[LXAV0(locsym)[(US)yxbucks]];  // pointer to sym block for y, known to exist
-  L *xbuckptr = &sympv[LXAV0(locsym)[yxbucks>>16]];  // pointer to sym block for x
   if(likely(w!=0)){  // If y given, install it & incr usecount as in assignment.  Include the script index of the modification
+   ybuckptr->val=w; ybuckptr->valtype=ATYPETOVALTYPE(AT(w)); ybuckptr->sn=jt->currslistx;  // finish the assignment, with QCGLOBAL semantics
    // If input is abandoned inplace and not the same as x, DO NOT increment usecount, but mark as abandoned and make not-inplace.  Otherwise ra
    // We can handle an abandoned argument only if it is direct or recursive, since only those values can be assigned to a name
    if((a!=w)&SGNTO0(AC(w)&(((AT(w)^AFLAG(w))&RECURSIBLE)-1))&((I)jtinplace>>JTINPLACEWX)){
-    ybuckptr->flag=LPERMANENT|LWASABANDONED; ACIPNO(w);  // remember, blocks from every may be 0x8..2, and we must preserve the usecount then as if we ra()d it
+    AFLAGORLOCAL(w,AFKNOWNNAMED);   // indicate the value is in a name.  We do this to allow virtual extension.
+    ybuckptr->flag=LPERMANENT|LWASABANDONED; ACIPNOABAND(w);  // remember, blocks from every may be 0x8..2, and we must preserve the usecount then as if we ra()d it
+    ramkrecursv(w);  // make the block recursive
    }else{
     // not abandoned; but it could be VIRTUAL and even UNINCORPABLE!  We know that those blocks have valid usecounts inited to 1, so if we
     // keep the usecount right the block will never be freed except when it goes out of scope in the originator
-    ra(w);  // not abandoned: raise the block
-    if((likely(!(AFLAG(w)&AFVIRTUAL+AFNJA)))){AMNVRCINI(w)}  // since the block is now named, if it is not virtual it must switch to NVR interpretation of AM
+    ra(w);  // not abandoned: raise the block.  No need for AFKNOWNNAMED since usecount will preclude virtual extension
    }
-   ybuckptr->val=w; ybuckptr->valtype=ATYPETOVALTYPE(AT(w)); ybuckptr->sn=jt->currslistx;  // finish the assignment
   }
     // for x (if given), slot is from the beginning of hashchain EXCEPT when that collides with y; then follow y's chain
     // We have verified that hardware CRC32 never results in collision, but the software hashes do (needs to be confirmed on ARM CPU hardware CRC32C)
-  if(a){
+  if(a!=0){
+   L *xbuckptr = &sympv[LXAV0(locsym)[yxbucks>>16]];  // pointer to sym block for x
    if(!C_CRC32C&&xbuckptr==ybuckptr)xbuckptr=xbuckptr->next+sympv;
-   if((a!=w)&SGNTO0(AC(a)&(((AT(a)^AFLAG(a))&RECURSIBLE)-1))&((I)jtinplace>>JTINPLACEAX)){
-    xbuckptr->flag=LPERMANENT|LWASABANDONED; ACIPNO(a);
-   }else{ra(a); if((likely(!(AFLAG(a)&AFVIRTUAL+AFNJA)))){AMNVRCINI(a)}}
    xbuckptr->val=a; xbuckptr->valtype=ATYPETOVALTYPE(AT(a)); xbuckptr->sn=jt->currslistx;
+   if((a!=w)&SGNTO0(AC(a)&(((AT(a)^AFLAG(a))&RECURSIBLE)-1))&((I)jtinplace>>JTINPLACEAX)){
+    AFLAGORLOCAL(a,AFKNOWNNAMED); xbuckptr->flag=LPERMANENT|LWASABANDONED; ACIPNOABAND(a); ramkrecursv(a);
+   }else{ra(a);}
   }
-  // Do the other assignments, which occur less frequently, with symbis
+  // Do the other assignments, which occur less frequently, with symbis, without the special treatment of virtuals
   if(unlikely(((I)u|(I)v)!=0)){
    if(u){(symbis(mnuvxynam[2],u,locsym)); if(NOUN&AT(u))symbis(mnuvxynam[0],u,locsym); }  // assign u, and m if u is a noun
    if(v){(symbis(mnuvxynam[3],v,locsym)); if(NOUN&AT(v))symbis(mnuvxynam[1],v,locsym); }  // bug errors here must be detected
   }
- }
- FDEPINC(1);   // do not use error exit after this point; use BASSERT, BGA, BZ
- // remember tnextpushx.  We will tpop after every sentence to free blocks.  Do this AFTER any memory
- // allocation that has to remain throughout this routine.
+ }  // for name scope only
+ FDEPINC(1);
+ // remember tnextpushp.  We will tpop after every few sentences, to free blocks.  Do this AFTER any memory
+ // allocation that has to remain throughout this routine (and be ready to move the pointer if there is an allocation in the loop)
  // If the user turns on debugging in the middle of a definition, we will raise old when he does
  A *old=jt->tnextpushp;
 
  // loop over each sentence
- A cd=0;  // pointer to block holding the for./select. stack, if any
- I r=0;  // number of unused slots allocated in for./select. stack
- I i=0;  // control-word number of the executing line
- A z=mtm;  // last B-block result; will become the result of the execution. z=0 is treated as an error condition inside the loop, so we have to init the result to i. 0 0
+ I ic=~0;  // one's comp of control-word number of the executing line
  A t=0;  // last T-block result
- I4 bi;   // cw number of last B-block result.  Needed only if it gets a NONNOUN error - can force to memory
- I4 ti;   // cw number of last T-block result.  Needed only if it gets a NONNOUN error
- while(1){
+ I4 bic;   // cw number of last B-block result.  Needed only if it gets a NONNOUN error - can force to memory
+ I4 tic;   // cw number of last T-block result.  Needed only if it gets a NONNOUN error
+ UI8 tcesx;  // combined line#/flags/type for cw being executed - sometimes with the next line's too
+
+ {  // this is a loop, but we always branch to one of the start points
+  // **************** top of main dispatch loop ********************
+  // Inside the loop we must use BZ and BASSERT or continue for errors; these will break out of the loop and run the ending code
   // i holds the control-word number of the current control word
+nextline:;  // here to look at next line, whose cw number is ic (which must be valid, though possibly at end+1)
+  tcesx=CWTCESX(cwsent,ic);  // fetch info for the next line
+nextlinetcesx:;   // here when we have the next tcesx already loaded, possibly with high-order garbage
   // Check for debug and other modes
-  if(unlikely(jt->uflags.us.cx.cx_us!=0)){  // fast check to see if we have overhead functions to perform
-   if(!(nG0ysfctdl&(16+1))&&jt->uflags.us.cx.cx_c.db){
-    // If we haven't done so already, allocate an area to use for the SI entries for sentences executed here, if needed.  We need a new area only if we are debugging.  Don't do it if locked.
-    // We have to have 1 debug frame to hold parse-error information in, but it is allocated earlier if debug is off
-    // We check before every sentence in case the user turns on debug in the middle of this definition
-    // NOTE: this stack frame could be put on the C stack, but that would reduce the recursion limit because the frame is pretty big
-    // If there is no calling stack frame we can't turn on debug mode because we can't suspend
-    // If we are executing a recursive call to JDo we can't go into debug because we can't prompt
-    DC d; for(d=jt->sitop;d&&DCCALL!=d->dctype;d=d->dclnk);  /* find bottommost call                 */
-    if(d&&jt->recurstate<RECSTATEPROMPT){  // if there is a call and thus we can suspend; and not prompting already
-     BZ(thisframe=deba(DCPARSE,0L,0L,0L));  // if deba fails it will be before it modifies sitop.  Remember our stack frame
+  if(unlikely(jt->uflags.trace)){  // fast check to see if we have overhead functions to perform
+   // here to handle debug jump, perf monitor, or any other unusual cases
+   if(!(NPGpysfmtdl&1)&&jt->recurstate<RECSTATEPROMPT){  // only if not locked and not recursive
+    if(unlikely(!(NPGpysfmtdl&16))){  // if we have never allocated debug stack
+     // if debug/perfmon is set, or has ever been set while this defn is running, there are 2 stack frames available: top of stack is a PARSE frame used for requesting line changes & ? else, and the
+     // frame below the top is a DCCALL type which will hold debug info.  If the caller was unquote, it will have opened a CALL for the name, which can reuse (once)
+     I lvl; DC callframe;   // level of name: 0=bare 1=> 2=>> 3=anionymous
+     if(unlikely(!((callframe=jt->sitop)&&callframe->dctype==DCCALL)))lvl=3;     // If the TOS is not a call, we were called from the parser or 0!:n (or "".) and are truly anonymous.
+     else{  // TOS is a call
+      // self==callframe->dcf    callframe->dcc!=0  lvl example
+      //        0                       0            1  name"0    first call to anon value
+      //        0                       1            2  ({{ a }} , {{ b }})   second call to anon value
+      //        1                       0            0  name      direct call to name
+      //        1                       1            2  impossible   the same value is both named and anonymous
+      lvl=self!=callframe->dcf; lvl=callframe->dcc!=0?2:lvl;  // calculate name decoration according to table above
+     }
+     if(lvl!=0){BZ(callframe=deba(DCCALL,a?a:w?0:u,w?w:a?0:v,self)); callframe->dcnmlev=lvl;}  // allocate frame, remember.  lvl init to 0 for other cases
+     callframe->dcloc=locsym; callframe->dcc=AAV(sv->fgh[2])[HN*((NPGpysfmtdl>>6)&1)];  // install info about the exec for use in debug
+
+     // always allocate the parse frame
+     DC thisframe=deba(DCPARSE,0L,0L,0L);  // if deba fails it will be before it modifies sitop.  Remember our stack frame
+     if(unlikely(thisframe==0)){if(lvl!=0)debz(); BZ(0);}  // if failure, remove first deba by hand
+     NPGpysfmtdl|=16;  // indicate we have a debug frame
      old=jt->tnextpushp;  // protect the stack frame against free
-     nG0ysfctdl|=16+2;  // indicate we have a debug frame and are in debug mode
-     forcetomemory(&bi); forcetomemory(&ti);  // urge the compiler to leave these values in memory
+     if(iotavec[-IOTAVECBEGIN]){forcetomemory(&tdv); forcetomemory(&cv); forcetomemory(&bic); forcetomemory(&tic);}  // force little-used names to memory
+    }
+
+    if(jt->uflags.trace&TRACEDB){   // if debug is on, or coming on
+     NPGpysfmtdl|=2;  // if this is coming from debug, indicate debug mode
+     ic=~debugnewi(~ic,jt->sitop,self);  // get possibly-changed execution line#
+    }
+    IFOB() goto bodyend;  // if defn is exiting, avoid a PM record for an invalid line
+
+    // if performance monitor is on, collect data for it
+    if((jt->uflags.trace&TRACEPM)&&C1==((PM0*)CAV1(JT(jt,pma)))->rec){
+     // PM is enabled & we have requested line timing.  We have to record the name and locale that is running.
+     // If the most recent stack entry before this entity started is a CALL, that is the name to use (it may have been extracted from an anonymous operator).
+     // Otherwise, the call is truly anonymous and we use a name of ''
+     NPGpysfmtdl|=128;  // indicate pm running so we flag calls to parser
+     pmrecord(jt->sitop->dclnk&&jt->sitop->dclnk->dctype==DCCALL&&jt->sitop->dclnk->dcnmlev==0?jt->curname:mtv,jt->global?LOCNAME(jt->global):0,~ic,NPGpysfmtdl&64?VAL2:VAL1);  // scaf should use lev to add >>
+    }
+
+    // If the executing verb was reloaded during debug, switch over to the modified definition
+    DC siparent;
+    if(NPGpysfmtdl&16){
+      if(jt->sitop->dcredef&&(siparent=jt->sitop->dclnk)&&siparent->dctype==DCCALL&&siparent->dcc!=0&&siparent->dcnmlev==0&&self!=siparent->dcf){A *hv;  // must be DCCALL; dcc not0 and lvl 0 means direct call
+       // the top-of-stack (a PARSE entry) indicates redefined, and it is a direct named call to here
+       self=siparent->dcf; V *sv=FAV(self); LINE(sv); siparent->dcc=AAV(sv->fgh[2])[4*((NPGpysfmtdl>>6)&1)];  // LINE sets pointers for subsequent line lookups
+       // Clear all local bucket info in the definition, since it doesn't match the symbol table now
+       // This will affect the current definition and all pyx executions of this definition.  We allow it because
+       // it's for debug only.  The symbol table itself persists
+       A *base=CWBASE(AAV(sv->fgh[2])[HN*((NPGpysfmtdl>>6)&1)]);
+// obsolete        DO(AN(hv[0]), if(AT(line[i])&NAME){NAV(line[i])->bucket=0;});
+       DO(AN(AAV(sv->fgh[2])[HN*((NPGpysfmtdl>>6)&1)]),A l=base[i]; if((I)l&QCISLKPNAME){NAV(QCWORD(l))->bucket=0;});
+      }
+     jt->sitop->dcredef=0;
     }
    }
+// obsolete    IFOB(unlikely)goto bodyend;  // exit if ic is still ob
+   tcesx=CWTCESX(cwsent,ic);  // since i may have been updated - not to mention the defn - refetch the line info
+  }  // end of overhead for debug/pm
 
-   i=debugnewi(i,thisframe,self);  // get possibly-changed execution line
-   if((UI)i>=(UI)(nG0ysfctdl>>16))break;
-
-   // if performance monitor is on, collect data for it
-   if(jt->uflags.us.cx.cx_c.pmctr&&C1==((PM0*)CAV1(JT(jt,pma)))->rec&&FAV(self)->flag&VNAMED)pmrecord(jt->curname,jt->global?LOCNAME(jt->global):0,i,nG0ysfctdl&64?VAL2:VAL1);
-   // If the executing verb was reloaded during debug, switch over to the modified definition
-   DC siparent;
-   if(nG0ysfctdl&16){
-     if(thisframe->dcredef&&(siparent=thisframe->dclnk)&&siparent->dcn&&DCCALL==siparent->dctype&&self!=siparent->dcf){A *hv;
-      self=siparent->dcf; V *sv=FAV(self); LINE(sv); siparent->dcc=hv[1];  // LINE sets pointers for subsequent line lookups
-      // Clear all local bucket info in the definition, since it doesn't match the symbol table now
-      // This will affect the current definition and all future executions of this definition.  We allow it because
-      // it's for debug only.  The symbol table itself persists
-      DO(AN(hv[0]), if(AT(line[i])&NAME){NAV(line[i])->sb.sb.bucket=0;});
-     }
-    thisframe->dcredef=0;
-   }
-  }
-
-  // Don't do the loop-exit test until debug has had the chance to update the execution line.  For example, we might be asked to reexecute the last line of the definition
-  if(unlikely((UI)i>=(UI)(nG0ysfctdl>>16)))break;
+// obsolete   // Don't do the loop-exit test until debug has had the chance to update the execution line.  For example, we might be asked to reexecute the last line of the definition
+// obsolete   IFOB(unlikely)goto bodyend;  // normal exit at end of definition
   // process the control word according to its type
-  I cwgroup;
-  // **************** top of main dispatch loop ********************
-  switch(((cwgroup=cw[i].ig.group[0])&31)){  // highest cw is 33, but it aliases to 1 & there is no 32
+  // the names cwsent, ic, NPGpysfmtdl, tcesx, t, z, jt, and old fit into the 8 nonvolatile non-SP registers
+  // **************** switch by line type ********************
+
+  switch((((tcesx)>>TCESXTYPEX)&31)){  // highest cw is 33, but it aliases to 1 & there is no 32.  32 is used as a multipurpose flag
 
   // The top cases handle the case of if. T do. B B B... end B B...      without looping back to the switch except for the if.
-  case CBBLOCK: case CBBLOCKEND:  // placed first because likely case for unpredicted first line of definition
+  // if there is nothing but if./while/end. most of the branches are internal
+  case CBBLOCK:  // (also BLOCKEND) placed first because likely case for unpredicted first line of definition
+// obsolete  case CBBLOCKEND:
 dobblock:
    // B-block (present on every sentence in the B-block)
    // run the sentence
-   tpop(old); parseline(z);
-   // if there is no error, or ?? debug mode, step to next line
-   if(likely(z!=0)){bi=i; i+=((cwgroup>>5)&1)+1;  // go to next sentence, or to the one after that if it's harmless end. 
-    if(unlikely((UI)i>=(UI)(nG0ysfctdl>>16)))break;  // end of definition
-    if(unlikely(((((cwgroup=cw[i].ig.group[0])^CBBLOCK)&0x1f)+jt->uflags.us.cx.cx_us)!=0))break;  // not another B block
-    goto dobblock;  // avoid indirect-branch overhead on the likely case
+// obsolete    if(old!=jt->tnextpushp)tpop(old);    // we must tpop before every sentence because parse may end with tpushes that would make a block eligible for inplaced assignment.  Test is 1 cycle to save 30
+   parseline(z,tpop(old);,t=0;);  // *** run user's line *** sets tcesx to thisline/nextline; t=0 so t doesn't have to be preserved over subrt calls
+   // if there is no error, step to next line.  debug mode has set the value to use if any, or 0 to request a new line
+   if(likely(z!=0)){bic=ic; ic-=(tcesx>>(32+TCESXTYPEX+5))+1;  // advance to next sentence to be executed, which is NSI, or NSI+1 if BBLOCKEND
+    // the sequence BBLOCKEND BBLOCKEND indicates that the second BBLOCKEND was originally an END that went to NSI which was BBLOCK, i. e. end. for an if./select. followed by BBLOCK.
+// obsolete     if(!(((tcesx&(0x1f<<TCESXTYPEX))^((CBBLOCK&0x1f)<<TCESXTYPEX))|jt->uflags.trace))goto dobblock;  // if NSI is BBLOCK, run it; if we have BBE BBE BB[E], run BB[E] as bblock 
+    if(!(TXOR5(tcesx,CBBLOCK)|jt->uflags.trace))goto dobblock;  // if NSI is BBLOCK, run it; if we have BBE BBE BB[E], skip second BBE (which was an END) - even for debug/pm -  and run BB[E] as bblock 
+    if(!(TXORTOP5(tcesx,32+(CIF&CWHILE))|jt->uflags.trace)){--ic; goto knowntblock;}  // if NSI is flagged if./while., skip over it, knowing it is followed by tblock. i was always decremented by 1
+    goto nextline;  // not another B block or if./while., dispatch the next location (which might not be in tcesx)
+// obsolete     IFOB(unlikely)goto nextlinetcesx;  // end of definition.  Would be nice to go straight to bodyend but we have to check for ss stop after this line
+// obsolete     if(!(((((tcesx=cw[i].tcesx)>>TCESXTYPEX)^CBBLOCK)&0x1f)|jt->uflags.trace))goto dobblock;  // avoid indirect-branch overhead on the likely case of another B block
+// obsolete (((tcesx>>TCESXTYPEX)^CBBLOCK)&0x1f
     // BBLOCK is usually followed by another BBLOCK, but another important followon is END followed by BBLOCK.  BBLOCKEND means
     // 'bblock followed by end that falls through', i. e. a bblock whose successor is i+2.  By handling that we process all sequences of if. T do. B end. B... without having to go through the switch;
     // this means the switch will learn to go to the if.
-   }else if((nG0ysfctdl&16)&&jt->uflags.us.cx.cx_c.db&(DB1)){  // error in debug mode
-    z=mtm,bi=i,i=debugnewi(i+1,thisframe,self);   // Remember the line w/error; fetch continuation line if any. it is OK to have jerr set if we are in debug mode, but z must be a harmless value to avoid error protecting it
-   // if the error is THROW, and there is a catcht. block, go there, otherwise pass the THROW up the line
-   }else if(EVTHROW==jt->jerr){
-    if(nG0ysfctdl&4&&(tdv+tdi-1)->t){i=(tdv+tdi-1)->t+1; RESETERR; z=mtm;}else BASSERT(0,EVTHROW);  // z might not be protected if we hit error
+   // *** the rest is error cases
+   }else if(unlikely((jt->jerr&(EVEXIT^EVDEBUGEND))==EVEXIT)){ic=OBCW; goto nextlinetcesx;  // if 2!:55 requested, honor it regardless of debug status; also EVDEBUGEND which silently cuts everything back in that thread
+   }else if(unlikely((NPGpysfmtdl&16)&&(jt->uflags.trace&TRACEDB1))){  // if we get an error return from debug, the user must be branching to a new line.  Do it
+    if(jt->jerr==EVCUTSTACK)BZ(0);  // if Cut Stack executed on this line, abort the current definition, leaving the Cut Stack error to cause caller to flush the active sentence
+    z=mtm,bic=ic,ic=~debugnewi(~ic+1,jt->sitop,self);   // Remember the line w/error; fetch continuation line#. it is OK to have jerr set if we are in debug mode, but z must be a harmless value to avoid error protecting it
+   }else if(unlikely(jt->jerr==EVTHROW)){
+    // if the error is THROW, and there is a catcht. block, go there, otherwise pass the THROW up the line
+    if(NPGpysfmtdl&4){I j; for(j=CWGO(cwsent,CNSTOREDCW,tdv[-1].b);!TEQ5(CWTCESX(cwsent,j),CEND)&&!TEQ6(CWTCESX(cwsent,j),CBBLOCKEND);j=CWGO(cwsent,CNSTOREDCW,j))if(TEQ5(CWTCESX(cwsent,j),CCATCHT)){ic=j-1; RESETERR; z=mtm; POPIFTRYSTK break;}} BASSERT(z!=0,EVTHROW);  // z might not be protected if we hit error
    // for other error, go to the error location; if that's out of range, keep the error; if not,
-   // it must be a try. block, so clear the error.  Pop the try. stack, and if it pops back to 0, restore debug mode (since we no longer have a try.)
-   // NOTE ERROR: if we are in a for. or select., going to the catch. will leave the stack corrupted,
-   // with the for./select. structures hanging on.  Solution would be to save the for/select stackpointer in the
-   // try. stack, so that when we go to the catch. we can cut the for/select stack back to where it
+   // it must be a try. block, so clear the error (and if the error is ATTN/BREAK, clear the source of the error).
+   //  Pop the try. stack, and restore debug\trapping status
    // was when the try. was encountered
-   }else{i=cw[i].go; if(i<SMAX){RESETERR; z=mtm; if(nG0ysfctdl&4){if(!--tdi){jt->uflags.us.cx.cx_c.db=(UC)(nG0ysfctdl>>8); nG0ysfctdl^=4;}}}  // z might not have been protected: keep it safe. This is B1 try. error catch. return. end.
+   }else{bic=ic; ic=CWGO(cwsent,CNSTOREDCW,ic); IFNOTOB(){if(BETWEENC(jt->jerr,EVATTN,EVBREAK))CLRATTN RESETERR; z=mtm; cv=forpopgoto(jt,cv,ic,1); POPIFTRYSTK}  // Nondebug error.  If caught, we continue: make z valid then.  Pop try. stack always, for. stack if needed
    }
-   break;
+   goto nextline;
 
-  case CIF: case CWHILE: case CELSEIF:
-     // in a long run of only if. and B blocks, the only switches executed will go to the if. processor, predictably
-   i=cw[i].go;  // Go to the next sentence, whatever it is
-   if(unlikely((UI)i>=(UI)(nG0ysfctdl>>16)))break;  // no fallthrough if line exits
-   if(unlikely((((cwgroup=cw[i].ig.group[0])^CTBLOCK)&0xff)+jt->uflags.us.cx.cx_us))break;  // avoid indirect-branch overhead on the likely case
+  case CIF: case CWHILE:
+   --ic;  // always step to first line of tblock, which must be in range
+// obsolete    i=cw[i].go;  // Point to the next sentence, whatever it is
+// obsolete    if(unlikely((UI)i>=(UI)(CNSTOREDCW)))goto nextline;  // no fallthrough if line exits
+   tcesx=CWTCESX(cwsent,ic); if(unlikely(TXOR5(tcesx,CTBLOCK)|jt->uflags.trace))goto nextlinetcesx;  // redispatch if next is not tblock
    // fall through to...
-  case CASSERT:
-  case CTBLOCK:
-tblockcase:
+
+  case CASSERT: case CTBLOCK:
+ knowntblock:;  // tcesx may contain the previous line's value in place of TBLOCK - but it won't be ASSERT
+// obsolete tblockcase:
    // execute and parse line as if for B block, except save the result in t
    // If there is a possibility that the previous B result may become the result of this definition,
    // protect it during the frees during the T block.  Otherwise, just free memory
-   if(likely(cwgroup&0x200))tpop(old);else z=gc(z,old);   // 2 means previous B can't be the result
+// obsolete    if(old!=jt->tnextpushp)if(likely(tcesx&TCESXCECANT))tpop(old);else z=gc(z,old);  // must tpop before each user sentence  2 means previous B can't be the result
+// obsolete    if(likely(tcesx&TCESXCECANT))tpop(old);else z=gc(z,old);   //
    // Check for assert.  Since this is only for T-blocks we tolerate the test (rather than duplicating code)
-   if(unlikely((cwgroup&0xff)==CASSERT)){
-    if(JT(jt,assert)){parseline(t); if(t&&!(NOUN&AT(t)&&all1(eq(num(1),t))))t=pee(line,cw+i,EVASSERT,nG0ysfctdl<<(BW-2),callframe); t=t!=0?mtv:t; // if assert., signal post-execution error if result not all 1s.
-       // An assert is an entire T-block and must clear t afterward lest t be freed before it is checked by an empty while. .  But we can't set t=0 without looking like an error.  So we use a safe permanent value, mtv.  
-    }else{++i; break;}  // if ignored assert, go to NSI
-   }else{parseline(t);}
-   if(likely(t!=0)){ti=i,++i;  // if no error, continue on
-    if(unlikely((UI)i>=(UI)(nG0ysfctdl>>16)))break;  // exit if end of defn
-    if(unlikely(((((cwgroup=cw[i].ig.group[0])^CDO)&0xff)+jt->uflags.us.cx.cx_us)!=0))break;  // break if T block extended
-    goto docase;  // avoid indirect-branch overhead on the likely case, if. T do.
-   }else if((nG0ysfctdl&16)&&DB1&jt->uflags.us.cx.cx_c.db)ti=i,i=debugnewi(i+1,thisframe,self);  // error in debug mode: when coming out of debug, go to new line (there had better be one)
-   else if(EVTHROW==jt->jerr){if(nG0ysfctdl&4&&(tdv+tdi-1)->t){i=(tdv+tdi-1)->t+1; RESETERR;}else BASSERT(0,EVTHROW);}  // if throw., and there is a catch., do so
-   else{i=cw[i].go; if(i<SMAX){RESETERR; z=mtm; if(nG0ysfctdl&4){if(!--tdi){jt->uflags.us.cx.cx_c.db=(UC)(nG0ysfctdl>>8); nG0ysfctdl^=4;}}}else z=0;}  // uncaught error: if we take error exit, we might not have protected z, which is not needed anyway; so clear it to prevent invalid use
-     // if we are not taking the error exit, we still need to set z to a safe value since we might not have protected it.  This is B1 try. if. error do. end. catch. return. end.
-   break;
+   if(unlikely(TEQ5(tcesx,CASSERT))){
+    if(JT(jt,assert)){
+     parseline(t,{if(likely((tcesx&((UI8)TCESXCECANT<<32))!=0))tpop(old);else z=gc(z,old);},); if(t&&!(NOUN&AT(t)&&all1(eq(num(1),t))))t=pee(cwsent,CWTCESX2(cwsent,ic),EVASSERT,NPGpysfmtdl<<(BW-2),jt->sitop->dclnk); // if assert., signal post-execution error if result not all 1s.
+     if(likely(t!=0)){  // assert without error
+      t=mtv;  // An assert is an entire T-block and must clear t afterward lest t be freed before it is checked by an empty while.  So we use a safe permanent value, mtv.  
+// obsolete       --ic; IFOB(unlikely)goto nextlinetcesx; ++ic;  //  // The only way a T-block can run off the end is from an assert.  Check for that
+     }
+    }else{--ic; goto nextline;}  // if ignored assert, go to NSI
+   }else{parseline(t,{if(likely((tcesx&((UI8)TCESXCECANT<<32))!=0))tpop(old);else z=gc(z,old);},);} // no assert: run the line  resets tcesx to thisline/nextline
+   // this is return point from running the line
+   if(likely(t!=0)){tic=ic,--ic;  // if no error, continue on.  ++i must be in bounds for a non-assert T block (there must be another control word)
+// obsolete     if(unlikely((UI)i>=(UI)(CNSTOREDCW))){ i=i&0xffff; goto nextline;} // scaf  // exit if end of defn  scaf impossible! tblock cannot end fn
+// obsolete     if(unlikely((((((tcesx=CWTCESX(cwsent,i))>>TCESXTYPEX)^CDO))|jt->uflags.trace)!=0))goto nextline;   // next line not do.; T block extended to more than 1 line (rare)
+// obsolete     tcesx=CWTCESX(cwsent,ic);
+    if(unlikely(TXOR5(tcesx,CDO)|jt->uflags.trace))goto nextlinetcesx;   // next line not do.; T block extended to more than 1 line (rare).
+   }else{
+    // *** the rest is error cases
+    if(unlikely((jt->jerr&(EVEXIT^EVDEBUGEND))==EVEXIT)){ic=OBCW; goto nextlinetcesx;  // if 2!:55 requested, honor it regardless of debug status; also EVDEBUGEND which silently cuts everything back in that thread
+    }else if(unlikely((NPGpysfmtdl&16)&&(jt->uflags.trace&TRACEDB1))){  // if we get an error return from debug, the user must be branching to a new line.  Do it
+     if(jt->jerr==EVCUTSTACK)BZ(0);  // if Cut Stack executed on this line, abort the current definition, leaving the Cut Stack error to cause caller to flush the active sentence
+     z=mtm,bic=ic,ic=~debugnewi(~ic,jt->sitop,self);   // Remember the line w/error; fetch continuation line#. it is OK to have jerr set if we are in debug mode, but z must be a harmless value to avoid error protecting it
+    }else if(unlikely(EVTHROW==jt->jerr)){if(NPGpysfmtdl&4){I j; for(j=CWGO(cwsent,CNSTOREDCW,tdv[-1].b);!TEQ5(CWTCESX(cwsent,j),CEND)&&!TEQ6(CWTCESX(cwsent,j),CBBLOCKEND);j=CWGO(cwsent,CNSTOREDCW,j))if(TEQ5(CWTCESX(cwsent,j),CCATCHT)){ic=j-1; RESETERR; z=mtm; POPIFTRYSTK break;}} BASSERT(z!=0,EVTHROW);  // if throw., and there is a catch., do so
+    }else{bic=ic; ic=CWGO(cwsent,CNSTOREDCW,ic); IFNOTOB(){RESETERR; z=mtm; cv=forpopgoto(jt,cv,ic,1); POPIFTRYSTK}else z=0;}  // nondebug error: if we take error exit, we might not have protected z, which is not needed anyway; so clear it to prevent invalid use.  Pop try. stack always, for. stack if needed
+      // if we are not taking the error exit, we still need to set z to a safe value since we might not have protected it.
+    goto nextline;
+   }
+   // normal case falls through to do. ...
 
   case CDO:
-docase:
    // do. here is one following if., elseif., or while. .  It always follows a T block, and skips the
    // following B block if the condition is false.
-  {A tt=t; tt=t?t:mtv;  // missing t looks like '' which is true
-   //  Start by assuming condition is true; set to move to the next line then
-   ++i;
+  {A tt=t; tt=t?t:mtv; t=0;  // missing t looks like '' which is true; clear t to start NEXT tblock empty
+   --ic;   //  Start by assuming condition is true; set to move to the next line then
    // Quick true cases are: nonexistent t; empty t; direct numeric t with low byte nonzero.  This gets most of the true.  We add in char types and BOX cause it's free (they are always true)
-   if(likely(AN(tt)))if((-(AT(tt)&(B01|LIT|INT|FL|CMPX|C2T|C4T|BOX))&-((I)CAV(tt)[0]))>=0){I nexti=cw[i-1].go;  // C cond is false if (type direct or BOX) and (value not 0).  J cond is true then.  Musn't fetch CAV[0] if AN==0
+   if(unlikely(AN(tt)==0))goto safedo;  // nonexistent or empty t can fall through without checking for end
+   if((-(AT(tt)&(B01|LIT|INT|INT2|INT4|FL|CMPX|QP|C2T|C4T|BOX))&-((I)CAV(tt)[0]))<0)goto safedo;  // C cond is true if (type direct or BOX) and (value not 0).  J cond is true then.  Musn't fetch CAV[0] if AN==0
     // here the type is indirect or the low byte is 0.  We must compare more
-    while(1){  // 2 loops if sparse
-     if(likely(AT(tt)&INT+B01)){i=BIV0(tt)?i:nexti; break;} // INT and B01 are most common
-     if(AT(tt)&FL){i=DAV(tt)[0]?i:nexti; break;}
-     if(AT(tt)&CMPX){i=DAV(tt)[0]||DAV(tt)[1]?i:nexti; break;}
-     if(AT(tt)&(RAT|XNUM)){i=1<AN(XAV(tt)[0])||IAV(XAV(tt)[0])[0]?i:nexti; break;}
-     if(!(AT(tt)&NOUN)){CHECKNOUN}  // will take error
-     // other types test true, which is how i is set
-     if(!ISSPARSE(AT(tt)))break;
-     BZ(tt=denseit(tt)); if(AN(tt)==0)break;  // convert sparse to dense - this could make the length go to 0, in which case true
-    }
+   I nextic=CWGO(cwsent,CNSTOREDCW,ic+1);  // next inst if false
+   while(1){  // 2 loops if sparse
+    if(likely(AT(tt)&INT+B01)){ic=BIV0(tt)?ic:nextic; break;} // INT and B01 are most common
+    if(AT(tt)&FL){ic=DAV(tt)[0]?ic:nextic; break;}
+    if(AT(tt)&INT2){ic=I2AV(tt)[0]?ic:nextic; break;}
+    if(AT(tt)&INT4){ic=I4AV(tt)[0]?ic:nextic; break;}
+    if(AT(tt)&CMPX){ic=DAV(tt)[0]||DAV(tt)[1]?ic:nextic; break;}
+    if(AT(tt)&(RAT|XNUM)){ic=!ISX0(XAV(tt)[0])?ic:nextic; break;}
+    if(AT(tt)&QP){ic=EAV(tt)[0].hi?ic:nextic; break;}
+    if(!(AT(tt)&NOUN)){NOUNERR(tt,tic,1)}  // will take error exit
+    if(!ISSPARSE(AT(tt)))break;     // nonnumeric types (BOX, char) test true: i is set for that
+    BZ(tt=denseit(tt)); if(AN(tt)==0)break;  // convert sparse to dense - this could make the length go to 0, in which case true
    }
-   }
-   t=0;  // Indicate no T block, now that we have processed it
-   if(unlikely((UI)i>=(UI)(nG0ysfctdl>>16)))break;
-   if(unlikely(((((cwgroup=cw[i].ig.group[0])^CBBLOCK)&0x1f)+jt->uflags.us.cx.cx_us)!=0))break;  // check for end of definition of special types
-   goto dobblock;   // normal case, continue with B processing, without switch overhead
+   // false cases come here, and a few true ones
+ elseifasdo:;  // elseif is like do. with a failing test - probably followed by B.  i is set  case./fcase after the first also come here, to branch to end.
+// obsolete    IFOB(unlikely)goto bodyend;
+ safedo:;  // here when we have advanced ic.  If this op is flagged we know the thing at ic is a bblock[end].  tcesx still has the value from the previous ic
+// obsolete    if((I4)tcesx&((I)1<<(TCESXTYPEX+5)))goto dobblock;   // normal case, we know we are continuing with bblock.  No need to fetch it
+   if(FLAGGEDNOTRACE(tcesx))goto dobblock;   // normal case, we know we are continuing with bblock.  No need to fetch it
+// obsolete    tcesx=CWTCESX(cwsent,ic);  // 
+// obsolete  if(likely(!(TXOR5(tcesx,CBBLOCK)|jt->uflags.trace)))goto dobblock;  // normal case, continue with B processing
+   goto nextline;   // otherwise fetch & redispatch next line
+  }
+
+  case CELSEIF: ic=CWGO(cwsent,CNSTOREDCW,ic); goto elseifasdo;  // elseif is like a failing do - skips past end., probably to B
 
   // ************* The rest of the cases are accessed only by indirect branch or fixed fallthrough ********************
   case CTRY:
-   // try.  create a try-stack entry, step to next line
-   BASSERT(tdi<NTD,EVLIMIT);
-   tryinit(tdv+tdi,i,cw);
-   // turn off debugging UNLESS there is a catchd; then turn on only if user set debug mode
-   // if debugging is already off, it stays off
-   if(unlikely(jt->uflags.us.cx.cx_c.db))jt->uflags.us.cx.cx_c.db=(nG0ysfctdl&16)&&(UC)(tdv+tdi)->d?JT(jt,dbuser):0;
-   ++tdi; ++i; nG0ysfctdl|=4;  // bump tdi pointer, set flag
-   break;
+   {
+    // try.  create a try-stack entry, step to next line
+    BASSERT(tdv->ndx<NTD,EVLIMIT); tdv[1].ndx=tdv[0].ndx+1;   // verify not too many frames, and init next frame index
+    I j, isd=0; tdv->b=ic; for(j=CWGO(cwsent,CNSTOREDCW,ic);!TEQ5(CWTCESX(cwsent,j),CEND)&&!TEQ6(CWTCESX(cwsent,j),CBBLOCKEND);j=CWGO(cwsent,CNSTOREDCW,j))isd|=TEQ5(CWTCESX(cwsent,j),CCATCHD); tdv->e=j;  // fill in begin/end lines, remember if catchd. seen
+    tdv->trap=PUSHTRYSTK;
+    // turn off debugging UNLESS there is a catchd; then keep on only if user set debug mode
+    // if debugging is already off, it stays off
+    if(unlikely(jt->uflags.trace&TRACEDB)){jt->uflags.trace&=~TRACEDB; if((NPGpysfmtdl&16)&&isd)jt->uflags.trace|=TRACEDB1&(JT(jt,dbuser));}  // scaf avoid branches
+    // debugging is now off if we are trapping.  In that case, indicate that we are trapping errors, to prevent holding them for debug
+    jt->emsgstate|=(~jt->uflags.trace&TRACEDB1)<<EMSGSTATETRAPPINGX;  // turn on trapping if not now debug
+    // We allow verbose messages in case the catch. wants to display them.  This is different from u :: v
+    ++tdv; NPGpysfmtdl|=4;  // bump tdv pointer, install index of next entry, set flag
+    --ic;  // continue with NSI
+   }
+   goto nextline;
   case CCATCH: case CCATCHD: case CCATCHT:
-   // catch.  pop the try-stack, go to end., reset debug state.  There should always be a try. stack here
-   if(nG0ysfctdl&4){if(!--tdi){jt->uflags.us.cx.cx_c.db=(UC)(nG0ysfctdl>>8); nG0ysfctdl^=4;} i=1+(tdv+tdi)->e;}else i=cw[i].go; break;
+   // Falling through to catch*., which ends the trapping if any.  Pop the try-stack, go to after end., reset debug state, restore trapping status.  If there are both catch.
+   // and catchd., we could take an error to the catch. and then fall through to catchd., or we could branch from the catch. back to the try.; so we have to make sure that the
+   // block on the try. stack is for the structure we are in.  Go through the control words of the current try. looking for a match; if found, pop the try block and goto its end+1;
+   // otherwise just go to the next catch* in this structure - we'll hit end presently
+   {I nic=CWGO(cwsent,CNSTOREDCW,ic); if(likely(NPGpysfmtdl&4)){I j; for(j=CWGO(cwsent,CNSTOREDCW,tdv[-1].b);!TEQ5(CWTCESX(cwsent,j),CEND)&&!TEQ6(CWTCESX(cwsent,j),CBBLOCKEND);j=CWGO(cwsent,CNSTOREDCW,j))if(j==ic){POPIFTRYSTK nic=tdv->e-1; break;}} ic=nic;}
+   goto nextline;
   case CTHROW:
    // throw.  Create a throw error
    BASSERT(0,EVTHROW);
-  case CFOR:
-  case CSELECT: case CSELECTN:
-   // for./select. push the stack.  If the stack has not been allocated, start with 9 entries.  After that,
-   // if it fills up, double it as required
-   if(unlikely(!r))
-    if(unlikely(nG0ysfctdl&8)){I m=AN(cd)/WCD; BZ(cd=ext(1,cd)); cv=(CDATA*)AV(cd)+m-1; r=AN(cd)/WCD-m;}
-    else  {r=9; GAT0E(cd,INT,9*WCD,1,i=-1; z=0; continue); ACINITZAP(cd) cv=(CDATA*)IAV1(cd)-1; nG0ysfctdl|=8;}   // 9=r
-
-   ++cv; --r;
-   BZ(forinitnames(jt,cv,cwgroup&0xff,line[CWSENTX]));  // setup the names, before we see the iteration value
-   ++i;
-   break;
+  case CFOR: case CSELECT: case CSELECTN:
+   // for./select. push the stack.  Use the C stack for the first one, after that allocate as needed, keeping blocks around
+   if(cv==0){cv=&cdata; cv->bchn=0;  // for first block, use the canned area.  Indicate no previous blocks; there may be successors that we can reuse
+   }else if(cv->fchn){cv=voidAV0(cv->fchn);  // if there is another element already allocated, move to it
+   }else{A cd;
+    // we have to allocate an element.  cv points to end of current chain
+    GAT0E(cd,INT,(sizeof(CDATA)+SZI-1)>>LGSZI,0,{z=0; goto bodyend;}); ACINITZAP(cd) // allocate, rank 0, exiting with error if allocation failure.  Zap the block because it must persist over subsequent tpops; we will delete by hand
+    cv->fchn=cd;  // forward-chain chain allocated A block to current CDATA block
+    CDATA *newcv=voidAV0(cd);   // get address of CDATA portion of new block
+    newcv->bchn=cv; newcv->fchn=0; cv=newcv;  // backward-chain CDATA areas; indicate no forward successor; advance to new block
+   } 
+   BZ(forinitnames(jt,cv,(tcesx>>TCESXTYPEX)&0x1f,cwsent[tcesx&TCESXSXMSK],ic,CWGO(cwsent,CNSTOREDCW,ic)));  // setup the names and start/end line#s, before we see the iteration value
+   --ic; if(likely(FLAGGEDNOTRACE(tcesx)))goto knowntblock;   // We should be at a tblock; if so process it without fetching
+   goto nextline;
   case CDOF:   // do. after for.
    // do. after for. .  If this is first time, initialize the iterator
    if(unlikely(cv->j<0)){
-    BASSERT(t!=0,EVCTRL);   // Error if no sentences in T-block
-    CHECKNOUN    // if t is not a noun, signal error on the last line executed in the T block
+    BASSERT(t!=0,EVEMPTYT);   // Error if no sentences in T-block
+    CHECKNOUN(1)    // if t is not a noun, signal error on the last line executed in the T block
     BZ(forinit(cv,t)); t=0;
    }
    ++cv->j;  // step to first (or next) iteration
    if(likely(cv->indexsym!=0)){
     // for_xyz.  Manage the loop variables
-    L *sympv=JT(jt,sympv);  // base of symbol array
+    L *sympv=SYMORIGIN;  // base of symbol array
     A *aval=&sympv[cv->indexsym].val;  // address of iteration-count slot
     A iterct=*aval;  // A block for iteration count
     if(unlikely(AC(iterct)>1))BZ(iterct=swapitervbl(jt,iterct,aval));  // if value is now aliased, swap it out before we change it
     IAV0(iterct)[0]=cv->j;  // Install iteration number into the readonly index
     L *itemsym=&sympv[cv->itemsym];
-    if(unlikely(!(cwgroup&0x200)))BZ(z=rat(z));   // if z might be the result, protect it over the free
+    if(unlikely(!(tcesx&TCESXCECANT)))BZ(z=rat(z));   // if z might be the result, protect it over the free
     if(likely(cv->j<cv->niter)){  // if there are more iterations to do...
-    // if xyz has been reassigned, fa the incumbent and reinstate the sorta-virtual block, advanced to the next item
+    // if xyz has been reassigned, fa the incumbent and reinstate the virtual block, advanced to the next item
      AK(cv->item)+=cv->itemsiz;  // advance to next item
      if(unlikely(itemsym->val!=cv->item)){
-      // discard & free incumbent, switch to sorta-virtual, raise it
+      // discard & free incumbent, switch to virtual, raise it
       A val=itemsym->val; fa(val) val=cv->item; ra(val) itemsym->val=val;
       itemsym->valtype=ATYPETOVALTYPE(INT); // also have to set the value type in the symbol, in case it was changed.  Any noun will do
      }
-     ++i; continue;   // advance to next line and process it
+     --ic; goto elseifasdo;   // advance to next line and process it; if flagged, we know it's bblock
     }
     // ending the iteration.  set xyz to i.0
-    {A val=itemsym->val; fa(val)}  // discard & free incumbent, probably the sorta-virtual block
+    {A val=itemsym->val; fa(val)}  // discard & free incumbent, probably the virtual block.  If the virtual block, this is never the final free, which comes in unstackcv
     itemsym->val=mtv;  // after last iteration, set xyz to mtv, which is permanent
     itemsym->valtype=ATYPETOVALTYPE(INT); // also have to set the value type in the symbol, in case it was changed.  Any noun will do
-   }else if(likely(cv->j<cv->niter)){++i; continue;}  // advance to next line and process it
+   }else if(likely(cv->j<cv->niter)){--ic; goto elseifasdo;}  // (no for_xyz.) advance to next line and process it; if flagged is bblock
    // if there are no more iterations, fall through...
+   tcesx&=~(32<<TCESXTYPEX);  // the flag for DOF is for the loop, but we are exiting, so turn off the flag
   case CENDSEL:
    // end. for select., and do. for for. after the last iteration, must pop the stack - just once
    // Must rat() if the current result might be final result, in case it includes the variables we will delete in unstack
-   // (this includes ONLY xyz_index, so perhaps we should avoid rat if stack empty or xyz_index not used)
-   if(unlikely(!(cwgroup&0x200)))BZ(z=rat(z)); unstackcv(cv,1); --cv; ++r; 
-   i=cw[i].go;    // continue at new location
-   break;
-  case CBREAKS:
-  case CCONTS:
-   // break./continue-in-while. must pop the stack if there is a select. nested in the loop.  These are
-   // any number of SELECTN, up to the SELECT 
-   if(unlikely(!(cwgroup&0x200)))BZ(z=rat(z));   // protect possible result from pop, if it might be the final result
-   NOUNROLL do{I fin=cv->w==CSELECT; unstackcv(cv,1); --cv; ++r; if(fin)break;}while(1);
-    // fall through to...
-  case CBREAK:
-  case CCONT:  // break./continue. in while., outside of select.
-   i=cw[i].go;   // After popping any select. off the stack, continue at new address
-   // It must also pop the try. stack, if the destination is outside the try.-end. range
-   if(nG0ysfctdl&4){tdi=trypopgoto(tdv,tdi,i); nG0ysfctdl^=tdi?0:4;}
-   break;
-  case CBREAKF:
-   // break. in a for. must first pop any active select., and then pop the for.
-   // We just pop till we have popped a non-select.
-   // Must rat() if the current result might be final result, in case it includes the variables we will delete in unstack
-   if(unlikely(!(cwgroup&0x200)))BZ(z=rat(z));   // protect possible result from pop
-   NOUNROLL do{I fin=cv->w; unstackcv(cv,1); --cv; ++r; if((fin^CSELECT)>(CSELECT^CSELECTN))break;}while(1);  // exit on non-SELECT/SELECTN
-   i=cw[i].go;     // continue at new location
-   // It must also pop the try. stack, if the destination is outside the try.-end. range
-   if(nG0ysfctdl&4){tdi=trypopgoto(tdv,tdi,i); nG0ysfctdl^=tdi?0:4;}
-   break;
-  case CRETURN:
-   // return.  Protect the result during free, pop the stack back to empty, set i (which will exit)
-   i=cw[i].go;   // If there is a try stack, restore to initial debug state.  Probably safe to  do unconditionally
-   if(nG0ysfctdl&4)jt->uflags.us.cx.cx_c.db=(UC)(nG0ysfctdl>>8);  // if we had an unfinished try. struct, restore original debug state
-   break;
+   // (scaf this is no longer needed since names are not deleted but the result case is rare)
+   if(unlikely(!(tcesx&TCESXCECANT)))BZ(z=rat(z)); cv=unstackcv(cv,1);
+   if(FLAGGEDNOTRACE(tcesx)){--ic; goto dobblock;}  // if flagged (must be ENDSEL), NSI is bblock, go do it without reading
+   ic=CWGO(cwsent,CNSTOREDCW,ic);    // continue at new location
+   goto nextline;
   case CCASE:
   case CFCASE:
-   // case. and fcase. are used to start a selection.  t has the result of the T block; we check to
-   // make sure this is a noun, and save it on the stack in cv->t.  Then clear t
+   // The first case./fcase. start a selection; subsequent ones are executed only to end the selected case.
    if(!cv->t){
-    // This is the first case.  That means the t block has the select. value.  Save it.
-    BASSERT(t!=0,EVCTRL);  // error if select. case.
-    CHECKNOUN    // if t is not a noun, signal error on the last line executed in the T block
+    // This is the first case.  That means the t block has the select. value.  Save it in cv->t
+    BASSERT(t!=0,EVEMPTYT);  // error if select. case.
+    CHECKNOUN(1)    // if t is not a noun, signal error on the last line executed in the select T block
     BZ(ras(t)); cv->t=t; t=0;  // protect t from free while we are comparing with it, save in stack
+    --ic;   // first case always falls to NSI
+    if(FLAGGEDNOTRACE(tcesx))goto knowntblock;  // if flagged, NSI is tblock, go do it without reading
+    goto nextline;  // expect tblock after first case.
    }
-   i=cw[i].go;  // Go to next sentence, which might be in the default case (if T block is empty)
-   if(likely((UI)i<(UI)(nG0ysfctdl>>16)))if(likely(!((((cwgroup=cw[i].ig.group[0])^CTBLOCK)&0xff)+jt->uflags.us.cx.cx_us)))goto tblockcase;  // avoid indirect-branch overhead on the likely case, which is case. t-block do.
-   break;  // if it's not a t-block, take the indirect branch
+   ic=CWGO(cwsent,CNSTOREDCW,ic);  // Go to next sentence, which might be after end., or (for the first case.), the test
+   goto elseifasdo;  // case. after the first marks the end of a do. block and is like elseif
+// obsolete    IFNOTOB(likely)if(likely(!((((tcesx=CWTCESX(cwsent,ic))>>TCESXTYPEX)^CTBLOCK)|jt->uflags.trace)))goto tblockcase;  // avoid indirect-branch overhead on the likely case, which is case. t-block do.
   case CDOSEL:   // do. after case. or fcase.
    // do. for case./fcase. evaluates the condition.  t is the result (a T block); if it is nonexistent
    // or not all 0, we advance to the next sentence (in the case); otherwise skip to next test/end
-   ++i;  // go to NSI if case tests true
+   --ic;  // go to NSI if case tests true
    if(t){    // if t is not a noun, signal error on the last line executed in the T block
-    CHECKNOUN
+    CHECKNOUN(1)
     if(!((AT(t)|AT(cv->t))&BOX)){
      // if neither t nor cv is boxed, just compare for equality.  Boxed empty goes through the other path
-     if(!equ(t,cv->t))i=cw[i-1].go;  // should perhaps take the scalar case specially & send it through singleton code
+     if(!equ(t,cv->t))ic=CWGO(cwsent,CNSTOREDCW,ic+1);  // should perhaps take the scalar case specially & send it through singleton code
     }else{
-     if(all0(eps(boxopen(cv->t),boxopen(t))))i=cw[i-1].go;  // if case tests false, jump around bblock   test is cv +./@:,@:e. boxopen t
+     if(all0(eps(boxopen(cv->t),boxopen(t))))ic=CWGO(cwsent,CNSTOREDCW,ic+1);  // if case tests false, jump around bblock   test is cv +./@:,@:e. boxopen t
     }
     // Clear t to ensure that the next case./fcase. does not reuse this value
     t=0;
    }
-   if(likely((UI)i<(UI)(nG0ysfctdl>>16)))if(likely(!((((cwgroup=cw[i].ig.group[0])^CBBLOCK)&0x1f)+jt->uflags.us.cx.cx_us)))goto dobblock;  // avoid indirect-branch overhead on the likely  case. ... do. bblock
-   break;
-  default:   //   CELSE CWHILST CGOTO CEND
-   if(unlikely(2<=*JT(jt,adbreakr))) {BASSERT(0,EVBREAK);} 
+   // the probable next instruction is the bblock if the test was true or the next tblock if the test was false.  No prediction
+// obsolete    IFNOTOB(likely)
+// obsolete    if(likely(!(((((tcesx=CWTCESX(cwsent,ic))>>TCESXTYPEX)^CBBLOCK)&0x1f)|jt->uflags.trace)))goto dobblock;  // avoid indirect-branch overhead on the likely  case. ... do. bblock
+   goto nextline;
+    
+  case CGOTO: case CBREAKS: case CCONTS: case CBREAK: case CCONT: case CBREAKF: case CRETURN: // goto_label. or any break/continue/return.  Close any structures we branch out of
+   ic=CWGO(cwsent,CNSTOREDCW,ic);  // Go to the next sentence, whatever it is
+   // Must rat() if the current result might be final result, in case it includes the variables we will delete in unstack
+   if(unlikely(!(tcesx&TCESXCECANT)))BZ(z=rat(z));   // protect possible result from pop
+   cv=forpopgoto(jt,cv,ic,1);   // if the branch takes us outside a control structure, pop the for/select stack
+   // It must also pop the try. stack, if the destination is outside the try.-end. range
+   if(unlikely(NPGpysfmtdl&4)){tdv=trypopgoto(jt,tdv,ic); NPGpysfmtdl^=tdv->ndx?0:4;}
+   if(unlikely(2<=__atomic_load_n(JT(jt,adbreakr),__ATOMIC_ACQUIRE))) {BASSERT(0,EVBREAK);} 
      // JBREAK0, but we have to finish the loop.  This is double-ATTN, and bypasses the TRY block
-   i=cw[i].go;  // Go to the next sentence, whatever it is
-  }
- }  // end of main loop
- // We still must not take an error exit in this runout.  We have to hang around to the end to restore symbol tables, pointers, etc.
+   goto nextline;
+// obsolete    goto checkbreak;   // finish up through BREAK check
 
- FDEPDEC(1);  // OK to ASSERT now
+  default:   //   CELSE CWHILST CEND
+   ic=CWGO(cwsent,CNSTOREDCW,ic);  // Go to the next sentence, whatever it is
+// obsolete checkbreak:;
+   if(unlikely(2<=__atomic_load_n(JT(jt,adbreakr),__ATOMIC_ACQUIRE))) {BASSERT(0,EVBREAK);} 
+     // JBREAK0, but we have to finish the loop.  This is double-ATTN, and bypasses the TRY block
+   if(likely(FLAGGEDNOTRACE(tcesx)))goto dobblock;   // normal case, flagged so we know we are continuing with bblock.  No need to fetch it
+   goto nextline;
+
+  case CENDOFDEFN:;  // end of definition.  fall out of loop
+  }  // end of giant select
+ }  // end of main 'loop'
+bodyend: ;  // we branch to here to exit with z set to result
  //  z may be 0 here and may become 0 before we exit
+ // We still must not take an error exit in this runout.  We have to hang around to the end to restore symbol tables, pointers, etc.
+ // if we did not get an error, the try. and for./select. stacks must be clear
+
+ FDEPDEC(1);
+ // check for pee
  if(likely(z!=0)){
   // There was a result (normal case)
   // If we are executing a verb (whether or not it started with 3 : or [12] :), make sure the result is a noun.
@@ -609,78 +701,72 @@ docase:
    // If we are returning a virtual block, we are going to have to realize it.  This is because it might be (indeed, probably is) backed by a local symbol that
    // is going to be summarily freed by the symfreeha() below.  We could modify symfreeha to recognize when we are freeing z, but the case is not common enough
    // to be worth the trouble
-   realizeifvirtual(z);
-  }else if(AT(self)&ADV+CONJ){  // non-noun result, but OK from adv/conj
+   realizeifvirtualE(z,);  // this just leaves z=0 if there is an error realizing
+  }else if(NPGpysfmtdl&8){  // non-noun result, but OK from adv/conj
    // if we are returning a non-noun, we have to cleanse it of any implicit locatives that refer to the symbol table in use now.
    // It is OK to refer to other symbol tables, since they will be removed if they try to escape at higher lavels and in the meantime can be executed; but
    // there is no way we could have a reference to such an implied locative unless we also had a reference to the current table; so we replace only the
    // first locative in each branch
    z=fix(z,sc(FIXALOCSONLY|FIXALOCSONLYLOWEST));
-  }else {pee(line,&cw[bi],EVNONNOUN,nG0ysfctdl<<(BW-2),callframe); z=0;}  // signal error, set z to 'no result'
+  }else{pee(cwsent,CWTCESX2(cwsent,bic),EVNONNOUN,NPGpysfmtdl<<(BW-2),jt->sitop->dclnk); z=0;}  // signal error, set z to 'no result'
  }else{
-  // No result.  Must be an error
-  if(nG0ysfctdl&4)jt->uflags.us.cx.cx_c.db=(UC)(nG0ysfctdl>>8);  // if we had an unfinished try. struct, restore original debug state
-  // Since we initialized z to i. 0 0, there's nothing more to do
+  // No result.  Must be an error, or final exit from suspension
+  cv=forpopgoto(jt,cv,~-1,1);   // clear the for/select stack
+  if(unlikely(NPGpysfmtdl&4)){trypopgoto(jt,tdv,-1);}  // pop all try structs, restore original debug state
  }
 
- if(unlikely(nG0ysfctdl&16)){debz();}   // pair with the deba if we did one
- A prevlocsyms=(A)AM(locsym);  // get symbol table to return to, before we free the old one
- if(likely((REPSGN(SGNIF(nG0ysfctdl,3))&((I)cv^(I)((CDATA*)IAV1(cd)-1)))==0)){  // if we never allocated cd, or the stack is empty
-  // Normal path.  protect the result block and free everything allocated here, possibly including jt->locsyms if it was cloned (it is on the stack now)
-  if(likely(z!=0))z=EPILOGNORET(z); else tpop(_ttop);  // protect return value from being freed when the symbol table is.  Must also be before stack cleanup, in case the return value is xyz_index or the like
-   // We have to make sure that we clear all atored values, because they may point to virtual blocks, even unincorpable ones, in callers.
-   // tpop will do the trick for cloned symbol tables, and EPILOG calls tpop - EXCEPT when z is 0.  Probably the best solution is to have gc() do the
-   // tpop whenever z is 0, but out of timidity we do it here instead, making sure tpop runs one way or another.  This frees any cloned symbol tables,
-   // and below we free the values from an original local table
- }else{
-  // Unusual path with an unclosed contruct (e. g. return. from inside for. loop).  We have to free up the for. stack, but the return value might be one of the names
-  // to be deleted on the for. stack, so we must protect the result before we pop the stack.  BUT, EPILOG frees all locally-allocated blocks, which might include the symbol
-  // table that we need to pop from.  So we protect the symbol table during the cleanup of the result and stack.
-  ra(locsym);  // protect local symtable - not contents
-  if(likely(z!=0))z=EPILOGNORET(z); else tpop(_ttop);  // protect return value from being freed when the symbol table is.  Must also be before stack cleanup, in case the return value is xyz_index or the like.  See sbove for tpop
-  NOUNROLL while(cv!=(CDATA*)IAV1(cd)-1){unstackcv(cv,0); --cv;}  // clean up any remnants left on the for/select stack
-  fa(locsym);  // unprotect local syms.  This deletes them if they were cloned
+ if(unlikely(NPGpysfmtdl&16)){debz(); if(jt->sitop->dcnmlev!=0)debz();}   // pair with the deba(s) if we did any.  Unstack debug frames before the EPILOGNORET call to tpop which would free them, but after pee so we show error in this defn
+
+ SYMSETLOCAL((A)AM(locsym));    // Pop the stack of private symbol tables, before the old one is freed
+ if(likely(z!=0))z=EPILOGNORET(z);  // protect return value from being freed when the symbol table is.  Must also be before stack cleanup, in case the return value is xyz_index or the like.  If error, leave stack to be freed at restart point
+ // locsym may have been freed now, if it was cloned and there was no error
+
+ // blocks in the for./select. stack are zapped and reused as needed; must be freed en bloc on completion
+ A freechn=cdata.fchn; while(freechn){A nextchn=((CDATA*)voidAV0(freechn))->fchn; fa(freechn); freechn=nextchn;}   // free the allocated chain of for./select. blocks, whose contents have been unstacked
+
+ // If, while debug is off, we hit an error in the master thread that is not going to be intercepted, add a debug frame for the private-namespace chain and leave the freeing for later
+ // We don't do this if jt->jerr is set: that's the special result for comming out of debug; or when WSFULL, since there may be no memory.  Also, suppress pmdebug
+ // if an immex phrase is running or has been requested, because those would be confusing and also they call tpop
+ if(unlikely(z==0))if(jt->jerr && jt->jerr!=EVWSFULL && !(jt->uflags.trace&TRACEDB1) && THREADID(jt)==0 && !(jt->emsgstate&EMSGSTATETRAPPING) && jt->iepdo==0){
+  // if there are any UNINCORPABLE values, they must be realized in case they are on the C stack that are are about to pop over.  Only x and y are possible
+  UI4 yxbucks = *(UI4*)LXAV0(locsym); L *sympv=SYMORIGIN; if(w!=0){L *ybuckptr = &sympv[LXAV0(locsym)[(US)yxbucks]]; if(ybuckptr->val&&AFLAG(ybuckptr->val)&AFUNINCORPABLE){A rv=realize(ybuckptr->val); SYMVALFA(*ybuckptr) ybuckptr->val=rv;}}  // y if any
+  if(a!=0){L *ybuckptr = &sympv[LXAV0(locsym)[yxbucks>>16]]; if(ybuckptr->val&&AFLAG(ybuckptr->val)&AFUNINCORPABLE){A rv=realize(ybuckptr->val); SYMVALFA(*ybuckptr) ybuckptr->val=rv;}}  // x if any
+  deba(DCPM+(~bic<<8)+(NPGpysfmtdl<<(7-6)&(~(I)jtinplace>>(JTXDEFMODIFIERX-7))&128),locsym,AAV(sv->fgh[2])[HN*((NPGpysfmtdl>>6)&1)],self); RETF(0);  // push a debug frame for this error.  We know we didn't free locsym
  }
- if(unlikely(cd!=0)){fa(cd);}  // have to delete explicitly, because we protected the block with ACINITZAP
- // locsym may have been freed now
 
  // If we are using the original local symbol table, clear it (free all values, free non-permanent names) for next use.  We know it hasn't been freed yet
- // We detect original symbol table by rank ARLSYMINUSE - other symbol tables are assigned rank 0.
- // Tables are born with NAMEADDED off.  It gets set when a name is added.  Setting back to initial state here, we clear NAMEADDED
- if(likely(nG0ysfctdl&32)){symfreeha(locsym); AR(locsym)=ARLOCALTABLE;}
- // Pop the private-area stack
- SYMSETLOCAL(prevlocsyms);
+ // We detect original symbol table by rank flag ARLSYMINUSE - other symbol tables are assigned rank 0.
+ // Tables are born with ARNAMEADDED off.  It gets set when a name is added.  Setting back to initial state here, we clear ARNAMEADDED
+ if(likely(NPGpysfmtdl&32)){symfreeha(locsym); __atomic_store_n(&AR(locsym),ARLOCALTABLE,__ATOMIC_RELEASE);}
  // Now that we have deleted all the local symbols, we can see if we were returning one.
  // See if EPILOG pushed a pointer to the block we are returning.  If it did, and the usecount we are returning is 1, set this
  // result as inplaceable and install the address of the tpop stack into AM (as is required for all inplaceable blocks).  If the usecount is inplaceable 1,
  // we don't do this, because it is possible that the AM slot was inherited from higher up the stack.
  // Note that we know we are not returning a virtual block here, so it is OK to write to AM
- // BUT: SPARSE value must NEVER be inplaceable, because the children aren't handled correctly during assignment
- if(likely(z!=0))if(likely((_ttop!=jt->tnextpushp)==AC(z))){ACRESET(z,(ACINPLACE&~AT(z))|ACUC1) AZAPLOC(z)=_ttop;}  // AC can't be 0.  The block is not in use elsewhere
+ // BUT: SPARSE value must NEVER be inplaceable, because the children aren't handled correctly during assignment; and READONLY values must never be inplaceable
+ if(likely(z!=0))if(likely(((_ttop!=jt->tnextpushp)==AC(z))&(~AFLAG(z)>>AFROX))){ACRESET(z,(ACINPLACE&~AT(z))|ACUC1) AZAPLOC(z)=_ttop;}  // AC can't be 0.  The block is not in use elsewhere
  RETF(z);
 }
 
-// execution of u : v, selecting the version of self to use based on  valence
-static DF1(xv1){A z; R df1(z,  w,FAV(self)->fgh[0]);}
-static DF2(xv2){A z; R df2(z,a,w,FAV(self)->fgh[1]);}
+// execution of u : v, selecting the version of self to use based on valence
+static DF1(xv1){A z; R dfv1(z,  w,FAV(self)->fgh[0]);}  // scaf make bivalent
+static DF2(xv2){A z; R dfv2(z,a,w,FAV(self)->fgh[1]);}
 
-static DF1(xn1 ){R xdefn(0L,w, self);}  // Transfer monadic xdef to the common code - inplaceable
-static DF1(xadv){R xdefn(w, 0L,self);}  // inplaceable
 
-// Nilad.  See if an anonymous verb needs to be named.  If so, result is the name, otherwise 0
-static F1(jtxopcall){R jt->uflags.us.cx.cx_c.db&&DCCALL==jt->sitop->dctype?jt->sitop->dca:0;}
-
+// Nilad.  The caller has just executed an entity to produce an operator.  If we are debugging/pm'ing, AND the operator comes from a named entity, we need to extract the
+// name so we can debug/time it.  We do this by looking at the debug stack: if we are executing a CALL, we get the name from there.  If we are
+// executing PARSE or other, we must be executing a truly anonymous operator, and we return 0
+static F1(jtxopcall){R jt->uflags.trace&&jt->sitop&&DCCALL==jt->sitop->dctype?jt->sitop->dca:0;}  // debug or pm, and CALL type.  sitop may be 0 if deb/pm turned on in the middle of a sentence
 
 // This handles adverbs/conjs that refer to x/y.  Install a[/w] into the derived verb as f/h, and copy the flags
 // point g in the derived verb to the original self
 // If we have to add a name for debugging purposes, do so
 // Flag the operator with VOPR, and remove VFIX for it so that the compound can be fixed
-DF2(jtxop2){A ff,x;
- RZ(ff=fdef(0,CCOLON,VERB, xn1,jtxdefn, a,self,w,  (VXOP|VFIX|VJTFLGOK1|VJTFLGOK2)^FAV(self)->flag, RMAX,RMAX,RMAX));
+DF2(jtxop2){F2PREFIP;A ff,x;
+ ARGCHK2(a,w);
+ self=AT(w)&(ADV|CONJ)?w:self; w=AT(w)&(ADV|CONJ)?0:w; // we are called as u adv or u v conj
+ ff=fdef(0,CCOLON,VERB, jtxdefn,jtxdefn, a,self,w,  (VXOP|VFIX|VJTFLGOK1|VJTFLGOK2)^FAV(self)->flag, RMAX,RMAX,RMAX);  // inherit other flags
  R (x=xopcall(0))?namerefop(x,ff):ff;
-}
-static DF1(xop1){
- R xop2(w,0,self);
 }
 
 
@@ -709,7 +795,7 @@ static I jtxop(J jt,A w){I i,k;
    }  // 'name is not empty'
   } // 'is name'
   if(AT(w)&VERB){
-    if((FAV(w)->id&-2)==CUDOT)fndflag|=4;  // u./v.
+    if((FAV(w)->id&-2)==CUDOT)fndflag|=(4<<(FAV(w)->id&1));  // u./v.
   }
   // exit if we have seen enough: mnuv plus x.  No need to wait for y.  If we have seen only y, keep looking for x
   if(fndflag>=8+4+2)R fndflag;
@@ -723,48 +809,56 @@ static I jtxop(J jt,A w){I i,k;
 // Stop when we hit ) line, or EOF
 static A jtcolon0(J jt, I deftype){A l,z;C*p,*q,*s;A *sb;I m,n;
  n=0;
- I isboxed=BETWEENC(deftype,1,9);  // do we return boxes?
+ I isboxed=BETWEENC(deftype,1,9);  // do we return boxes? yes for 1-8; no for 0 (noun), 9 ({{ }}), and 13 :
  // Allocate the return area, which we extend as needed
- if(isboxed){RZ(z=exta(BOX,1L,1L,20L)); sb=AAV(z);}
- else{RZ(z=exta(LIT,1L,1L,300L)); s=CAV(z);}
+ RZ(z=exta(isboxed?INT:LIT,1,1,isboxed?24:300));  sb=AAV1(z); s=CAV1(z);
  while(1){
   RE(l=jgets("\001"));   // abort if error on input
   if(!l)break;  // exit loop if EOF.  The incomplete definition will be processed
-  if(deftype!=0)RZ(l=ddtokens(l,8+2));  // if non-noun def, handle DDs, for explicit def, return string, allow jgets().  Leave noun contents untouched
+  if(deftype!=0)RZ(l=ddtokens(l,0b1010));  // if non-noun def, handle DDs, for explicit def, return string, allow jgets().  Leave noun contents untouched
   // check for end: ) by itself, possibly with spaces
   m=AN(l); p=q=CAV(l); 
   NOUNROLL while(p<q+m&&' '==*p)++p; if(p<q+m&&')'==*p){NOUNROLL while(p<q+m&&' '==*++p); if(p>=m+q)break;}  // if ) with nothing else but blanks, stop
   // There is a new line.  Append it to the growing result.
   if(isboxed){
-   if((C2T+C4T)&AT(l))RZ(l=cvt(LIT,l));  // each line must be LIT
-   NOUNROLL while(AN(z)<=n+1){RZ(z=ext(0,z)); sb=AAV(z);}  // extend the result if necessary
+   if(unlikely((C2T+C4T)&AT(l)))RZ(l=cvt(LIT,l));  // each line must be LIT
+   NOUNROLL while(AN(z)<=n+1){RZ(z=ext(0,z)); sb=AAV1(z);}  // extend the result if necessary
    sb[n]=incorp(l); ++n; // append the line, increment line number
   }else{
-   NOUNROLL while(AN(z)<=n+m){RZ(z=ext(0,z)); s=CAV(z);}  // extend the result if necessary
-   MC(s+n,q,m); n+=m; s[n]=CLF; ++n;  // append LF at end of each line
+   NOUNROLL while(AN(z)<=n+m){RZ(z=ext(0,z)); s=CAV1(z);}  // extend the result if necessary
+   MC(s+n,q,m); n+=m; s[n]=CLF; ++n;  // append LF at end of each line, increment 
   }
  }
- // Return the string.  No need to trim down the list of boxes, as it's transitory
- if(isboxed){AN(z)=AS(z)[0]=n; R z;}
- R str(n,s);
+ AT(z)=isboxed?BOX:LIT;  // If boxed, set that type (suppressed till now to avoid needless clears, since all is nonrecursive)
+ AN(z)=AS(z)[0]=n;  // set final count of boxes or characters
+ R z;  // return boxes or string
 }    /* enter nl terminated lines; ) on a line by itself to exit */
 
 // w is character array or list
 // if table, take , w ,. LF    if list take ,&LF^:(LF~:{:) w)
 static F1(jtlineit){
- R 1<AR(w)?ravel(stitch(w,scc(CLF))):AN(w)&&CLF==cl(w)?w:over(w,scc(CLF));
+ R 1<AR(w)?ravel(stitch(w,scc(CLF))):AN(w)&&CLF==CAV(w)[AN(w)-1]?w:over(w,scc(CLF));
 }
 
-// Convert ASCII w to boxed lines.  Create separate lists of boxes for monad and dyad
-// if preparsed is set, we know the lines have gone through wordil already & it is OK
-// to do it again.  This means we are processing 9 :  n
-static A jtsent12c(J jt,A w){C*p,*q,*r,*s,*x;A z;
+// w is a rank-1 string.  We scan it for {{ }} and return the boxed result.  self is invalid
+static DF1(jtboxddline){RZ(w=ddtokens(w,0b1110)) R box(w);}
+
+
+// Convert ASCII w to boxed lines.  w is the argument to m : w and thus might be from 9 : w or might contain
+// 9 : w.  All we do here is look for non-embedded LF, i. e. LFs in the current line
+// We split into boxed lines on those LFs.  Any 9 : n strings will be processed during execution of this definition
+// If the input is a table, we don't look for anything, just box the lines
+// userm is the m from the m : string that originated this w.  If userm is not 9, this is a one-line definition and we have to
+// scan it for LF and {{ }}
+static A jtsent12c(J jt,A w,I userm){C*p,*q,*r,*s,*x;A z;
  ASSERT(!AN(w)||LIT&AT(w),EVDOMAIN);
  ASSERT(2>=AR(w),EVRANK);
- if(AR(w)>1)R IRS1(w,0L,1,jtbox,z);  // table, just box lines individually 
+ if(AR(w)>1)R rank1ex(w,DUMMYSELF,1,jtboxddline); // table, just box lines individually after checking for {{ }} (which come when we have an AR)
 
- // otherwise we have a single string.  Could be from 9 : string
- if(!(AN(w)&&DDSEP==cl(w)))RZ(w=over(w,scc(DDSEP)));  // add LF if missing
+ // otherwise we have a single string.  Could be from 9 : string.  If not, scan it for {{ }}
+ if(userm!=9){RZ(w=ddtokens(w,0b1110))}  // scan for {{ }}.  Don't allow calling for another line, and return result as string
+ // 9 : string, perhaps.  scan it for LF
+ if(!(AN(w)&&DDSEP==CAV(w)[AN(w)-1]))RZ(w=over(w,scc(DDSEP)));  // add LF if missing
  // Lines are separated by DDSEP, and there may be DDSEP embedded in strings.  Convert the whole thing to words, which will
  // leave the embedded DDSEP embedded; then split on the individual DDSEP tokens
  // tokenize the lines.  Each LF is its own token.
@@ -788,12 +882,13 @@ static A jtsent12c(J jt,A w){C*p,*q,*r,*s,*x;A z;
  R jtboxcut0(jt,wil,w,ds(CWORDS));
 }    /* literal fret-terminated or matrix sentences into monad/dyad */
 
-// Audit w to make sure it contains all strings; convert to LIT if needed
+// Audit w to make sure it contains all strings; convert to LIT if needed.  Also translate LF to VT
 static A jtsent12b(J jt,A w){A t,*wv,y,*yv;I j,*v;
  ASSERT(1>=AR(w),EVRANK);
  wv=AAV(w); 
  GATV(y,BOX,AN(w),AR(w),AS(w)); yv=AAV(y);
- DO(AN(w), RZ(yv[i]=incorp(vs(wv[i]))););
+ DO(AN(w), RZ(yv[i]=incorp(vs(C(wv[i])))); )
+ // We honor LF as end-of-line even in the middle of a sentence.
  R y;
 }    /* boxed sentences into monad/dyad */
 
@@ -808,7 +903,7 @@ static A jtsent12b(J jt,A w){A t,*wv,y,*yv;I j,*v;
 static A jtcalclocalbuckets(J jt, A *t, LX *actstv, I actstn, I dobuckets, I recur){LX k;
  A tv=QCWORD(*t);  // the actual NAME block
  I tqc=QCTYPE(*t);  // the name type
- L *sympv=JT(jt,sympv);  // base of symbol table
+ L *sympv=SYMORIGIN;  // base of symbol table
  if(!(NAV(tv)->flag&(NMLOC|NMILOC))){  // don't store if we KNOW we won't be looking up in the local symbol table - and bucketx contains a hash/# for NMLOC/NMILOC
   I4 compcount=0;  // number of comparisons before match
   // tv is a simplename.  We will install the bucket/index fields
@@ -824,20 +919,20 @@ static A jtcalclocalbuckets(J jt, A *t, LX *actstv, I actstn, I dobuckets, I rec
     A oldtv=tv;
     if(likely(!(AT(tv)&NAMEABANDON))){  // not name::
      tv=sympv[k].name;  // use shared copy
-     if(recur){ras(tv); fa(oldtv);} // if we are installing into a recursive box, increment/decr usecount new/old
+     if(recur){ras(tv); fana(oldtv);} // if we are installing into a recursive box, increment/decr usecount new/old.  No audit on the fa() since tstack is temporarily invalid
      NAV(tv)->flag|=NMSHARED;  // tag the shared copy as shared
     }
     // Remember the exact location of the symbol.  It will not move as long as this symbol table is alive.  We can
     // use it only when we are in this primary symbol table
-    NAV(tv)->sb.sb.symx=k;  // keep index of the allocated symbol
+    NAV(tv)->symx=k;  // keep index of the allocated symbol
     compcount=~compcount;  // negative bucket indicates found symbol
     break;
    }
   }
-  NAV(tv)->sb.sb.bucket=bucket;  // fill in the bucket in the (possibly modified) name
+  NAV(tv)->bucket=bucket;  // fill in the bucket in the (possibly modified) name
   NAV(tv)->bucketx=compcount;
  }
- if(!dobuckets)NAV(tv)->sb.sb.bucket=0;  // remove bucket if this name not allowed to have them
+ if(!dobuckets)NAV(tv)->bucket=0;  // remove bucket if this name not allowed to have them
  R (A)((I)tv|tqc);  // return combined pointer/type
 }
 
@@ -875,9 +970,9 @@ A jtcrelocalsyms(J jt, A l, A c,I type, I dyad, I flags){A actst,*lv,pfst,t,wds;
  // Do a probe-for-assignment for every name that is locally assigned in this definition.  This will
  // create a symbol-table entry for each such name
  // Start with the argument names.  We always assign y, and x EXCEPT when there is a monadic guaranteed-verb
- RZ(probeis(mnuvxynam[5],pfst));if(!(!dyad&&(type>=3||(flags&VXOPR)))){RZ(probeis(mnuvxynam[4],pfst));}
- if(type<3){RZ(probeis(mnuvxynam[2],pfst)); RZ(probeis(mnuvxynam[0],pfst));}
- if(type==2){RZ(probeis(mnuvxynam[3],pfst)); RZ(probeis(mnuvxynam[1],pfst));}
+ RZ(probeisres(mnuvxynam[5],pfst));if(!(!dyad&&(type>=3||(flags&VXOPR)))){RZ(probeisres(mnuvxynam[4],pfst));}
+ if(type<3){RZ(probeisres(mnuvxynam[2],pfst)); RZ(probeisres(mnuvxynam[0],pfst));}
+ if(type==2){RZ(probeisres(mnuvxynam[3],pfst)); RZ(probeisres(mnuvxynam[1],pfst));}
  // Go through the definition, looking for local assignment.  If the previous token is a simplename, add it
  // to the table.  If it is a literal constant, break it into words, convert each to a name, and process.
  ln=AN(l); lv=AAV(l);  // Get # words, address of first box
@@ -886,7 +981,7 @@ A jtcrelocalsyms(J jt, A l, A c,I type, I dyad, I flags){A actst,*lv,pfst,t,wds;
   // look for 'names' =./=: .  If found (and the names do not begin with `), replace the string with a special form: a list of boxes where each box contains a name.
   // This form can appear only in compiled definitions
   if(AT(QCWORD(lv[j]))&ASGN&&AT(t)&LIT&&AN(t)&&CAV(t)[0]!=CGRAVE){
-   A neww=words(t);
+   A neww; RZ(neww=words(t));  // find names; if string ill-formed, we might as well catch it now
    if(AN(neww)){  // ignore blank string
     A newt=every(neww,(A)&onmself);  // convert every word to a NAME block
     if(newt){lv[j-1]=QCINSTALLTYPE(t=incorp(newt),QCNOUN); AT(t)|=BOXMULTIASSIGN;}else RESETERR  // if no error, mark the block as MULTIASSIGN type and save it in the compiled definition; also set as t for below.  If error, catch it later
@@ -896,13 +991,13 @@ A jtcrelocalsyms(J jt, A l, A c,I type, I dyad, I flags){A actst,*lv,pfst,t,wds;
   if((AT(QCWORD(lv[j]))&ASGN+ASGNLOCAL)==(ASGN+ASGNLOCAL)) {  // local assignment
    if(AT(QCWORD(lv[j]))&ASGNTONAME){    // preceded by name?
     // Lookup the name, which will create the symbol-table entry for it
-    // name:: causes a little trouble.  The name carries with it the :: flag, but we will eventually replace all refs with the srade ref from
+    // name:: causes a little trouble.  The name carries with it the :: flag, but we will eventually replace all refs with the shared ref from
     // this table.  That means we have to remove the :: flag from the stored value, lest every reference appear flagged just because the last one was.
     // Note that we are here looking only before =., so we are specifically checking for name:: =. ... .  This should be an error, and we might catch
     // it when executed; but we are just making sure that it doesn't make the refs invalid.  name:: also sets NAMEXY, and we have to leave that because
     // any valid ref to mnuvxy will need that set; so there is a chance that name:: =. will result in an ordinary reference to the name's having the NAMEXY
     // flag.  That won't hurt anything significant.
-    L *nml; RZ(nml=probeis(t,pfst)); AT(nml->name)&=~NAMEABANDON;   // put name in symbol table, with ABANDON flag cleared
+    L *nml; RZ(nml=probeisres(t,pfst)); AT(nml->name)&=~NAMEABANDON;   // put name in symbol table, with ABANDON flag cleared
    } else if(AT(t)&LIT) {
     // LIT followed by =.  Probe each word.  Now that we support lists of NAMEs, this is used only for AR assignments
     // First, convert string to words
@@ -912,13 +1007,13 @@ A jtcrelocalsyms(J jt, A l, A c,I type, I dyad, I flags){A actst,*lv,pfst,t,wds;
      for(kk=0;kk<wdsn;++kk) {
       // Convert word to NAME; if local name, add to symbol table
       if((wnm=onm(wdsv[kk]))) {
-       if(!(NAV(wnm)->flag&(NMLOC|NMILOC))){L *nml; RZ(nml=probeis(wnm,pfst)); AT(nml->name)&=~NAMEABANDON;}  // see above
+       if(!(NAV(wnm)->flag&(NMLOC|NMILOC))){L *nml; RZ(nml=probeisres(wnm,pfst)); AT(nml->name)&=~NAMEABANDON;}  // see above
       } else RESETERR
      }
     } else RESETERR  // if invalid words, ignore - we don't catch it here
    }else if((AT(t)&BOX+BOXMULTIASSIGN)==BOX+BOXMULTIASSIGN){  // not NAME, not LIT; is it NAMEs box?
     // the special form created above.  Add each non-global name to the symbol table
-    A *tv=AAV(t); DO(AN(t), if(!(NAV(tv[i])->flag&(NMLOC|NMILOC))){L *nml; RZ(nml=probeis(tv[i],pfst)); AT(nml->name)&=~NAMEABANDON;})
+    A *tv=AAV(t); DO(AN(t), if(!(NAV(tv[i])->flag&(NMLOC|NMILOC))){L *nml; RZ(nml=probeisres(tv[i],pfst)); AT(nml->name)&=~NAMEABANDON;})
    }
   } // end 'local assignment'
  }  // for each word in sentence
@@ -926,49 +1021,49 @@ A jtcrelocalsyms(J jt, A l, A c,I type, I dyad, I flags){A actst,*lv,pfst,t,wds;
  // Go through the control-word table, looking for for_xyz.  Add xyz and xyz_index to the local table too.
  I cn=AN(c); CW *cwv=(CW*)AV(c);  // Get # control words, address of first
  for(j=0;j<cn;++j) {   // look at each control word
-  if(cwv[j].ig.indiv.type==CFOR){  // for.
-   I cwlen = AN(QCWORD(lv[cwv[j].ig.indiv.sentx]));
+  if((cwv[j].tcesx>>TCESXTYPEX)==CFOR){  // for.
+   I cwlen = AN(QCWORD(lv[cwv[j].tcesx&TCESXSXMSK]));
    if(cwlen>4){  // for_xyz.
     // for_xyz. found.  Lookup xyz and xyz_index
-    A xyzname = str(cwlen+1,CAV(QCWORD(lv[cwv[j].ig.indiv.sentx]))+4);  // +1 is -5 for_. +6 _index
-    RZ(probeis(nfs(cwlen-5,CAV(xyzname)),pfst));  // create xyz
+    A xyzname = str(cwlen+1,CAV(QCWORD(lv[cwv[j].tcesx&TCESXSXMSK]))+4);  // +1 is -5 for_. +6 _index
+    RZ(probeisres(nfs(cwlen-5,CAV(xyzname)),pfst));  // create xyz
     MC(CAV(xyzname)+cwlen-5,"_index",6L);    // append _index to name
-    RZ(probeis(nfs(cwlen+1,CAV(xyzname)),pfst));  // create xyz_index
+    RZ(probeisres(nfs(cwlen+1,CAV(xyzname)),pfst));  // create xyz_index
    }
   }
  }
 
  // Count the assigned names, and allocate a symbol table of the right size to hold them.  We won't worry too much about collisions, since we will be assigning indexes in the definition.
  // We choose the smallest feasible table to reduce the expense of clearing it at the end of executing the verb
- I pfstn=AN(pfst); LX*pfstv=LXAV0(pfst),pfx; I asgct=0; L *sympv=JT(jt,sympv);
+ I pfstn=AN(pfst); LX*pfstv=LXAV0(pfst),pfx; I asgct=0; L *sympv=SYMORIGIN;
  for(j=SYMLINFOSIZE;j<pfstn;++j){  // for each hashchain
   for(pfx=pfstv[j];pfx=SYMNEXT(pfx),pfx;pfx=sympv[pfx].next){++asgct;}  // chase the chain and count.  The chains have MSB flag, which must be removed
  }
 
- asgct = asgct + ((asgct+4)>>1); // leave 33% empty space + 2, since we will have resolved most names here
+ asgct = asgct + ((asgct+6)>>1); // leave just 33% empty space because buckets & symbol addresses do most of the work
  RZ(actst=stcreate(2,asgct,0L,0L));  // Allocate the symbol table we will use
  *(UI4*)LXAV0(actst)=(UI4)((SYMHASH(NAV(mnuvxynam[4])->hash,AN(actst)-SYMLINFOSIZE)<<16)+SYMHASH(NAV(mnuvxynam[5])->hash,AN(actst)-SYMLINFOSIZE));  // get the yx bucket indexes for a table of this size, save in first hashchain
 
  // Transfer the symbols from the pro-forma table to the result table, hashing using the table size
  // For fast argument assignment, we insist that the arguments be the first symbols added to the table.
- // So we add them by hand - just y and possibly x.  They will be added later too
- RZ(probeis(ca(mnuvxynam[5]),actst));if(!(!dyad&&(type>=3||(flags&VXOPR)))){RZ(probeis(ca(mnuvxynam[4]),actst));}
- for(j=1;j<pfstn;++j){  // for each hashchain
-  for(pfx=pfstv[j];pfx=SYMNEXT(pfx);pfx=JT(jt,sympv)[pfx].next){L *newsym;
-   A nm=JT(jt,sympv)[pfx].name;
-   // If we are transferring a PERMANENT name, we have to clone it, because the name may be local & if it is we may install bucket info or a symbol index
+ // So we add them by hand - just y and possibly x.  They will be added later too, perhaps
+ RZ(probeisres(ca(mnuvxynam[5]),actst));if(!(!dyad&&(type>=3||(flags&VXOPR)))){RZ(probeisres(ca(mnuvxynam[4]),actst));}
+ for(j=SYMLINFOSIZE;j<pfstn;++j){  // for each hashchain
+  for(pfx=pfstv[j];pfx=SYMNEXT(pfx);pfx=SYMORIGIN[pfx].next){L *newsym;
+   A nm=SYMORIGIN[pfx].name;
+   // If we are transferring an ACPERMANENT name, we have to clone it, because the name may be local & if it is we may install bucket info or a symbol index
    if(ACISPERM(AC(nm)))RZ(nm=ca(nm));   // only cases are mnuvxy
-   RZ(newsym=probeis(nm,actst));  // create new symbol (or possibly overwrite old argument name)
-   newsym->flag = JT(jt,sympv)[pfx].flag|LPERMANENT;   // Mark as permanent
+   RZ(newsym=probeisres(nm,actst));  // create new symbol (or possibly overwrite old argument name)
+   newsym->flag = SYMORIGIN[pfx].flag|LPERMANENT;   // Mark as permanent
   }
  }
  I actstn=AN(actst); LX*actstv=LXAV0(actst);  // # hashchains in new symbol table, and pointer to hashchain table
 
  // Go through all the newly-created chains and clear the non-PERMANENT flag that was set in each root and next pointer.  This flag is set to
  // indicate that the symbol POINTED TO is non-permanent.
- sympv=JT(jt,sympv);  // refresh pointer to symbols
- for(j=1;j<actstn;++j){  // for each hashchain
-  actstv[j]=SYMNEXT(actstv[j]); for(pfx=actstv[j];pfx;pfx=sympv[pfx].next)sympv[pfx].next=SYMNEXT(sympv[pfx].next);  // set PERMANENT for all symbols in the table
+ sympv=SYMORIGIN;  // refresh pointer to symbols
+ for(j=SYMLINFOSIZE;j<actstn;++j){  // for each hashchain
+  actstv[j]=SYMNEXT(actstv[j]); for(pfx=actstv[j];pfx;pfx=sympv[pfx].next){sympv[pfx].next=SYMNEXT(sympv[pfx].next);}  // set PERMANENT for all symbols in the table
  }
 
  // Go back through the words of the definition, and add bucket/index information for each simplename, and cachability flag
@@ -990,19 +1085,48 @@ A jtcrelocalsyms(J jt, A l, A c,I type, I dyad, I flags){A actst,*lv,pfst,t,wds;
  R actst;
 }
 
-// l is the A block for all the words/queues used in the definition
+// compress PPPs in in, move to ppp.  inarea and outarea are the same.  The input never grows.  Set AFISPPP in any word that replaces multiple words, to signify that the linear rep must be used to create its
+// value in the debug line.  Set AFHADPAREN if () is removed; they will be restored.  isparen is set if the previous token is ).  *fragv/*fragl are a work area.  They may be reallocated, and are
+// wiped out by recursion.  Result is address of next word to fill in ppp, or 0 if error.  On return *in is the addr+1 of the last word of in that we consumed
+static A *jtscanandmoveppp(J jt, I isparen, A *ppp, A **in, I inl, A **fragv, I *fragl){
+ I state=1;   // proc state: 0=waiting for E+AVN; 1=prev token was E+AVN; 2=prev tokens were E+AVN,VN; 3=prev tokens were E+AVN,VN,C
+ I nameseen=0;  // set when we have hit a name and thus cannot parse
+ while(1){A inwd;A *inend=(*in)+inl;I ranoff;  // till we hit end-of-input or )
+  if((ranoff=*in==inend)||(AT(inwd=*(*in)++)&RPAR)){ASSERT(ranoff!=isparen,EVDOMAIN) break;}  // exit if end-of input or ).  ) must end ( exactly
+  // if we are on (, process the ( ) and see if it was replaced by a single word
+  if(AT(inwd)==LPAR){A *lpara=ppp;  // we are at (  ... )
+   if(inend-*in>1&&AT((*in)[2])==RPAR){AFLAG((*in)[1])|=AFHADPAREN; *ppp++=(*in)[1]; in+=3;  // special case of (word) - keep word, marked as (), but not as lrr unless already so marked
+   }else{lpara=ppp; A *pstart=&(*in)[1]; RZ(ppp=jtscanandmoveppp(jt,1,ppp,&pstart,inend-pstart,fragv,fragl))
+   }
+   // ( ... ) processed.  If the result was a single word
+  }
+ }
+ R 0;
+}
+
+// l is the A block for all the words/queues used in the definition (modified in place)
 // c is the table of control-word info used in the definition
 // type is the m operand to m : n, indicating part of speech to be produced
 // We preparse what we can in the definition
-static I pppp(J jt, A l, A c){I j; A fragbuf[20], *fragv=fragbuf; I fragl=sizeof(fragbuf)/sizeof(fragbuf[0]);
+// Return 0 if error
+static I pppp(J jt, A l, A c){I j; A fragbuf[20], *fragv=fragbuf+1; I fragl=sizeof(fragbuf)/sizeof(fragbuf[0])-1;  // leave 1 pad word before frag to allow for overfetch in parsea
  // Go through the control-word table, looking at each sentence
  I cn=AN(c); CW *cwv=(CW*)AV(c);  // Get # control words, address of first
  A *lv=AAV(l);  // address of words in sentences
+ I outsent=0;
  for(j=0;j<cn;++j) {   // look at each control word
-  if(((((I)1<<(BW-CBBLOCK-1))|((I)1<<(BW-CTBLOCK-1)))<<(cwv[j].ig.indiv.type&31))<0){  // BBLOCK or TBLOCK
+  I endx=(cwv[j+1].tcesx-cwv[j].tcesx)&TCESXSXMSK;   // # words in sentence
+  if(((((I)1<<(BW-CBBLOCK-1))|((I)1<<(BW-CTBLOCK-1)))<<((cwv[j].tcesx>>TCESXTYPEX)&31))<0){  // BBLOCK[END] or TBLOCK
    // scan the sentence for PPPP.  If found, parse the PPPP and replace the sequence in the sentence; reduce the length
-   A *lvv=lv+cwv[j].ig.indiv.sentx;  // pointer to sentence words
-   I startx=0, endx=cwv[j].ig.indiv.sentn;  // start and end+1 index of sentence
+   A *lvv=lv+(cwv[j].tcesx&TCESXSXMSK);  // pointer to sentence words
+   I startx=0;   // start and end+1 index of sentence
+#if 0
+   A lv0=lv;
+
+   A *lvi=lv0+(cwv[j].tcesx&TCESXSXMSK);
+   RZ(lv=jtscanandmoveppp(jt,0,&lv,lvi,(cwv[j+1].tcesx-cwv[j].tcesx)&TCESXSXMSK),&fragv,&fragl);  // copy the sentence, compressing PPPs
+#endif
+
    // loop till we have found all the parens
    while(1){
     // Look forward for )
@@ -1012,10 +1136,10 @@ static I pppp(J jt, A l, A c){I j; A fragbuf[20], *fragv=fragbuf; I fragl=sizeof
     while(--startx>=0 && !(AT(QCWORD(lvv[startx]))==LPAR)){  // look for matching (   use = because LPAR can be a NAMELESS flag
      if(AT(QCWORD(lvv[startx]))&RPAR+ASGN+NAME)break;  // =. not allowed; ) indicates previous disqualified block; NAME is unknowable
      if(AT(QCWORD(lvv[startx]))&VERB && FAV(QCWORD(lvv[startx]))->flag2&VF2IMPLOC)break;  // u. v. not allowed: they are half-names
-     if(AT(QCWORD(lvv[startx]))&CONJ && FAV(QCWORD(lvv[startx]))->id==CIBEAM)break;  // !: not allowed: might produce adverb/conj to do who-knows-what
+     if(AT(QCWORD(lvv[startx]))&CONJ && FAV(QCWORD(lvv[startx]))->id==CIBEAM)break;  // !: not allowed: might produce adverb/conj to do who-knows-what  scaf should have safe list
      if(AT(QCWORD(lvv[startx]))&CONJ && FAV(QCWORD(lvv[startx]))->id==CCOLON && !(AT(QCWORD(lvv[startx-1]))&VERB))break;  // : allowed only in u : v form
     }
-    if(startx>=0 && (AT(QCWORD(lvv[startx]))==LPAR)){
+    if(startx>=0 && (startx+2<rparx) && (AT(QCWORD(lvv[startx]))==LPAR)){  // ( ... ) but not () or ( word )
      // The ) was matched and the () can be processed.
      // See if the () block was a (( )) block.  If it is, we will execute it even if it contains verbs
      I doublep = (rparx+1<endx) && (AT(QCWORD(lvv[rparx+1]))==RPAR) && (startx>0) && (AT(QCWORD(lvv[startx-1]))==LPAR);  // is (( ))?
@@ -1030,82 +1154,131 @@ static I pppp(J jt, A l, A c){I j; A fragbuf[20], *fragv=fragbuf; I fragl=sizeof
      }
      if(likely(jt->jerr==0)){
       // no error: parse the actual () block
-      A pfrag; RZ(pfrag=parsea(&lvv[startx+1],rparx-startx-1)); makewritable(pfrag); INCORP(pfrag); AFLAGORLOCAL(pfrag,(doublep|!!(AT(pfrag)&NOUN))<<AFDPARENX);  // if this came from (( )) or is a noun, mark such in the value
-      // Replace the () block with its parse, close up the sentence, zero the ending area
-      lvv[startx]=QCINSTALLTYPE(pfrag,ATYPETOVALTYPE(AT(pfrag))); DO(endx-(rparx+1), lvv[startx+1+i]=lvv[rparx+1+i];) DP(rparx-startx, lvv[endx+i]=0;) 
+      // mark the block as PPPP if it will need extra parens: (( )) or noun or non-noun & not invisible modifier, which always has ( ) added
+      A pfrag; RZ(pfrag=parsea(&lvv[startx+1],rparx-startx-1)); makewritable(pfrag); INCORP(pfrag); AFLAGORLOCAL(pfrag,(doublep | !!(AT(pfrag)&NOUN) | (AT(pfrag)&FUNC && !BETWEENC(FAV(pfrag)->id,CHOOK,CADVF)))<<AFDPARENX);  // indicate that the value came from ( non-hook )  or (( ))
+      // Replace the () block with its parse, close up the sentence
+// obsolete , zero the ending area
+      lvv[startx]=QCINSTALLTYPE(pfrag,ATYPETOVALTYPE(AT(pfrag))); DO(endx-(rparx+1), lvv[startx+1+i]=lvv[rparx+1+i];)
+// obsolete  DP(rparx-startx, lvv[endx+i]=0;) 
       // Adjust the end pointer and the ) position
-      cwv[j].ig.indiv.sentn=endx-=rparx-startx; rparx=startx;  // back up to account for discarded tokens; resume as if the parse result was at ) position
+// obsolete       cwv[j].ig.indiv.sentn=
+      endx-=rparx-startx; rparx=startx;  // back up to account for discarded tokens; resume as if the parse result was at ) position
      }else{RESETERR} // skipping because of error; clear error indic
     }
     // Whether we skipped or not, rpar now has the adjusted position of the ) and endx is correct relative to it.  Advance to next ) search
     startx=rparx+1;  // continue look after )
    }
   }
+  // copy the result to the end of the previous sentence, adjust pointer
+  I sent1=cwv[j].tcesx&TCESXSXMSK; cwv[j].tcesx=(cwv[j].tcesx&~TCESXSXMSK)|outsent; DQ(endx, lv[outsent++]=lv[sent1++];)  // pack sentences together
  }
+ cwv[cn].tcesx=TCESXCECAN|outsent;   // add on length in final cw block, and mark that end+1 line as using its input.  This sentinel is NOT included in AN(c)
+ AN(l)=outsent;  // update the number of sentence words to discard any that we joined into a pppp
  R 1;
+}
+
+// cw is control words, sw is sentence words for one valence.  Result is in compiled form, one A block with the data preceded by index info
+static A compiledefn(J jt, A sw, A cw){A z;
+ I nsw=AN(sw); I ncw=AN(cw)+1;  // number of sentence words and control words including the extra word with total len
+ I alloamtA=nsw+ncw*(8/sizeof(A));  // number of As needed to hold the sentences plus 8 bytes per cw 
+ GATV0(z,BOX,alloamtA,0) AK(z)+= 8*ncw; AN(z)=nsw;  // allo block; point AK past the cw data; AN=# sentence words (for when we free them)
+ A * RESTRICT base=CWBASE(z);  // point to start of sent/end+1 of tcesx
+ JMC(base,AAV(sw),nsw*sizeof(A),0)  // copy in the sentence words
+ CW * RESTRICT cwv=(CW *)voidAV(cw);  // point to control words
+ // Convert BBEND (END going to NSI) BB[END] to BBEND BBEND BB[END]
+ // set 32 flag in
+ //  if./while. followed by tblock
+ //  else./elseif./whilst./end./case./fcase. where go is a bblock[end]
+ //  do. for if./while. where both NSI and go are bblock[end]
+ //  for./select. followed by tblock 
+ //  case./fcase with go=NSI, followed by tblock (first case)
+ //  end. for select. or do. for for.   followed by bblock
+ // could have others, for break./continue. etc.
+#define CWMB(x) ((I)1<<(x))
+#define CWIS1(msk,x) ((msk)>>(((x)>>TCESXTYPEX)&31))
+#define CWFLGNSITBLOCK (CWMB(CIF)+CWMB(CWHILE)+CWMB(CFOR)+CWMB(CSELECT)+CWMB(CSELECTN))
+#define CWFLGNSIBBLOCK (CWMB(CENDSEL)+CWMB(CDOF))
+#define CWFLGGOBBLOCK (CWMB(CELSE)+CWMB(CELSEIF)+CWMB(CWHILST)+CWMB(CEND)+CWMB(CCASE)+CWMB(CFCASE))
+#define CWFLGNSIGOBBLOCK (CWMB(CDO))
+#define CWFLGGOEQNSITBLOCK (CWMB(CCASE)+CWMB(CFCASE))
+ UI4 prevt=0;
+ DO(ncw, I go=cwv[i].go; go=go>ncw-1?ncw-1:go; UI4 tcesx=cwv[i].tcesx, otcesx=tcesx; if(prevt==CBBLOCKEND&&(tcesx>>TCESXTYPEX)==CEND&&go==i+1&&((cwv[i+1].tcesx>>TCESXTYPEX)&31)==CBBLOCK)tcesx^=(CBBLOCKEND^CEND)<<TCESXTYPEX; prevt=otcesx>>TCESXTYPEX;
+   tcesx|=((CWIS1(CWFLGNSITBLOCK,tcesx)&(cwv[i+1].tcesx>>TCESXTYPEX)==CTBLOCK)|(CWIS1(CWFLGNSIBBLOCK,tcesx)&((cwv[i+1].tcesx>>TCESXTYPEX)&31)==CBBLOCK)|  // check modified tcesx so we don't pick up replaced END
+   (CWIS1(CWFLGGOEQNSITBLOCK,tcesx)&(go==i+1)&(cwv[i+1].tcesx>>TCESXTYPEX)==CTBLOCK)|  // first case/fcase
+   (CWIS1(CWFLGGOBBLOCK,tcesx)&((cwv[go].tcesx>>TCESXTYPEX)&31)==CBBLOCK)|(CWIS1(CWFLGNSIGOBBLOCK,tcesx)&((cwv[go].tcesx>>TCESXTYPEX)&31)==CBBLOCK&((cwv[i+1].tcesx>>TCESXTYPEX)&31)==CBBLOCK))<<(TCESXTYPEX+5);
+   CWTCESX(base,~i)=tcesx; CWGO(base,-ncw,~i)=~go; CWSOURCE(base,-ncw,~i)=cwv[i].source;)  // create the output block
+ R z;
 }
 
 // a is a local symbol table, possibly in use
 // result is a copy of it, ready to use.  All PERMANENT symbols are copied over and given empty values, without inspecting any non-PERMANENT ones
-// The rank-flag of the table is 'not modified'
+// The rank-flag of the table is 'cloned'
 A jtclonelocalsyms(J jt, A a){A z;I j;I an=AN(a); LX *av=LXAV0(a),*zv;
  RZ(z=stcreate(2,AN(a),0L,0L)); zv=LXAV0(z); AR(z)|=ARLCLONED;  // allocate the clone; zv->clone hashchains; set flag to indicate cloned
  // Copy the first hashchain, which has the x/v hashes
  zv[0]=av[0]; // Copy as LX; really it's a UI4
+ // We don't need to save all SYMLINFOSIZE slots for local symbol tables
  // Go through each hashchain of the model, after the first one.  We know the non-PERMANENT flags are off
  for(j=SYMLINFOSIZE;j<an;++j) {LX *zhbase=&zv[j]; LX ahx=av[j]; LX ztx=0; // hbase->chain base, hx=index of current element, ztx is element to insert after
+  SYMRESERVE(1)   // this relocates symbols
   while(SYMNEXTISPERM(ahx)) {L *l;  // for each permanent entry...
-   RZ(l=symnew(zhbase,SYMNEXT(ztx)));   // append new symbol after tail (or head, if tail is empty), as PERMANENT
+   l=symnew(zhbase,SYMNEXT(ztx));   // make sure symbol is available; append new symbol after tail (or head, if tail is empty), as PERMANENT.
    *zhbase=SYMNEXT(*zhbase);  // zhbase points to the pointer to the entry we just added.  First time, that's the chain base
-   A nm=(JT(jt,sympv))[ahx].name;
+   A nm=(SYMORIGIN)[ahx].name;
    l->name=nm; ra(l->name);  // point symbol table to the name block, and increment its use count accordingly
-   l->flag=(JT(jt,sympv))[ahx].flag&(LINFO|LPERMANENT);  // Preserve only flags that persist
-   ztx = ztx?(JT(jt,sympv))[ztx].next : *zhbase;  // ztx=index to value we just added.  We avoid address calculation because of the divide.  If we added
+   l->flag=(SYMORIGIN)[ahx].flag&(LINFO|LPERMANENT);  // Preserve only flags that persist
+   ztx = ztx?(SYMORIGIN)[ztx].next : *zhbase;  // ztx=index to value we just added.  We avoid address calculation because of the divide.  If we added
       // at head, the added block is the new head; otherwise it's pointed to by previous tail
+   SYMRESERVEPREFSUFF(1,I lsymno=l-SYMORIGIN;, l=&(SYMORIGIN)[lsymno];)   // relocate l if the symbols are relocated
    zhbase=&l->next;  // after the first time, zhbase is the chain field of the tail
-   ahx = (JT(jt,sympv))[ahx].next;  // advance to next symbol
+   ahx = (SYMORIGIN)[ahx].next;  // advance to next symbol
   }
  }
  R z;
 }
 
-F2(jtcolon){A d,h,*hv,m;C*s;I flag=VFLAGNONE,n,p;
+F2(jtcolon){F2PREFIP;A d,h,*hv,m;C*s;I flag=VFLAGNONE,n,p;
  ARGCHK2(a,w);PROLOG(778);
+ A z; fdefallo(z)
  if(VERB&AT(a)){  // v : v case
   ASSERT(AT(w)&VERB,EVDOMAIN);   // v : noun is an error
   // If nested v : v, prune the tree
   if(CCOLON==FAV(a)->id&&FAV(a)->fgh[0]&&VERB&AT(FAV(a)->fgh[0])&&VERB&AT(FAV(a)->fgh[1]))a=FAV(a)->fgh[0];  // look for v : v; don't fail if fgh[0]==0 (namerefop).  Must test fgh[0] first
   if(CCOLON==FAV(w)->id&&FAV(w)->fgh[0]&&VERB&AT(FAV(w)->fgh[0])&&VERB&AT(FAV(w)->fgh[1]))w=FAV(w)->fgh[1];
-  R fdef(0,CCOLON,VERB,xv1,xv2,a,w,0L,((FAV(a)->flag&FAV(w)->flag)&VASGSAFE),mr(a),lr(w),rr(w));  // derived verb is ASGSAFE if both parents are 
+  fdeffill(z,0,CCOLON,VERB,xv1,xv2,a,w,0L,((FAV(a)->flag&FAV(w)->flag)&VASGSAFE),mr(a),lr(w),rr(w)) R z; // derived verb is ASGSAFE if both parents are 
  }
+ ASSERT(AT(w)&NOUN,EVDOMAIN);   // noun : verb is an error
  RE(n=i0(a));  // m : n; set n=value of a argument
  I col0;  // set if it was m : 0
  if(col0=equ(w,num(0))){RZ(w=colon0(n)); }   // if m : 0, read up to the ) .  If 0 : n, return the string unedited
- if(!n){ra0(w); RCA(w);}  // noun - return it.  Give it recursive usecount
+ if(n==0){ra0(w); RCA(w);}  // noun - it's a string, return it.  Give it recursive usecount
  if((C2T+C4T)&AT(w))RZ(w=cvt(LIT,w));
  I splitloc=-1;   // will hold line number of : line
  if(10<n){ASSERT(AT(w)&LIT,EVDOMAIN) s=CAV(w); p=AN(w); if(p&&CLF==s[p-1])RZ(w=str(p-1,s));}  // if tacit form, discard trailing LF
  else{  // not tacit translator - preparse the body
-  // we want to get all forms to a common one: a list of boxed strings.  If we went through m : 0, we are in that form
-  // already.  Convert strings
-  if(!col0)if(BOX&AT(w)){RZ(w=sent12b(w))}else{RZ(w=sent12c(w))}  // convert to list of boxes
+  // we want to get all forms to a common one: boxed string(s) rank<2.  If we went through m : 0, we are in that form
+  // already.
+  if(!col0)if(BOX&AT(w)){RZ(w=sent12b(C(w)))  // list of boxes - convert to character, no analysis
+  }else{  // character
+   RZ(w=jtsent12c(jt,w,n)) // if this is NOT 9 : w, cause a one-line definition to be scanned for {{ }}.  9 : strings have already been scanned
+  }
   // If there is a control line )x at the top of the definition, parse it now and discard it from m
-  if(likely(AN(w)!=0))if(unlikely(AN(AAV(w)[0])&&CAV(AAV(w)[0])[0]==')')){
+  if(likely(AN(w)!=0))if(unlikely(AN(C(AAV(w)[0]))&&CAV(C(AAV(w)[0]))[0]==')')){
    // there is a control line.  parse it.  Cut to words
-   A cwds=wordil(AAV(w)[0]); RZ(cwds); ASSERT(AM(cwds)==2,EVDOMAIN);  // must be exactly 2 words: ) and type
+   A cwds=wordil(C(AAV(w)[0])); RZ(cwds); ASSERT(AM(cwds)==2,EVDOMAIN);  // must be exactly 2 words: ) and type
    ASSERT(((IAV(cwds)[1]-IAV(cwds)[0])|(IAV(cwds)[3]-IAV(cwds)[2]))==1,EVDOMAIN);  // the ) and the next char must be 1-letter words  
-   C ctltype=CAV(AAV(w)[0])[IAV(cwds)[2]];  // look at the second char, which must be one of acmdv*  (n is handled in ddtokens)
+   C ctltype=CAV(C(AAV(w)[0]))[IAV(cwds)[2]];  // look at the second char, which must be one of acmdv*  (n is handled in ddtokens)
    I newn=-1; newn=ctltype=='a'?1:newn; newn=ctltype=='c'?2:newn; newn=ctltype=='m'?3:newn; newn=ctltype=='d'?4:newn; newn=ctltype=='v'?3:newn; newn=ctltype=='*'?9:newn;  // choose type based on char
    ASSERT(newn>=0,EVDOMAIN);  // error if invalid char
    n=newn;  // accept the type the user specified
    // discard the control line
    RZ(w=beheadW(w));
-   // Noun DD
+   // Noun DD was converted to a string, possibly containing LF, and doesn't come through here
   }
   // find the location of the ':' divider line, if any.  But don't recognize : on the last line, since it could
   // conceivably be the return value from a modifier
-  A *wv=AAV(w); DO(AN(w)-1, I st=0;
-    DO(AN(*wv), I c=CAV(*wv)[i]; if(c!=':'&&c!=' '){st=0; break;} if(c!=' ')if(st==1){s=0; break;}else st=1;)
+  A *wv=AAV(w); DO(AN(w)-1, I st=0; A wvc=C(*wv); 
+    DO(AN(wvc), I c=CAV(wvc)[i]; if(c!=':'&&c!=' '){st=0; break;} if(c!=' ')if(st==1){s=0; break;}else st=1;)
     if(st==1){splitloc=wv-AAV(w); break;} ++wv;)
   // split the definition into monad and dyad.
   I mn=splitloc<0?AN(w):splitloc; I nn=splitloc<0?0:AN(w)-splitloc-1;
@@ -1124,7 +1297,7 @@ F2(jtcolon){A d,h,*hv,m;C*s;I flag=VFLAGNONE,n,p;
   I fndflag=xop(hv[0])|xop(hv[0+HN]);   // 8=mu 4=nv 2=x 1=y, combined for both valences
   // for 9 : n, figure out best type after looking at n
   if(n==9){
-   I defflg=(fndflag&((splitloc>>(BW-1))|-4))|1; CTLZI(defflg,n); n=(0x2143>>(n<<2))&0xf; // replace 9 by value depending on what was seen; if : seen, ignore x
+   I defflg=(fndflag&((splitloc>>(BW-1))|-4))|1; n=CTLZI(defflg); n=(0x2143>>(n<<2))&0xf; // replace 9 by value depending on what was seen; if : seen, ignore x
    if(n==4){hv[HN]=hv[0]; hv[0]=mtv; hv[HN+1]=hv[1]; hv[1]=mtv; hv[HN+2]=hv[2]; hv[2]=mtv; flag=(flag&~VTRY2)+VTRY1; }  // if we created a dyadic verb, shift the monad over to the dyad and clear the monad, incl try flag
   } 
   if(n<=2){  // adv or conj after autodetection
@@ -1140,26 +1313,26 @@ F2(jtcolon){A d,h,*hv,m;C*s;I flag=VFLAGNONE,n,p;
  // definition is executed, so that we wouldn't take up the space for library verbs; but since we don't explicitly free
  // the components of the explicit def, we'd better do it now, so that the usecounts are all identical
  if(4>=n) {
-  // explicit definitions.  Create local symbol table and pppp
+  // explicit definitions.  Create local symbol table, pppp, and compile into internal form
   I hnofst=0; do{  // for each valence
    // Don't bother to create a symbol table for an empty definition, since it is a domain error
    if(AN(hv[hnofst+1])){
     RZ(hv[hnofst+3] = incorp(crelocalsyms(hv[hnofst+0], hv[hnofst+1],n,!!hnofst,flag)));  // words,cws,type,dyad,flag
-    pppp(jt, hv[hnofst+0], hv[hnofst+1]);  // words,cws,type,dyad,flag
+    I ppr; WITHDEBUGOFF(ppr=pppp(jt, hv[hnofst+0], hv[hnofst+1]);) RZ(ppr);  // words,cws.  Suppress messages during pppp
+    RZ(hv[hnofst+0]=incorp(compiledefn(jt, hv[hnofst+0], hv[hnofst+1]))) hv[hnofst+1]=0;  // join cw and sent together, lose sent
    }
   }while((hnofst+=HN)<=HN);
  }
- A z;
  switch(n){
- case 3:  z=fdef(0,CCOLON, VERB, xn1,jtxdefn,       num(n),0L,h, flag|VJTFLGOK1|VJTFLGOK2, RMAX,RMAX,RMAX); break;
- case 1:  z=fdef(0,CCOLON, ADV,  flag&VXOPR?xop1:xadv,0L,    num(n),0L,h, flag, RMAX,RMAX,RMAX); break;
- case 2:  z=fdef(0,CCOLON, CONJ, 0L,flag&VXOPR?jtxop2:jtxdefn, num(n),0L,h, flag, RMAX,RMAX,RMAX); break;
- case 4:  z=fdef(0,CCOLON, VERB, xn1,jtxdefn,       num(n),0L,h, flag|VJTFLGOK1|VJTFLGOK2, RMAX,RMAX,RMAX); break;
+ case 3:  fdeffill(z,0,CCOLON, VERB, jtxdefn,jtxdefn,       num(n),0L,h, flag|VJTFLGOK1|VJTFLGOK2, RMAX,RMAX,RMAX); break;
+ case 1:  fdeffill(z,0,CCOLON, ADV,  flag&VXOPR?jtxop2:jtxdefn,jtvalenceerr,    num(n),0L,h, flag, RMAX,RMAX,RMAX); break;
+ case 2:  fdeffill(z,0,CCOLON, CONJ, jtvalenceerr,flag&VXOPR?jtxop2:jtxdefn, num(n),0L,h, flag, RMAX,RMAX,RMAX); break;
+ case 4:  fdeffill(z,0,CCOLON, VERB, jtxdefn,jtxdefn,       num(n),0L,h, flag|VJTFLGOK1|VJTFLGOK2, RMAX,RMAX,RMAX); break;
  case 13: z=vtrans(w); break;
  default: ASSERT(0,EVDOMAIN);
  }
  // EPILOG is called for because of the allocations we made, but it is essential to make sure the pfsts created during crelocalsyms get deleted.  They have symbols with no value
- // that will cause trouble if 18!:31 is executed before they are expunged.  As a nice side effect, all explicit definitions are recursive.
+ // that will cause trouble if 18!:_2 is executed before they are expunged.  As a nice side effect, all explicit definitions are recursive.
  EPILOG(z);
 }
 
@@ -1173,7 +1346,7 @@ F2(jtcolon){A d,h,*hv,m;C*s;I flag=VFLAGNONE,n,p;
 // Bits 0-1 of env are as for enqueue()
 //
 // Bit 2 of env suppresses the call to jgets().  It will be set if it is known that there is no way to get more
-// input, for example if the string comes from (". y) or from an event.  If an unterminated DD is found when bit 2 is set,
+// input, for example if the string comes from (". y), from an event, or from m : 'string'.  If an unterminated DD is found when bit 2 is set,
 // the call fails with control error
 //
 // Bit 3 of env is set if the caller wants the returned value as a string rather than as enqueued words
@@ -1187,26 +1360,30 @@ A jtddtokens(J jt,A w,I env){
  A wil; RZ(wil=wordil(w));  // get index to words
  C *wv=CAV(w); I nw=AS(wil)[0]; I (*wilv)[2]=voidAV(wil);  // cv=pointer to chars, nw=#words including final NB   wilv->[][2] array of indexes into wv word start/end
  // scan for start of DD/end of DD.
- I firstddbgnx;  // index of first/last start of DD, and end of DD
+ I firstddbgnx;  // index of first/last start of DD
  I ddschbgnx=0; // place where we started looking for DD
- for(firstddbgnx=ddschbgnx;firstddbgnx<nw;++firstddbgnx){US ch2=*(US*)(wv+wilv[firstddbgnx][0]); ASSERT(!(ch2==DDEND&&(wilv[firstddbgnx][1]-wilv[firstddbgnx][0]==2)),EVCTRL) if(ch2==DDBGN&&(wilv[firstddbgnx][1]-wilv[firstddbgnx][0]==2))break; }
- if(firstddbgnx>=nw){ASSERT(AM(wil)>=0,EVOPENQ) R env&8?w:enqueue(wil,w,env&3);}    //   If no DD chars found, and caller wants a string, return w fast
+ for(firstddbgnx=ddschbgnx;firstddbgnx<nw;++firstddbgnx){US ch2=*(US*)(wv+wilv[firstddbgnx][0]); ASSERT(!(ch2==DDEND&&(wilv[firstddbgnx][1]-wilv[firstddbgnx][0]==2)),EVEMPTYDD) if(ch2==DDBGN&&(wilv[firstddbgnx][1]-wilv[firstddbgnx][0]==2))break; }
+   // search for {{; error if first thing found is }}; firstddbgnx is index of {{
+ if(firstddbgnx>=nw){ASSERT(AM(wil)>=0,EVOPENQ) R env&8?w:enqueue(wil,w,env&3);}    //   If no DD chars found, and caller wants a string, return w fast.  There may be a latent quote error to attend to
  // loop till all DDs found
  while(firstddbgnx<nw){
   // We know that firstddbgnx is DDBGN
-  // Move all the words before the DD into one long megaword - if there are any.  We mustn't disturb the DD itself
-  // Close up after the megaword with empties
-  I *fillv=&wilv[ddschbgnx][1]; DQ(2*(firstddbgnx-ddschbgnx)-1, *fillv++=wilv[firstddbgnx][0];)
+  // If there are words before the DDBGN, back the starting word to include leading whitespace.  This loses space between two adjacent DDs, bfd
+  if(ddschbgnx<firstddbgnx)wilv[ddschbgnx][0]=ddschbgnx>0?wilv[ddschbgnx-1][1]:0;  // back up to start of line or end of word
+  I *fillv=&wilv[ddschbgnx][1]; DQ(2*(firstddbgnx-ddschbgnx)-1, *fillv++=wilv[firstddbgnx][0];)  // set each end-of-word pointer to end at the start of [ddbgnx], and all start pointers except the first.  This preserves spacing from schbgn to firstddbgn
   I ddendx=-1, ddbgnx=firstddbgnx;  // end/start of DD, indexes into wilv.  This will be the pair we process.  We advance ddbgnx and stop when we hit ddendx
   I scanstart=firstddbgnx;  // start looking for DDEND/nounDD at the first known DDBGN.  But if there turns out to be no DDEND, advance start ptr to avoid rescanning
   while(1){I i;  // loop till we find a complete DD
+   // w/wilv has the accumulated words in the lines of the DD.  scanstart indexes the first word of the most-recent line
    for(i=scanstart;i<nw;++i){
     US ch2=*(US*)(wv+wilv[i][0]);  // digraph for next word
     if(ch2==DDEND&&(wilv[i][1]-wilv[i][0]==2)){ddendx=i; break;}  // if end, break, we can process
     if(ch2==DDBGN&&(wilv[i][1]-wilv[i][0]==2)){
-     //  Nested DD found.  We have to go back and preserve the spacing for everything that precedes it
+     //  Nested/noun DD found, OR looking at the first {{.  We have to go back and preserve the spacing for everything that precedes it
      ddbgnx=i;  // set new start pointer, when we find an end
-     fillv=&wilv[firstddbgnx][1]; DQ(2*(ddbgnx-firstddbgnx)-1, *fillv++=wilv[ddbgnx][0];)
+     // Move all the words before the DD into one long megaword - if there are any.  We mustn't disturb the DD itself
+     // Close up after the megaword with empties
+     I *fillv=&wilv[firstddbgnx][1]; DQ(2*(ddbgnx-firstddbgnx)-1, *fillv++=wilv[ddbgnx][0];)  // preserve spacing from firstddbgnx to new {{
      if(AN(w)>=wilv[i][1]+2 && wv[wilv[i][0]+2]==')' && wv[wilv[i][0]+3]=='n'){  // is noun DD?
       // if the nested DD is a noun, break to process it immediately
       ddendx=0;  // use the impossible starting }} to signify noun DD
@@ -1218,10 +1395,10 @@ A jtddtokens(J jt,A w,I env){
 
    // Here the current line ended with no end DD or noun DD.  We have to continue onto the next line
    ASSERT(AM(wil)>=0,EVOPENQ);  // if the line didn't contain noun DD, we have to give error if open quote
-   ASSERT(!(env&4),EVCTRL);   // Abort if we are not allowed to continue (as for an event or ". y)
-   scanstart=AM(wil);  // Get # words, not including final NB.  We have looked at em all, so start next look after all of them
+   ASSERT(!(env&4),EVEMPTYDD);   // Abort if we are not allowed to continue (as for an event or ". y)
+   scanstart=AM(wil);  // Get # words, not including NB.  We have looked at em all, so start next look after all of them
    A neww=jgets("\001");  // fetch next line, in raw mode
-   RE(0); ASSERT(neww!=0,EVCTRL); // fail if jgets failed, or if it returned EOF - problem either way
+   RE(0); ASSERT(neww!=0,EVEMPTYDD); // fail if jgets failed, or if it returned EOF - problem either way
    // join the new line onto the end of the old one (after discarding trailing NB in the old).  Must add an LF character and a word for it
    w=jtapip(jtinplace,w,scc(DDSEP));   // append a separator, which is all that remains of the original line
    jtinplace=(J)((I)jtinplace|JTINPLACEW);  // after the first one, we can certainly inplace on top of w
@@ -1238,7 +1415,7 @@ A jtddtokens(J jt,A w,I env){
    makewritable(newwil);  // We will modify the block rather than adding to it
    I *nwv=IAV(newwil); DO(AN(newwil), *nwv++ += oldchn;)  // relocate all the new words so that they point to chars after the added LF
    RZ(wil=jtapip(jtinplace,wil,newwil));   // add new words after LF, giving old LF new
-   if(likely(savam>=0)){AM(wil)=savam+scanstart;}else{AM(wil)=0;}  // set total # words in combined list, not including final comment; remember if error scanning line
+   if(likely(savam>=0)){AM(wil)=savam+scanstart;}else{AM(wil)=savam;}  // set total # words in combined list, not including final comment; remember if error scanning line
    wv=CAV(w); nw=AS(wil)[0]; wilv=voidAV(wil);  // refresh pointer to word indexes, and length
   }
 
@@ -1252,7 +1429,7 @@ A jtddtokens(J jt,A w,I env){
     for(enddelimx=nounstart;enddelimx<wn-1;++enddelimx)if(wv[enddelimx]==(DDEND&0xff) && wv[enddelimx+1]==(DDEND>>8))break;
    }
    if(enddelimx>=wn-1){
-    ASSERT(!(env&4),EVCTRL);   // Abort if we are not allowed to consume a new line (as for an event or ". y)
+    ASSERT(!(env&4),EVEMPTYDD);   // Abort if we are not allowed to consume a new line (as for an event or ". y)
     // if a delimiter was not found on the first line, consume lines until we hit a delimiter
     while(1){
      // append the LF for the previous line (unless an empty first line), then the new line itself, to w
@@ -1262,7 +1439,7 @@ A jtddtokens(J jt,A w,I env){
      }
      enddelimx=0;   // after the first line, we always install the LF
      A neww=jgets("\001");  // fetch next line, in raw mode
-     RE(0); ASSERT(neww!=0,EVCTRL); // fail if jgets failed, or if it returned EOF - problem either way
+     RE(0); ASSERT(neww!=0,EVEMPTYDD); // fail if jgets failed, or if it returned EOF - problem either way
      // join the new line onto the end of the old one
      I oldchn=AN(w);  // len after adding LF, before adding new line
      RZ(w=jtapip(jtinplace,w,neww));   // join the new character list onto the old, inplace if possible
@@ -1300,22 +1477,20 @@ A jtddtokens(J jt,A w,I env){
    wv=CAV(w);   // refresh data pointer.  Number of words has not changed, nor have indexes
    // Replace ddbgnx and ddendx with the start/end strings.  Fill in the middle, if any, with everything in between
    wilv[ddbgnx][0]=AN(w)-6; wilv[ddbgnx][1]=AN(w);  //  ( 9 :  
-   wilv[ddbgnx+1][0]=bodystart; fillv=&wilv[ddbgnx+1][1]; DQ(2*(ddendx-ddbgnx)-1, *fillv++=bodystart+bodylen+2;)  // everything in between, and trailing )SP
+   wilv[ddbgnx+1][0]=bodystart; I *fillv=&wilv[ddbgnx+1][1]; DQ(2*(ddendx-ddbgnx)-1, *fillv++=bodystart+bodylen+2;)  // everything in between, and trailing )SP
    // continue the search.
-   if(ddbgnx==firstddbgnx){ddschbgnx=ddendx+1;  //   If this was not a nested DD, we can simply pick up the search after ddendx.
-   }else{
-    // Nested DD.  The characters below ddendx are out of order and there will be trouble if we try to preserve
-    // the user's spacing by grouping them.  We must run the ending lines together, to save their spacing, and then
-    // refresh w and wil to get the characters in order
-    if(++ddendx<nw){wilv[ddendx][0]=trailstart; wilv[ddendx][1]=bodystart; AN(wil)=2*(AS(wil)[0]=ddendx+1);}  // make one string of DDEND to end of string
-    RZ(w=unwordil(wil,w,0)); RZ(wil=wordil(w));  // run chars in order; get index to words
-    wv=CAV(w); nw=AS(wil)[0]; wilv=voidAV(wil);  // cv=pointer to chars, nw=#words including final NB   wilv->[][2] array of indexes into wv word start/end
-    ddschbgnx=0;  // start scan back at the beginning
-   }
+   // The characters below ddendx are out of order and there will be trouble if we try to preserve
+   // the user's spacing by grouping them.  We must run the ending lines together, to save their spacing, and then
+   // refresh w and wil to get the characters in order.  We really need this only when there is a nested or noun DD, but that's hard to detect
+   if(++ddendx<nw){wilv[ddendx][0]=trailstart; wilv[ddendx][1]=bodystart; AN(wil)=2*(AS(wil)[0]=ddendx+1);}  // make one string of DDEND to end of string
+   RZ(w=unwordil(wil,w,0)); RZ(wil=wordil(w));  // run chars in order; get index to words
+   wv=CAV(w); nw=AS(wil)[0]; wilv=voidAV(wil);  // cv=pointer to chars, nw=#words including final NB   wilv->[][2] array of indexes into wv word start/end
+   ddschbgnx=0; wilv[0][0]=0;  // start scan back at the beginning.  Preserve leading space; too bad about interior spacing
   }
 
   // We have replaced one DD with its equivalent explicit definition.  Rescan the line, starting at the first location where DDBGN was seen
-  for(firstddbgnx=ddschbgnx;firstddbgnx<nw;++firstddbgnx){US ch2=*(US*)(wv+wilv[firstddbgnx][0]); ASSERT(!(ch2==DDEND&&(wilv[firstddbgnx][1]-wilv[firstddbgnx][0]==2)),EVCTRL) if(ch2==DDBGN&&(wilv[firstddbgnx][1]-wilv[firstddbgnx][0]==2))break; }
+  for(firstddbgnx=ddschbgnx;firstddbgnx<nw;++firstddbgnx){US ch2=*(US*)(wv+wilv[firstddbgnx][0]); ASSERT(!(ch2==DDEND&&(wilv[firstddbgnx][1]-wilv[firstddbgnx][0]==2)),EVEMPTYDD) if(ch2==DDBGN&&(wilv[firstddbgnx][1]-wilv[firstddbgnx][0]==2))break; }
+   // search for {{; error if first thing found is }}; firstddbgnx is index of {{
  }
  ASSERT(AM(wil)>=0,EVOPENQ);  // we have to make sure there is not an unscannable remnant at the end of the last line
  // All DDs replaced. convert word list back to either text form or enqueued form

@@ -1,5 +1,10 @@
 #!/bin/sh
 # rm all *.o for clean builds - makefile dependencies are not set
+set -e
+
+if [ "$1" = "noclean" ] ; then
+ exit 0
+fi
 
 realpath()
 {
@@ -13,11 +18,8 @@ realpath()
  cd $oldpath > /dev/null 2>&1
 }
 
-cd "$(realpath "$0")"
+cd "$(realpath $(dirname "$0"))"
 echo "entering `pwd`"
 
-find ../jsrc -name "*.o" -type f -delete
-find ../dllsrc -name "*.o" -type f -delete
-find ../sleef/src -name "*.o" -type f -delete
-find ../base64 -name "*.o" -type f -delete
-find obj -name "*.o" -type f -delete || true
+find .. -not -path "*/.*" -not -path "../openssl-asm/*" -not -path "../asm/*" \( -name "*.o" -o -name "*.tmp" \) -type f -delete || true
+find .. -not -path "*/.*" -not -path "../openssl-asm/*" -not -path "../asm/*" -name "*.dSYM" -type d -delete || true

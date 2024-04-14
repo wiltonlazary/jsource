@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g420fg.ijs'
+prolog './g420fg.ijs'
 NB. f/@:g for atomic verbs ----------------------------------------------
 
 f=: ;: '! % * + - < = > ^ | <. <: >. >: +. +: *. *: ~: o.'
@@ -126,6 +126,9 @@ assert. (xx tvb1"(lvr,rvr) yy) -: (xx tvb"(lir,rir)"(lvr,rvr) yy)
 
 f (#: i.@:(*/)) 6$5
 
+(9 10,"0 _1/i.2 3) -: (9 10,"0 0 _1/i.2 3)
+(9 10,"0 _1/i.2 3) -: (9 10,"0 0 _1"0 _ i.2 3)
+
 NB. x +/@:*"1 y ---------------------------------------------------------
 
 NB. y is lvr, rvr, lnr, rnr   ranks of verbs, ranks of arguments
@@ -217,10 +220,22 @@ op1 +/@:*"1!.0"rnk&:(perm&{"1) op2
 1e_15 > | 1e_10 - f (, 1 1e5+/i. 17) ;"0 1 ]1;2;''
 1e_15 > | 1e_10 - f (, 1 1e5+/i. 17) ;"0 1 ]2;2 2 2;''
 
+NB. x +/@:*"1!.1 y ---------------------------------------------------------
+{{
+assert. 1.00000000010000111850e0 1.11022311648542148964e_25 -: (1+1e_15) +/@:*"1!.1 (1+1e_10)
+assert. (3 2 $ 1.00000000010000111850 1.11022311648542148964e_25 2.00000000020000090473 8.88178493188337191713e_26 3.00000000030000091300 8.88178493188337191713e_26) -: (1 2 3+1e_15) +/@:*"1!.1"0 (1+1e_10)
+assert. 'nonce error' -: (1 2 3+1e_15) +/@:*"1!.1 etx (1+1e_10)
+assert. 26 0 -: 1 2 3 +/@:*"1!.1 ] 3 4 5
+y
+}}^:(+./ ('avx2';'avx512') +./@:E.&> <9!:14'') 1
+
 NB. Test for NaN
-'NaN error' -: 0 _ 1 (+/@:*"1!.0) etx _ 0 2   NB. in exact calculation, any infinity causes a NaN
+2 -: 0 _ 1 (+/@:*"1!.0) _ 0 2   NB. in exact calculation, any infinity causes a NaN - failover to normal dotproduct
 'NaN error' -: _ 0 __ +/@:*"1 etx  1 1 1
 
 4!:55 ;:'f p q space test testsub x xx y yy x0 y0'
 
+
+
+epilog''
 

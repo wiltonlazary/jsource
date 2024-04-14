@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './gspi.ijs'
+prolog './gspi.ijs'
 NB. (dense vector) i. sparse , also i: ----------------------------------
 
 df=: $.^:_1
@@ -167,6 +167,11 @@ d=: df s=: 0(2)}$. i.5
 (s i. 0) -: d i. 0
 (s i: 0) -: d i: 0
 
+s =: $.,1
+s =: 0 (0}) s
+1 = s i. 1
+1 = (8 $. s) i. 1
+
 
 NB. i. and i: on general dense or sparse arguments ----------------------
 
@@ -301,4 +306,7 @@ f&> c
 
 4!:55 ;:'b c d df f f0 f1 f2 f3 f4 p pe ps q qe qs r s t x'
 
+
+
+epilog''
 

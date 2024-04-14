@@ -1,4 +1,4 @@
-/* Copyright 1990-2006, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Xenos: Host Command Facilities                                          */
@@ -35,34 +35,38 @@ extern int os_swi1(I,I);
 
 #if (SYS & SYS_MACINTOSH)
 
-F1(jthost  ){ASSERT(0,EVDOMAIN);}
-F1(jthostne){ASSERT(0,EVDOMAIN);}
+F1(jthost  ){ASSERT(0,EVDOMAIN);}  // 2!:0
+F1(jthostne){ASSERT(0,EVDOMAIN);}  // 2!:1
 
 #else
 
 // return string indicating which JEs this hardware would run
-// ""         would run j.dll
-// "avx"      would run j.dll or javx.dll
-// "avx avx2" would run j.dll or javx.dll or javx2.dll
+// ""            would run j.dll
+// "avx2"        would run j.dll or javx2.dll
+// "avx2 avx512" would run j.dll or javx2.dll or javx512.dll
+// 2!:7
 F1(jtjgetx){
+ASSERT(!JT(jt,seclev),EVSECURE)
 #if !defined(ANDROID) && (defined(__i386__) || defined(_M_X64) || defined(__x86_64__))
-if(getCpuFeatures()&CPU_X86_FEATURE_AVX2) R cstr("avx avx2");
-if(getCpuFeatures()&CPU_X86_FEATURE_AVX) R cstr("avx");
+if(getCpuFeatures()&CPU_X86_FEATURE_AVX512F) R cstr("avx2 avx512");
+if(getCpuFeatures()&CPU_X86_FEATURE_AVX2)   R cstr("avx2");
 #endif
 
 R cstr("");
 }
 
-F1(jthost){A z;
- F1RANK(1,jthost,DUMMYSELF);
+// 2!:0
+DF1(jthost){A z;
+ ASSERT(!JT(jt,seclev),EVSECURE)
+ F1RANK(1,jthost,self);
  RZ(w=vslit(w));
 // #if SY_WINCE
-#if SY_WINCE || SY_WIN32
+#if SY_WINCE || SY_WIN32 || defined(TARGET_IOS)
  ASSERT(0,EVDOMAIN);
 #else
 {
  A t;I b=0;C*fn,*s;F f;I n;
-#if defined(ANDROID) || defined(TARGET_IOS)
+#if defined(ANDROID)
  const char*ftmp=getenv("TMPDIR");  /* android always define TMPDIR in jeload */
 #endif
  n=AN(w);
@@ -83,7 +87,7 @@ F1(jthost){A z;
 #endif
  strcat(fn,"/tmp.XXXXXX");
  {int fd=mkstemp(fn); close(fd);}
-#if defined(ANDROID) || (defined(__MACH__) && !defined(TARGET_IOS))
+#if defined(ANDROID) || (defined(__APPLE__) && !defined(TARGET_IOS))
 /* no posix_spawn */
  b=!system(s);
 #else
@@ -98,7 +102,7 @@ F1(jthost){A z;
  char * argv[] = {"/bin/sh","-c",NULL,NULL};
  argv[2] = s;
  if (!(status = posix_spawn(&pid, argv[0], &action, NULL, &argv[0], environ))){
-#if defined(__MACH__)
+#if defined(__APPLE__)
 /* macos different behavior (from linux) for SIGCHLD */
 /* no interface error will be reported */
    waitpid(pid, &status, 0); b = WIFEXITED(status) && !WEXITSTATUS(status);
@@ -117,8 +121,10 @@ F1(jthost){A z;
  R z;
 }
 
-F1(jthostne){
- F1RANK(1,jthostne,DUMMYSELF);
+// 2!:1
+DF1(jthostne){
+ ASSERT(!JT(jt,seclev),EVSECURE)
+ F1RANK(1,jthostne,self);
  RZ(w=vslit(w));
 // #if SY_WINCE
 #if SY_WINCE || SY_WIN32 || defined(TARGET_IOS)
@@ -133,7 +139,7 @@ F1(jthostne){
 #else
   b=system(CAV(str0(w)));
 #endif
-#if !SY_64 && (SYS&SYS_LINUX)
+#if !SY_64 && (SYS&SYS_UNIX)
   //Java-jnative-j.so system always returns -1
   if(JT(jt,sm)==SMJAVA&&-1==b) b=-1==system("")?0:-1;
 #endif
@@ -146,22 +152,22 @@ F1(jthostne){
 
 #endif
 
-
 #if 0 // doesn't work
 #if !(SYS & SYS_UNIX)
 
-F1(jthostio){ASSERT(0,EVDOMAIN);}
-F1(jtjwait ){ASSERT(0,EVDOMAIN);}
+F1(jthostio){ASSERT(0,EVDOMAIN);}  // 2!:2
+F1(jtjwait ){ASSERT(0,EVDOMAIN);}  // 2!:3
 
 #else
 
 #define CL(f) {close(f[0]);close(f[1]);}
 
-F1(jthostio){C*s;A z;F*pz;int fi[2],fo[2],r;int fii[2],foi[2];
+DF1(jthostio){C*s;A z;F*pz;int fi[2],fo[2],r;int fii[2],foi[2];
+ ASSERT(!JT(jt,seclev),EVSECURE)
  if(pipe(fi)==-1) ASSERT(0,EVFACE);
  if(pipe(fo)==-1){CL(fi); ASSERT(0,EVFACE);}
  fii[0]=fi[0];fii[1]=fi[1];foi[0]=fo[0];foi[1]=fo[1];
- F1RANK(1,jthostio,DUMMYSELF);
+ F1RANK(1,jthostio,self);
  RZ(w=vs(w));
  s=CAV(str0(w)); GAT0(z,INT,3,1); pz=(F*)AV(z);
  if((r=pipe(fii))==-1||pipe(foi)==-1){if(r!=-1)CL(fi); ASSERT(0,EVFACE);}
@@ -182,18 +188,19 @@ F1(jthostio){C*s;A z;F*pz;int fi[2],fo[2],r;int fii[2],foi[2];
  R z;
 }
 
-F1(jtjwait){I k;int s; RE(k=i0(w)); if(-1==waitpid(k,&s,0))jerrno(); R sc(s);}
+F1(jtjwait){I k;int s; ASSERT(!JT(jt,seclev),EVSECURE) RE(k=i0(w)); if(-1==waitpid(k,&s,0))jerrno(); R sc(s);}  // 2!:3
 
 #endif
 #endif
 /* return errno info from c library */
+// 2!:8
 F1(jtcerrno){C buf[1024],ermsg[1024];
- ASSERTMTV(w);
+ ASSERT(!JT(jt,seclev),EVSECURE) ASSERTMTV(w);
 #ifdef _WIN32
  if(errno&&!strerror_s(ermsg,1024,errno)) strcpy (buf, ermsg); else strcpy (buf, "");
 #else
  if(errno&&!strerror_r(errno,ermsg,1024)) strcpy (buf, ermsg); else strcpy (buf, "");
 #endif
- R link(sc(errno),cstr(buf));
+ R jlink(sc(errno),cstr(buf));
 }    /* 2!:8  errno information */
 

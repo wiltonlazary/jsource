@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g530.ijs'
+prolog './g530.ijs'
 NB. m}y and u}y ---------------------------------------------------------
 
 randuni''
@@ -253,7 +253,11 @@ d1 =: 9 8 7 6
 c =: b} c1,:d1
 1 2 3 4 -: c1
 1 2 7 6 -: c
-   
+
+NB. Don't modify readonly
+ c1 =: |. ] d1 =: i. # ] b =: 1 0 0 0 1 0 0 1 1 1
+ d1 =: b } d1,:c1
+ 0 1 2 3 4 5 6 7 8 9 -: i. 10
 
 y=: 1 2 3
 b=: 0 1 2
@@ -460,6 +464,54 @@ test1 2 u: 'abcdefghijklmno'
 test1 10 u: 'abcdefghijklmno'
 test1 s: ' now is the time for all good men'
 
+NB. complementary indexing and axes in full
+NB. x has an atom for each leading axis of y to be fetched from:
+NB. 0=atom 1=list 2=complementary 3=axis in full
+NB. we calculate a selector for the given x.  Then we amend with it, comparing against an exploded version
+NB. We do amends with each possible frame of replacement data
+test1 =: {{
+axes =. 0$a: [ exaxes =. 0$0  NB. axes, exploded axes
+for_i. x do.
+ ys =. i_index { $y  NB. length of selected axis
+ select. i
+ case. 0 do. exaxis =. axis =. ?ys
+ case. 1 do. exaxis =. axis =. (?ys) ? ys
+ case. 2 do. exaxis =. (i.ys) -. >axis =. < (?ys) ? ys
+ case. 3 do. exaxis =. i. ys [ axis =. a:
+ end.
+ axes =. axes , <axis [ exaxes =. exaxes ,"1 0/ exaxis
+end.
+NB. We have the selectors.
+selshape =. (}:$exaxes) , ({:$exaxes)}.$y  NB. shape of m{y
+NB. obsolete ax   =: axes
+NB. obsolete exax   =: exaxes
+ip =. 1 |. y  NB. inplaceable version
+for_i. i.#selshape do.
+ repldata =. (,y) {~ (i}.selshape)?@$ */@$ y
+NB. obsolete rd   =: repldata
+NB. 'repldata__ axes__ exaxes__ y__'   =: repldata;axes;exaxes;<y
+ assert. repldata ((<axes)} -: (<^:(1=#@$) exaxes)}) y
+ NB. Also execute inplace, to exercise usecount management
+ ip =. repldata (<axes)} ip
+end.
+1
+}}"1 _
+NB. x is number of leading axes to test
+test2 =: {{
+((#: i.@(*/)) x # 4) test1 y
+1
+}}"0 _
+0 1 2 3 4 5 test2 i. 4 3 4 5 7 6 3
+0 1 2 3 4 5 test2 0. + i. 4 3 4 5 7 6 4
+0 1 2 3  test2 0x + i. 4 3 4 5 3
+0 1 2 3  test2 1r2 + i. 4 3 4 5 3
+0 1 2 3 test2 <"0 i. 4 3 4 5 2
+0 1 2 3 4 5 test2 (4 3 4 5 7 6 1) $ a.
+0 1 2 3 4 5 test2 (4 3 4 5 7 6 2) $ a.
+0 1 2 3 4 5 test2 (4 3 4 5 7 6 3) $ a.
+0 1 2 3 4 5 test2 (4 3 4 5 7 6 4) $ a.
+0 1 2 3 4 5 test2 (4 3 4 5 7 6 5) $ a.
+
 NB. lists of boxes get opened and go through the list-of-numbers code
 
 _10 -: (,_10) (,<0$4)} 4
@@ -499,7 +551,6 @@ val1 -: y
 'length error' -: 4 (i.0 2)} etx i. 20
 'length error' -: (i. 1 5) (2 4$_1 2 3 _4 1 1 1 1)test1 etx i. 8 9 5
 (100 ?@$ 100) (? 100 4 $ 6 7 8 9)test1 i. 6 7 8 9 
-
 
 
 'index error' -:  0 (i. 6)} etx 0
@@ -682,6 +733,12 @@ a =. (5,y) $ 'a'
 )
 test i. 517
 
+(,: 0 1 2 5) -: (,5) (,<0 3)} i. 1 4
+'rank error' -: (,5) (<0 3)} etx i. 1 4
+(0 1 2 0 4,:5 6 7 1 9) -:  (i. 2)    (<a:;3)} i. 2 5
+'length error' -:  (i. 2)    (<a:;,3)} etx  i. 2 5
+'index error' -: (i. 2 2)    (<<i. 2 2)} etx i. 2 11
+
 NB. Noun & other components of AR
 x =: 5
 'domain error' -: ex '((5!:1<''x'')`[`])}'
@@ -696,10 +753,114 @@ x =: "
 'domain error' -: ex '([`(5!:1<''x'')`])}'
 'domain error' -: ex '([`]`(5!:1<''x''))}'
 
+NB. Verify values out of execution are still inplaceable
+a =: i. 1e6
+IGNOREIFFVI 10000 > 7!:2 'a =: (#a) 0} a'
+
+NB. x -@{`[`]} y
+
+test1 =: -@{`[`]} -: -"-@{`[`]}
+a =: 0. + b =: i. 4 5
+a: test1 a
+a: test1 b
+2 test1 a
+3 test1 b
+(<2;3 4) test1 a
+(<2;3 4) test1 b
+(<2 1;3) test1 a
+(<2 1;3) test1 b
+(<a:;3) test1 a
+(<a:;3) test1 b
+(<a:;3 1 4) test1 b
+(<a:;<<3) test1 a
+(<a:;<<3) test1 b
+a =: 0. + b =: i. 4 5 6
+(<a:;3) test1 a
+(<a:;3) test1 b
+ 
+a =: 0. + i. 100 100
+10000 > 7!:2 'a =: 2 -@{`[`]} a'  NB. inplace
+
+NB. x m}"n y with IRS
+
+NB. y is (axis size profile);(surplus a frame);(common frame);(rank of ind);(# repeated axes of a);(cell rank);(type of data)
+testm =: {{
+'axisprof asf cf indr areps rcell dtype' =. y
+ranshape =. axisprof I. 0 ?@$~ ]  NB. y is rank, result is shape using axis-length profile
+aframe =. ranshape (asf>.0)   NB. neg means surplus is in w
+wframe =. ranshape (0>.-asf)
+commonframe =. ranshape cf
+cellshape =. ranshape rcell  NB. shape of inner cell
+indshape =. ranshape indr  NB. selectors lengths
+wcellframe =. 1 >. ranshape ($indshape)   NB. frame of minor cells in w
+ind =. indshape ?@$&.> wcellframe   NB. selector values for each leading axis of w-cell
+selframe =. ((#ind) {. # S:0 ind)   NB. axes preserved by the selection
+NB. Use simplest suitable form of ind, which is now a list of boxes
+if. 1=#ind do.  NB. just one axis.
+  ind =. ,>ind
+  if. 1 = #ind do. if. (?2) do. ind =. {. ind [ selframe =. $0 end. end.   NB. Singleton.  Can be atom or list; if atom, lose the axis from the selection
+  ind =. <@<^:(?2) ind   NB. Value can be bare or double-boxed
+elseif. *./ (,1)&-:@$@> ind do.   NB. all singletons, make into list of successive axes
+  selframe =. $0  NB. these axes are lost to the selection result  
+  ind =. < ; ind   NB. Run the axes together in one box
+else. ind =. <ind   NB. normal case, box the selectors
+end.
+c =: ind
+ashapein =. areps }. selframe , cellshape  NB. a may be any length suffix of selection
+ashape =. commonframe , aframe , ashapein
+wshape =. commonframe , wframe , wcellframe , cellshape
+d =: r =. (#ashapein) , (wcellframe +&# cellshape)
+select. dtype
+case. 1 do. a =: ashape ?@$ 2 [ b =: wshape ?@$ 2
+case. 2 do. a =: ashape (] {~ (?@$ #)) a. [ b =: wshape (] {~ (?@$ #)) a.
+case. 4 do. a =: ashape ?@$ 1e6 [ b =: wshape ?@$ 1e6
+case. 8 do. a =: ashape ?@$ 0 [ b =: wshape ?@$ 0
+case. 16 do. a =: 2 j. ashape ?@$ 0 [ b =: 3 j. wshape ?@$ 0
+case. 64 do. a =: ashape ?@$ 1000000x [ b =: wshape ?@$ 1000000x
+case. 128 do. a =: 1r7 * ashape ?@$ 1000000x [ b =: 1r7 * wshape ?@$ 1000000x
+case. do. 13!:8 ] 2
+end.
+assert. a (ind}"r -: ind}"]"r) b
+1
+}}
+
+NB. y is # tests;precision
+testn =: {{
+'ntests prec' =. y
+for. i. ntests do.
+  testm 0.02 0.1 0.5 0.9;(2-?4);(?4);(?4);(?2);(?2);prec
+end.
+}}"1
+testn 10000 ,. 1 2 4 8 16 64 128  NB. Reduce count after burn-in
+
+(,:~"2 i. 3 4 5) -:  (i. 3 4 5) (<a:,&<a:)}"2 i. 3 2 4 5  NB. verify last axis can't be removed
+
+23334 -: +/ , 0 (<1;0;<<_1) } i. 2 2 65
+
+NB. shaped boxed selectors
+(2 6 2 3$0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 90 91 92 93 94 95 96 97 98 99 100 101 96 97 98 99 100 101 90 91 92 93 94 95 66 67 68 69 70 71) -: (90+i. 2 2 3) (<1;1 3,:4 2)} i. 2 6 2 3
+(2 6 2 3$0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 90 91 92 48 49 50 93 94 95 54 55 56 93 94 95 60 61 62 90 91 92 66 67 68 69 70 71) -: (90+i. 2 3) (<1;(1 3,:4 2);1)} i. 2 6 2 3
+(2 6 2 3$0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 90 48 49 50 51 52 91 54 55 56 57 58 91 60 61 62 63 64 90 66 67 68 69 70 71) -: (90+i. 2) (<1;(1 3,:4 2);1;2)} i. 2 6 2 3
+(2 7 1 3$0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 900 901 902 900 901 902 903 904 905 903 904 905 900 901 902 36 37 38 903 904 905) -: (900+i. 2 1 3) (<1;3 2 $1 3  0 6 4 2)} i. 2 7 1 3
+(7 2 3$0 1 2 900 901 902 6 7 8 900 901 902 12 13 14 903 904 905 18 19 20 903 904 905 24 25 26 900 901 902 30 31 32 33 34 35 36 37 38 903 904 905) -: (900+i. 2 3) (<(3 2 $1 3  0 6 4 2);1)} i. 7 2 3
+(7 2 3$0 1 2 3 4 900 6 7 8 9 10 900 12 13 14 15 16 901 18 19 20 21 22 901 24 25 26 27 28 900 30 31 32 33 34 35 36 37 38 39 40 901) -: (900+i. 2) (<(3 2 $1 3  0 6 4 2);1;2)} i. 7 2 3
+
+(2 6 2 3$0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 900 900 900 900 900 900 900 900 900 900 900 900 900 900 900 900 900  900 900 900 900 900 900 900 66 67 68 69 70 71) -: (900) (<1;1 3,:4 2)} i. 2 6 2 3
+(2 6 2 3$0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 900 900 900 48 49 50 900 900 900 54 55 56 900 900 900 60 61 62 900 900 900 66 67 68 69 70 71) -: (900) (<1;(1 3,:4 2);1)} i. 2 6 2 3
+(2 6 2 3$0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 21 22 23 24 25 26 27 28 29 30 31 32 33 34 35 36 37 38 39 40 41 42 43 44 45 46 900 48 49 50 51 52 900 54 55 56 57 58 900 60 61 62 63 64 900 66 67 68 69 70 71) -: (900) (<1;(1 3,:4 2);1;2)} i. 2 6 2 3
+(2 7 1 3$0 1 2 3 4 5 6 7 8 9 10 11 12 13 14 15 16 17 18 19 20 900 900 900 900 900 900 900 900 900 900 900 900 900 900 900 36 37 38 900 900 900) -: (900) (<1;3 2 $1 3  0 6 4 2)} i. 2 7 1 3
+(7 2 3$0 1 2 900 900 900 6 7 8 900 900 900 12 13 14 900 900 900 18 19 20 900 900 900 24 25 26 900 900 900 30 31 32 33 34 35 36 37 38 900 900 900) -: (900) (<(3 2 $1 3  0 6 4 2);1)} i. 7 2 3
+(7 2 3$0 1 2 3 4 900 6 7 8 9 10 900 12 13 14 15 16 900 18 19 20 21 22 900 24 25 26 27 28 900 30 31 32 33 34 35 36 37 38 39 40 900) -: (900) (<(3 2 $1 3  0 6 4 2);1;2)} i. 7 2 3
+
+1:    99 (<1 2 3 ,:3 2 1)} i. 4 4 6   NB. more atoms than axes OK
+'domain error' -: 99 (0;0 0)} etx i. 2 3
 
 4!:55 ;:'a aa ab abc adot1 adot2 sdot0 b b32 C c c1 d d1 dd f f foo f1 '
 4!:55 ;:'f10 f11 f12 f13'
 4!:55 ;:'g g0 g1 g2 g3 g4 g5 g8 g9 g10 g11 goo '
-4!:55 ;:'h h1 hoo i ia j k n p pqr q qqq save size0 size1 sp t t t0 t1 t2 test test1 x xx xyz y yy z z1 zz '
+4!:55 ;:'h h1 hoo i ia j k n p pqr q qqq save size0 size1 sp t t t0 t1 t2 test test1 test2 testm testn x xx xyz y yy z z1 zz '
 4!:55 ;:'lim lm mody rx ry selshape tm tx ty' 
 randfini''
+
+epilog''
+

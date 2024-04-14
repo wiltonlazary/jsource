@@ -1,15 +1,16 @@
-/* Copyright 1990-2001, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Words                                                                   */
 
+#define CENDOFDEFN     0  // put into end+1 cw
 #define CBBLOCK        1   /* control word types */
 #define CTBLOCK        2
 #define CDO            3
 #define CIF            4
-#define CELSE          5
+#define CWHILE         5
 #define CEND           6
-#define CWHILE         7
+#define CELSE          7
 #define CWHILST        8
 #define CELSEIF        9
 #define CTRY           10

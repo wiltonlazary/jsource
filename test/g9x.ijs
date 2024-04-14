@@ -1,4 +1,5 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g9x.ijs'
+prolog './g9x.ijs'
+
 NB. 9!:0 and 9!:1 -------------------------------------------------------
 
 rlq =: 9!:0
@@ -171,7 +172,7 @@ a12 -: ":!.12 o.1
 
 'rank error'   -: pps etx 7 8
 
-'limit error'  -: pps etx 30
+'limit error'  -: pps etx 41
 
 
 NB. 9!:12 and 9!:14 -----------------------------------------------------
@@ -215,6 +216,33 @@ NB. 9!:18 and 9!:19 -----------------------------------------------------
 
 'rank error'   -: 9!:19 etx ,1e_14
 'rank error'   -: 9!:19 etx 1 1 1$1e_14
+
+NB. (9!:23) index auditing ---------------------------------------------------------------
+(3;,3) -: 0 0 0 _1 0 0 (9!:23) 0;0
+(2;,3) -: 0 0 0 0.5 0 0 (9!:23) 0;0
+(3;,2) -: 1 1 0 1 1 1 (9!:23) 0;1
+(3;,3) -: 0 0 0 _1 0 0x (9!:23) 0;0
+(3;,3) -: 0 0 0 _1 0 1r2 (9!:23) 0;0
+(2;,3) -: 0 0 0 1r2 0 0 (9!:23) 0;0
+(0;'') -: 0 0 0 2j0 0 0 (9!:23) 0;0
+(2;,3) -: 0 0 0 2j1 0 0 (9!:23) 0;0
+(0;'') -: 0 0 0 2j1 0 0 (9!:23) 1;0
+(3;,3) -: 0 0 0 2j_1 0 0 (9!:23) 1;0
+
+'domain error' -: a: (9!:23) etx 1
+'rank error' -: a: (9!:23) etx <'abc'
+'length error' -: a: (9!:23) etx 3$a:
+
+(0;'') -: (imin,imax,0,0,0) (9!:23) 0;''
+(3;,0) -: (imin,imax,0,0,0) (9!:23) 0;(>:imin)
+(3;,1) -: (imin,imax,0,0,0) (9!:23) 0;(imin,<:imax)
+(3;,3) -: _1 0 1 2 0 0 0 (9!:23) 0;_1 1
+(3;2 2) -: (i. 3 4) (9!:23) 0;0 9
+(3;2 2) -: ($. i. 3 4) (9!:23) 0;0 9
+(3;2 2) -: ($. 3 4 $0 0 0 0 1 0 0 0 8 9 10 0) (9!:23) 0;0 9
+
+
+
 
 
 NB. 9!:25 ---------------------------------------------------------------
@@ -365,8 +393,77 @@ NB. 'rank error'   -: 9!:51 etx 3 4$'abc'
 NB. 
 NB. 9!:51 old
 
+NB. 9!:54 and 9!:55
+1: 0 : 0  NB. multiple inhomo now an error
+9!:55 (271828)   NB. suppress msg but test
+1: 0 ((2;2 3);<3 2;4)} i. 10 10  NB. multiple inhomogeneous selectors
+(271827;'') -: 9!:54''
+9!:55 (271828;1)   NB. suppress test
+1: 0 ((2;2 3);<3 2;4)} i. 10 10
+(271828;1) -: 9!:54''
+NB. used only to debug error stop 9!:55 (_1)   NB. allow error
+NB. used only to debug error stop 'nonce error' -: 0 ((2;2 3);<3 2;4)} etx i. 10 10
+)
+
+9!:55 (271828)   NB. suppress msg but test
+1: 0 (<"1 (2 2$2 2 3 3))} i. 10 10  NB. multiple boxed selectors
+(271827;'') -: 9!:54''
+9!:55 (271828;2)   NB. suppress test
+1: 0  (<"1 (2 2$2 2 3 3))} i. 10 10
+(271828;2) -: 9!:54''
+9!:55 (271828)   NB. suppress msg but test
+1: 0 (<"0 (2 2$2 2 3 3))} i. 10 10  NB. multiple boxed selectors
+(271827;'') -: 9!:54''
+9!:55 (271828;1)   NB. suppress test
+1: 0  (<"0 (2 2$2 2 3 3))} i. 10 10
+(271828;1) -: 9!:54''
+
+1: 0 : 0   NB. axes containing table now OK
+9!:55 (271828)   NB. suppress msg but test
+1: 0 (<1;<i. 2 2)} i. 10 10  NB. axes containing table
+(271827;'') -: 9!:54''
+9!:55 (271828;3)   NB.
+1: 0 (<1;<i. 2 2)} i. 10 10 
+(271828;3) -: 9!:54''
+)
+
+1: 0 : 0   NB. m}"r is now OK
+9!:55 (271828)   NB. suppress msg but test
+1: 0 (2})"1 i. 10 10  NB. amend with rank
+(271827;'') -: 9!:54''
+9!:55 (271828;4)   NB.
+1: 0 (2})"1 i. 10 10 
+(271828;4) -: 9!:54''
+)
+
+9!:55 (271828)   NB. suppress msg but test
+1: *@+: 3 4  NB. f@atomic monad
+(271827;'') -: 9!:54''
+9!:55 (271828;5)   NB.
+1: *@+: 3 4
+(271828;5) -: 9!:54''
+
+9!:55 (271828)   NB. suppress msg but test
+1: 6 *@+ 3 4  NB. f@atomic dyad
+(271827;'') -: 9!:54''
+9!:55 (271828;6)   NB.
+1: 6 *@+ 3 4
+(271828;6) -: 9!:54''
+
+9!:55 (271828)   NB. suppress msg but test
+1: ". '+/@*'  NB. f@atomic dyad
+(271827;'') -: 9!:54''
+9!:55 (271828;8)   NB.
+1: ". '+/@*'  NB. f@atomic dyad
+(271828;8) -: 9!:54''
+
+9!:55 (0)  NB. reset
+
 4!:55 ;:'a a12 a6 a9 b boxq boxs c dispq disps '
 4!:55 ;:'drop1 erase evmq evms initspace namedvb nub old p ppq pps promptq '
 4!:55 ;:'prompts q read rlq rls s t v '
 
+
+
+epilog''
 

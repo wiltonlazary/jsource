@@ -1,4 +1,4 @@
-/* Copyright 1990-2008, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Atomic Verbs                                                            */
@@ -21,26 +21,28 @@
 #define ADECLR  AHDRR
 #define ADECLS  AHDRS
 
-extern ADECL1(  absQ,Q,Q);
-extern ADECL1(  absX,X,X);
-extern ADECL1( ceilQ,X,Q);
-extern ADECL1(  expX,X,X);
-extern ADECL1( factD,D,D);
-extern ADECL1( factI,I,I);
-extern ADECL1( factQ,X,Q);
-extern ADECL1( factX,X,X);
-extern ADECL1( factZ,Z,Z);
-extern ADECL1(floorQ,X,Q);
-extern ADECL1(  logX,X,X);
-extern ADECL1( logQD,D,Q);
-extern ADECL1( logQZ,Z,Q);
-extern ADECL1( logXD,D,X);
-extern ADECL1( logXZ,Z,X);
-extern ADECL1(  pixX,X,X);
-extern ADECL1(  sgnQ,X,Q);
-extern ADECL1(  sgnX,X,X);
-extern ADECL1( sqrtQ,Q,Q);
-extern ADECL1( sqrtX,X,X);
+extern ADECL1(   absQ,Q,Q);
+extern ADECL1(   absX,X,X);
+extern ADECL1(  ceilQ,X,Q);
+extern ADECL1( ceilQQ,Q,Q);
+extern ADECL1(   expX,X,X);
+extern ADECL1(  factD,D,D);
+extern ADECL1(  factI,I,I);
+extern ADECL1(  factQ,Q,Q);
+extern ADECL1(  factX,X,X);
+extern ADECL1(  factZ,Z,Z);
+extern ADECL1( floorQ,X,Q);
+extern ADECL1(floorQQ,Q,Q);
+extern ADECL1(   logX,X,X);
+extern ADECL1(  logQD,D,Q);
+extern ADECL1(  logQZ,Z,Q);
+extern ADECL1(  logXD,D,X);
+extern ADECL1(  logXZ,Z,X);
+extern ADECL1(   pixX,X,X);
+extern ADECL1(   sgnQ,X,Q);
+extern ADECL1(   sgnX,X,X);
+extern ADECL1(  sqrtQ,Q,Q);
+extern ADECL1(  sqrtX,X,X);
 
 extern ADECLP(   andpfxB,B, B );  extern ADECLR(   andinsB,B, B );  extern ADECLS(   andsfxB,B, B );
 extern ADECLP(   divpfxD,D, D );  extern ADECLR(   divinsD,D, D );  extern ADECLS(   divsfxD,D, D );
@@ -77,7 +79,10 @@ extern ADECLP(  pluspfxI,I, I );  extern ADECLR(  plusinsI,I, I );  extern ADECL
 extern ADECLP(  pluspfxO,D, I );  extern ADECLR(  plusinsO,D, I );  extern ADECLS(  plussfxO,D, I );
 extern ADECLP(  pluspfxQ,Q, Q );                                    extern ADECLS(  plussfxQ,Q, Q );
 extern ADECLP(  pluspfxX,X, X );                                    extern ADECLS(  plussfxX,X, X );
-extern ADECLP(  pluspfxZ,Z, Z );  extern ADECLR(  plusinsZ,Z, Z );  extern ADECLS(  plussfxZ,Z, Z );
+extern ADECLP(  pluspfxZ,Z, Z );  extern ADECLR(  plusinsZ,Z, Z );  extern ADECLS(  plussfxZ,Z, Z ); 
+extern ADECLR(  plusinsE,E, E );  extern ADECLR(  plusinsI2,I, I2 );   extern ADECLR(  plusinsI4,I, I4 );  
+extern ADECLR(  pluspfxI2,I, I2 );   extern ADECLR(  pluspfxI4,I, I4 );  
+extern ADECLR(  plussfxI2,I, I2 );   extern ADECLR(  plussfxI4,I, I4 );  
 extern ADECLP( tymespfxD,D, D );  extern ADECLR( tymesinsD,D, D );  extern ADECLS( tymessfxD,D, D );
 extern ADECLP( tymespfxI,I, I );  extern ADECLR( tymesinsI,I, I );  extern ADECLS( tymessfxI,I, I );
 extern ADECLP( tymespfxO,D, I );  extern ADECLR( tymesinsO,D, I );  extern ADECLS( tymessfxO,D, I );
@@ -102,16 +107,20 @@ extern ADECLP(bw1001pfxI,UI,UI);  extern ADECLR(bw1001insI,UI,UI);  extern ADECL
                                   extern ADECLR(bw1110insI,UI,UI);  extern ADECLS(bw1110sfxI,UI,UI);
 extern ADECLP(bw1111pfxI,UI,UI);  extern ADECLR(bw1111insI,UI,UI);  extern ADECLS(bw1111sfxI,UI,UI);
 
-#if (C_AVX&&SY_64) || EMU_AVX
+#if C_AVX2 || EMU_AVX2
 #define BID void
 #define PVB void
 #define PVI void
 #define PVD void
+#define PVDS void
+#define PVE void
 #else
 #define BID UI
 #define PVB B
 #define PVI I
 #define PVD D
+#define PVDS DS
+#define PVE E
 #endif
 extern ADECL2(bw0000II,BID,BID,BID);
 extern ADECL2(bw0001II,BID,BID,BID);
@@ -129,6 +138,38 @@ extern ADECL2(bw1100II,BID,BID,BID);
 extern ADECL2(bw1101II,BID,BID,BID);
 extern ADECL2(bw1110II,BID,BID,BID);
 extern ADECL2(bw1111II,BID,BID,BID);
+extern ADECL2(bw0000I2I2,UI2,UI2,UI2);
+extern ADECL2(bw0001I2I2,UI2,UI2,UI2);
+extern ADECL2(bw0010I2I2,UI2,UI2,UI2);
+extern ADECL2(bw0011I2I2,UI2,UI2,UI2);
+extern ADECL2(bw0100I2I2,UI2,UI2,UI2);
+extern ADECL2(bw0101I2I2,UI2,UI2,UI2);
+extern ADECL2(bw0110I2I2,UI2,UI2,UI2);
+extern ADECL2(bw0111I2I2,UI2,UI2,UI2);
+extern ADECL2(bw1000I2I2,UI2,UI2,UI2);
+extern ADECL2(bw1001I2I2,UI2,UI2,UI2);
+extern ADECL2(bw1010I2I2,UI2,UI2,UI2);
+extern ADECL2(bw1011I2I2,UI2,UI2,UI2);
+extern ADECL2(bw1100I2I2,UI2,UI2,UI2);
+extern ADECL2(bw1101I2I2,UI2,UI2,UI2);
+extern ADECL2(bw1110I2I2,UI2,UI2,UI2);
+extern ADECL2(bw1111I2I2,UI2,UI2,UI2);
+extern ADECL2(bw0000I4I4,UI4,UI4,UI4);
+extern ADECL2(bw0001I4I4,UI4,UI4,UI4);
+extern ADECL2(bw0010I4I4,UI4,UI4,UI4);
+extern ADECL2(bw0011I4I4,UI4,UI4,UI4);
+extern ADECL2(bw0100I4I4,UI4,UI4,UI4);
+extern ADECL2(bw0101I4I4,UI4,UI4,UI4);
+extern ADECL2(bw0110I4I4,UI4,UI4,UI4);
+extern ADECL2(bw0111I4I4,UI4,UI4,UI4);
+extern ADECL2(bw1000I4I4,UI4,UI4,UI4);
+extern ADECL2(bw1001I4I4,UI4,UI4,UI4);
+extern ADECL2(bw1010I4I4,UI4,UI4,UI4);
+extern ADECL2(bw1011I4I4,UI4,UI4,UI4);
+extern ADECL2(bw1100I4I4,UI4,UI4,UI4);
+extern ADECL2(bw1101I4I4,UI4,UI4,UI4);
+extern ADECL2(bw1110I4I4,UI4,UI4,UI4);
+extern ADECL2(bw1111I4I4,UI4,UI4,UI4);
 
 extern ADECL2(  andBB,void,void,void);
 extern ADECL2(  binDD,D,D,D);
@@ -138,12 +179,14 @@ extern ADECL2(  binZZ,Z,Z,Z);
 extern ADECL2(  cirBD,D,B,D);
 extern ADECL2(  cirID,D,I,D);
 extern ADECL2(  cirDD,D,D,D);
+extern ADECL2(  cirEE,E,E,E);
 extern ADECL2(  cirZZ,Z,Z,Z);
 extern ADECL2(  divBB,PVD,PVB,PVB);
 extern ADECL2(  divBD,PVD,PVB,PVD);
 extern ADECL2(  divBI,PVD,PVB,PVI);
 extern ADECL2(  divDB,PVD,PVD,PVB);
 extern ADECL2(  divDD,PVD,PVD,PVD);
+extern ADECL2(  divEE,E,E,E);
 extern ADECL2(  divDI,PVD,PVD,PVI);
 extern ADECL2(  divIB,PVD,PVI,PVB);
 extern ADECL2(  divID,PVD,PVI,PVD);
@@ -159,6 +202,7 @@ extern ADECL2(   eqCC,void,void,void);  // really B,C,C
 extern ADECL2(   eqCS,B,UC,US);
 extern ADECL2(   eqDB,B,D,B);
 extern ADECL2(   eqDD,B,D,D);
+extern ADECL2(   eqEE,B,E,E);
 extern ADECL2(   eqDI,B,D,I);
 extern ADECL2(   eqIB,B,I,B);
 extern ADECL2(   eqID,B,I,D);
@@ -179,6 +223,7 @@ extern ADECL2(   geBD,B,B,D);
 extern ADECL2(   geBI,B,B,I);
 extern ADECL2(   geDB,B,D,B);
 extern ADECL2(   geDD,B,D,D);
+extern ADECL2(   geEE,B,E,E);
 extern ADECL2(   geDI,B,D,I);
 extern ADECL2(   geIB,B,I,B);
 extern ADECL2(   geID,B,I,D);
@@ -191,6 +236,7 @@ extern ADECL2(   gtBD,B,B,D);
 extern ADECL2(   gtBI,B,B,I);
 extern ADECL2(   gtDB,B,D,B);
 extern ADECL2(   gtDD,B,D,D);
+extern ADECL2(   gtEE,B,E,E);
 extern ADECL2(   gtDI,B,D,I);
 extern ADECL2(   gtIB,B,I,B);
 extern ADECL2(   gtID,B,I,D);
@@ -209,6 +255,7 @@ extern ADECL2(   leBD,B,B,D);
 extern ADECL2(   leBI,B,B,I);
 extern ADECL2(   leDB,B,D,B);
 extern ADECL2(   leDD,B,D,D);
+extern ADECL2(   leEE,B,E,E);
 extern ADECL2(   leDI,B,D,I);
 extern ADECL2(   leIB,B,I,B);
 extern ADECL2(   leID,B,I,D);
@@ -221,6 +268,7 @@ extern ADECL2(   ltBD,B,B,D);
 extern ADECL2(   ltBI,B,B,I);
 extern ADECL2(   ltDB,B,D,B);
 extern ADECL2(   ltDD,B,D,D);
+extern ADECL2(   ltEE,B,E,E);
 extern ADECL2(   ltDI,B,D,I);
 extern ADECL2(   ltIB,B,I,B);
 extern ADECL2(   ltID,B,I,D);
@@ -228,10 +276,17 @@ extern ADECL2(   ltII,B,I,I);
 extern ADECL2(   ltSS,B,SB,SB);
 extern ADECL2(   ltQQ,B,Q,Q);
 extern ADECL2(   ltXX,B,X,X);
+extern ADECL2(   eqabsDD,B,D,D);
+extern ADECL2(   neabsDD,B,D,D);
+extern ADECL2(   ltabsDD,B,D,D);
+extern ADECL2(   leabsDD,B,D,D);
+extern ADECL2(   geabsDD,B,D,D);
+extern ADECL2(   gtabsDD,B,D,D);
 extern ADECL2(  maxBD,PVD,PVB,PVD);
 extern ADECL2(  maxBI,PVI,PVB,PVI);
 extern ADECL2(  maxDB,PVD,PVD,PVB);
 extern ADECL2(  maxDD,PVD,PVD,PVD);
+extern ADECL2(  maxEE,E,E,E);
 extern ADECL2(  maxDI,PVD,PVD,PVI);
 extern ADECL2(  maxIB,PVI,PVI,PVB);
 extern ADECL2(  maxID,PVD,PVI,PVD);
@@ -243,6 +298,7 @@ extern ADECL2(  minBD,PVD,PVB,PVD);
 extern ADECL2(  minBI,PVI,PVB,PVI);
 extern ADECL2(  minDB,PVD,PVD,PVB);
 extern ADECL2(  minDD,PVD,PVD,PVD);
+extern ADECL2(  minEE,E,E,E);
 extern ADECL2(  minDI,PVD,PVD,PVI);
 extern ADECL2(  minIB,PVI,PVI,PVB);
 extern ADECL2(  minID,PVD,PVI,PVD);
@@ -256,6 +312,7 @@ extern ADECL2(minusBI,PVI,PVB,PVI);
 extern ADECL2(minusBIO,D,B,I);
 extern ADECL2(minusDB,PVD,PVD,PVB);
 extern ADECL2(minusDD,PVD,PVD,PVD);
+extern ADECL2(minusEE,E,E,E);
 extern ADECL2(minusDI,PVD,PVD,PVI);
 extern ADECL2(minusIB,PVI,PVI,PVB);
 extern ADECL2(minusID,PVD,PVI,PVD);
@@ -265,6 +322,18 @@ extern ADECL2(minusIO,D,I,I);
 extern ADECL2(minusQQ,Q,Q,Q);
 extern ADECL2(minusXX,X,X,X);
 extern ADECL2(minusZZ,Z,Z,Z);
+extern ADECL2(plusI2I2,I2,I2,I2);
+extern ADECL2(plusI4I4,I4,I4,I4);
+extern ADECL2(minusI2I2,I2,I2,I2);
+extern ADECL2(minusI4I4,I4,I4,I4);
+extern ADECL2(minI2I2,I2,I2,I2);
+extern ADECL2(minI4I4,I4,I4,I4);
+extern ADECL2(maxI2I2,I2,I2,I2);
+extern ADECL2(maxI4I4,I4,I4,I4);
+extern ADECL2(tymesI2I2,I2,I2,I2);
+extern ADECL2(tymesI4I4,I4,I4,I4);
+extern ADECL2(remI2I2,I2,I2,I2);
+extern ADECL2(remI4I4,I4,I4,I4);
 extern ADECL2( nandBB,void,void,void);
 extern ADECL2(   neAA,B,A,A);
 extern ADECL2(   neBB,void,void,void);
@@ -274,6 +343,7 @@ extern ADECL2(   neCC,void,void,void);  // really B,C,C
 extern ADECL2(   neCS,B,UC,US);
 extern ADECL2(   neDB,B,D,B);
 extern ADECL2(   neDD,B,D,D);
+extern ADECL2(   neEE,B,E,E);
 extern ADECL2(   neDI,B,D,I);
 extern ADECL2(   neIB,B,I,B);
 extern ADECL2(   neID,B,I,D);
@@ -283,6 +353,18 @@ extern ADECL2(   neSC,B,US,UC);
 extern ADECL2(   neSS,B,S,S);
 extern ADECL2(   neXX,B,X,X);
 extern ADECL2(   neZZ,B,Z,Z);
+extern ADECL2(   eqI2I2,B,I2,I2);
+extern ADECL2(   neI2I2,B,I2,I2);
+extern ADECL2(   ltI2I2,B,I2,I2);
+extern ADECL2(   gtI2I2,B,I2,I2);
+extern ADECL2(   leI2I2,B,I2,I2);
+extern ADECL2(   geI2I2,B,I2,I2);
+extern ADECL2(   eqI4I4,B,I4,I4);
+extern ADECL2(   neI4I4,B,I4,I4);
+extern ADECL2(   ltI4I4,B,I4,I4);
+extern ADECL2(   gtI4I4,B,I4,I4);
+extern ADECL2(   leI4I4,B,I4,I4);
+extern ADECL2(   geI4I4,B,I4,I4);
 extern ADECL2(  norBB,void,void,void);
 extern ADECL2(   orBB,void,void,void);
 extern ADECL2( plusBB,PVI,PVB,PVB);
@@ -291,8 +373,8 @@ extern ADECL2( plusBIO,D,B,I);
 extern ADECL2( plusBD,PVD,PVB,PVD);
 extern ADECL2( plusDB,PVD,PVD,PVB);
 extern ADECL2( plusDD,PVD,PVD,PVD);
+extern ADECL2( plusEE,E,E,E);
 extern ADECL2( plusDI,PVD,PVD,PVI);
-extern ADECL2( plusDX,DX,DX,DX);
 extern ADECL2( plusIB,PVI,PVI,PVB);
 extern ADECL2( plusID,PVD,PVI,PVD);
 extern ADECL2( plusII,PVI,PVI,PVI);
@@ -305,6 +387,7 @@ extern ADECL2(  powBD,D,B,D);
 extern ADECL2(  powBI,D,B,I);
 extern ADECL2(  powDB,D,D,B);
 extern ADECL2(  powDD,D,D,D);
+extern ADECL2(  powEE,E,E,E);
 extern ADECL2(  powDI,D,D,I);
 extern ADECL2(  powIB,I,I,B);
 extern ADECL2(  powID,D,I,D);
@@ -314,6 +397,8 @@ extern ADECL2(  powXX,X,X,X);
 extern ADECL2(  powZZ,Z,Z,Z);
 extern ADECL2(  remDD,D,D,D);
 extern ADECL2(  remII,I,I,I);
+extern ADECL2(  remI2I2,I2,I2,I2);
+extern ADECL2(  remI4I4,I4,I4,I4);
 extern ADECL2(  remID,I,I,D);
 extern ADECL2(  remQQ,Q,Q,Q);
 extern ADECL2(  remXX,X,X,X);
@@ -322,6 +407,7 @@ extern ADECL2(tymesBD,PVD,PVB,PVD);
 extern ADECL2(tymesBI,PVI,PVB,PVI);
 extern ADECL2(tymesDB,PVD,PVD,PVB);
 extern ADECL2(tymesDD,PVD,PVD,PVD);
+extern ADECL2(tymesEE,E,E,E);
 extern ADECL2(tymesDI,PVD,PVD,PVI);
 extern ADECL2(tymesIB,PVI,PVI,PVB);
 extern ADECL2(tymesID,PVD,PVI,PVD);

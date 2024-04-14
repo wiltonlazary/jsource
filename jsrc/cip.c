@@ -1,4 +1,4 @@
-/* Copyright 1990-2009, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Conjunctions: Inner Product                                             */
@@ -6,8 +6,6 @@
 #include "j.h"
 #include "vasm.h"
 #include "gemm.h"
-
-#define MAXAROWS 384  // max rows of a that we can process to stay in L2 cache   a strip is m*CACHEHEIGHT, z strip is m*CACHEWIDTH   this is wired to 128*3 - check if you change
 
 // Analysis for inner product
 // a,w are arguments
@@ -17,8 +15,8 @@
 // *pp is number of inner-product muladds
 //   (in each, an atom of a multiplies an item of w)
 static A jtipprep(J jt,A a,A w,I zt,I*pm,I*pn,I*pp){A z=mark;I*as,ar,ar1,m,mn,n,p,*ws,wr,wr1;
- ar=AR(a); as=AS(a); ar1=ar-1>=0?ar-1:0; PRODX(m,ar1,as,1) *pm=m;  // m=# 1-cells of a.  It could overflow, if there are no atoms
- wr=AR(w); ws=AS(w); wr1=wr-1>=0?wr-1:0; PRODX(n,wr1,ws+1,1) *pn=n; DPMULDE(m,n,mn);  // n=#atoms in item of w; mn = #atoms in result
+ ar=AR(a); as=AS(a); ar1=ar-((UI)ar>0); PRODX(m,ar1,as,1) *pm=m;  // m=# 1-cells of a.  It could overflow, if there are no atoms
+ wr=AR(w); ws=AS(w); wr1=wr-((UI)wr>0); PRODX(n,wr1,ws+1,1) *pn=n; DPMULDE(m,n,mn);  // n=#atoms in item of w; mn = #atoms in result
  I t=AS(w)[0]; p=wr?t:1; t=AS(a)[ar1]; p=ar?t:p; *pp=p;  // if a is an array, the length of a 1-cell; otherwise, the number of items of w
  ASSERT(!(ar&&wr)||p==ws[0],EVLENGTH);
  GA00(z,zt,mn,ar1+wr1);   // allocate result area
@@ -67,7 +65,7 @@ static F2(jtpdtby){A z;B b,*u,*v,*wv;C er=0;I at,m,n,p,t,wt,zk;
      DQ(nn, if(*u++){vi=(UI*)v; d=ti; DQ(nw, *d+++=*vi++;);} v+=n;);  \
      x=zv; c=tc; DQ(n, *x+++=*c++;);
 
-#if (C_AVX || EMU_AVX) && defined(PREFETCH)
+#if C_AVX2 || EMU_AVX2
 // blocked multiply, processing vertical mx16 strips of y.  Good when y has few rows
 // *av is mxp, *wv is pxn, *zv is mxn
 // flgs is 0 for float, 1 for complex, i. e. lg2(# values per atom), 2 for upper-tri, 4 for INT.  If FLGCMP is set, n and p are even, and give the lengths of the arguments in values
@@ -78,7 +76,6 @@ static F2(jtpdtby){A z;B b,*u,*v,*wv;C er=0;I at,m,n,p,t,wt,zk;
 I blockedmmult(J jt,D* av,D* wv,D* zv,I m,I n,I pnom,I pstored,I flgs){
  // Since we sometimes use 128-bit instructions in other places, make sure we don't get stuck in slow state
  NAN0;
- _mm256_zeroupperx(VOIDARG) 
  __m256d z00=_mm256_setzero_pd(); // set here to avoid warnings
  // handle small mx2 separately
  // for(each vertical strip of w, processed 4-16 values at a time)
@@ -112,7 +109,7 @@ I blockedmmult(J jt,D* av,D* wv,D* zv,I m,I n,I pnom,I pstored,I flgs){
  if(((pnom-2)|(pnom-m))==0){  // m=p=2
   // m is 2x2.  preload it, then read pairs of inputs to produce pairs of outputs.  Must allow inplace ops
   D *wv1=wv, *zv1=zv;  // scan pointer through row-pairs of w and z (which may be the same)
-  __m256d z10, a00=_mm256_broadcast_sd(&av[0]), a01=_mm256_broadcast_sd(&av[1]), a10=_mm256_broadcast_sd(&av[2]), a11=_mm256_broadcast_sd(&av[3]);
+  __m256d z10, a00=_mm256_broadcast_sd(&av[0]), a01=_mm256_broadcast_sd(&av[1]), a10=_mm256_broadcast_sd(&av[pstored]), a11=_mm256_broadcast_sd(&av[pstored+1]);
   while(nrem>NPAR){  // guarantee nonempty remnant
    __m256d w0=_mm256_loadu_pd(wv1), w1=_mm256_loadu_pd(wv1+n);
    z00=_mm256_mul_pd(a00,w0); z00=MUL_ACC(z00,a01,w1); z10=_mm256_mul_pd(a10,w0); z10=MUL_ACC(z10,a11,w1);
@@ -131,7 +128,7 @@ I blockedmmult(J jt,D* av,D* wv,D* zv,I m,I n,I pnom,I pstored,I flgs){
  }
  // not 2x2
  I wskips=pnom-NPAR*4; wskips=flgs&FLGWUTRI?wskips:0; wskips=wskips<0?0:wskips;  // number of known trailing 0s in w, therefore shortening each dp
- while(nrem>=NPAR){  // do 1x4s as long as possible.  The load bandwidth is twice as high
+ while(nrem>=NPAR){  // do ?x4s as long as possible.  The load bandwidth is twice as high
   // create mx16 strip of result
   I mrem=m;  // number of rows of a left
   D *av1=av;  // scan pointer through a values, by cols then by rows, i. e. incrementing
@@ -223,19 +220,52 @@ I blockedmmult(J jt,D* av,D* wv,D* zv,I m,I n,I pnom,I pstored,I flgs){
  R NANTEST==0;  // return with error (0) if any FP error
 }
 // cache-blocking code
+// ctx block passed in from the task code
+typedef struct {
+ D*av,*wv,*zv;  // arg pointers into cachedmmultx, defined below
+ I m,n,p;  // dimensions ((mxp) x (pxn)) defined below
+ I flgs;   // complex, triangular processing flags
+ I nbigtasks[2];  // number of tasks using taskm[0]; number of tasks that are not in the shortened tail
+ I4 taskm[2];  // number of rows in leading tasks, unshortened trailing tasks
+ I nanerr; // nonzero whenever a nan was encountered; could indicate we should throw an error (_+__) or a case where we disagree with ieee (_*0)
+// scaf should deal with this case better; for the former case, should abort immediately (ideally siglonjmp or so but...); for the latter case, don't fall back to +/@(*"1 _), but rather recalculate the block with extra checks, maybe tell other threads about row/col containing inf/0
+} CACHEMMSTATE;
 #define OPHEIGHTX 2
 #define OPHEIGHT ((I)1<<OPHEIGHTX)  // height of outer-product block
 #define OPWIDTHX 3
 #define OPWIDTH ((I)1<<OPWIDTHX)  // width of outer-product block
 #define CACHEWIDTH 64  // width of resident cache block (in D atoms)
-#define CACHEHEIGHT 16  // height of resident cache block
+#define CACHEHEIGHTX 4
+#define CACHEHEIGHT ((I)1<<CACHEHEIGHTX)  // height of resident cache block
+#define MAXAROWS ((L2CACHESIZE/CACHEWIDTH/sizeof(D))*3/4)  // max #rows of a/z that we can process while staying in L2 cache   a strip is m*CACHEHEIGHT, z strip is m*CACHEWIDTH
 static D missingrow[CACHEHEIGHT]={1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1};
 // Floating-point matrix multiply, hived off to a subroutine to get fresh register allocation
 // *zv=*av * *wv, with *cv being a cache-aligned region big enough to hold CACHEWIDTH*CACHEHEIGHT floats
 // a is shape mxp, w is shape pxn.  Result is 0 if OK, 1 if fatal error
-// m must not exceed MAXAROWS.  mfull is the number of rows from the actual starting row to the end of a
-// Result is 0 if NaN error, 1 if OK
-static I cachedmmultx(J jt,D* av,D* wv,D* zv,I m,I n,I pnom,I pstored,I flgs){D c[(CACHEHEIGHT+1)*CACHEWIDTH + (CACHEHEIGHT+1)*OPHEIGHT*OPWIDTH*2 + 2*CACHELINESIZE/sizeof(D)];  // 2 in case complex
+// m must not exceed MAXAROWS.
+// Result is for taskrun: 0=OK, otherwise error#
+static NOINLINE C cachedmmultx(J jt,void *ctx,UI4 ti){ CACHEMMSTATE *pd=ctx;
+ // The task# ti must be converted to a slice of a to use: height m at offset moffset
+ I flgs=pd->flgs;
+ I tishort=ti-pd->nbigtasks[0]; I m=pd->taskm[REPSGN(tishort)+1];  // tishort is how far ti is into the second set of tasks.  If negative, it's in the first set.  Set m to the appropriate tasksize.
+ I mtailct=pd->nbigtasks[1]-ti;  // mtailct is negative of (how far ti is past the second set of tasks).  The third set is one cacheblock shorter than the second set
+ I moffset=ti*pd->taskm[0]+tishort*(m-pd->taskm[0])+((mtailct&REPSGN(mtailct))<<CACHEHEIGHTX);  // combine to get position of task: size if big blocks, minus adj for blocks in second group, minus single-block adj for third group
+ m+=REPSGN(mtailct-1)<<CACHEHEIGHTX; m=MIN(m,pd->m-moffset);  // if third group, reduce the size by one block; truncate the last task if it goes beyond the overall size
+ I n=pd->n;
+ I pnom=pd->p-(((moffset)&-((flgs>>FLGAUTRIX)&1))<<(flgs&FLGCMP));  // for upper-tri, shorten the rows of a to the nonzero part
+ I pstored=pd->p;
+ D *av=pd->av+(moffset*(pd->p+(((flgs>>FLGAUTRIX)&1)<<(flgs&FLGCMP))));   // for upper-triangular, horizontally skip the zeros of a
+ D *wv=pd->wv+((n*moffset)&-((flgs>>FLGAUTRIX)&1)); // for upper-tri, vertically skip the zeroed-out rows of w
+ D *zv=pd->zv+(n*moffset);
+ // Small problems should use a multiplier that does not use full cacheblock.  For jobs, we make the decision for each task
+ if(((((50-m)&(50-n)&(16-pstored)&((DCACHED_THRES-1)-m*n*pnom))|SGNIF(flgs,FLGCMPX))&SGNIFNOT(flgs,FLGWMINUSZX))>=0){  // blocked for small arrays in either dimension (after threading); not if CMP; force if WMINUSZ (can't be both)
+  // blocked algorithm.  there is no size limit on the blocks
+  I ok=blockedmmult(jt,av,wv,zv,m,n,pnom,pstored,flgs);  // blockedmult uses normal JE return of 0=error
+  if(unlikely(!ok))__atomic_fetch_add(&pd->nanerr,1,__ATOMIC_RELAXED);  //could be _fetch_or, but x86 has lock xadd
+  R 0;  // scaf should return nonzero to abort if error
+ }
+
+ D c[(CACHEHEIGHT+1)*CACHEWIDTH + (CACHEHEIGHT+1)*OPHEIGHT*OPWIDTH*2 + 2*CACHELINESIZE/sizeof(D)];  // 2 in case complex
  // Allocate a temporary result area for the stripe of z results
  D zt[((MAXAROWS+OPHEIGHT)&(-OPHEIGHT))*CACHEWIDTH+5*CACHELINESIZE/SZD];
  D *zblock=(D*)(((I)zt+5*CACHELINESIZE-1)&(-CACHELINESIZE));  // cache-aligned area to hold z values
@@ -247,12 +277,11 @@ static I cachedmmultx(J jt,D* av,D* wv,D* zv,I m,I n,I pnom,I pstored,I flgs){D 
  // point to cache-aligned areas we will use for staging the inner-product info
  // flgs is 0 for float, 1 for complex, i. e. lg2(# values per atom), 2 for upper-tri, 4 for INT.  If FLGCMP is set, n and p are even, and give the lengths of the arguments in values
  // Since we sometimes use 128-bit instructions in other places, make sure we don't get stuck in slow state
-_mm256_zeroupperx(VOIDARG) 
  D *cvw = (D*)(((I)&c+(CACHELINESIZE-1))&-CACHELINESIZE);  // place where cache-blocks of w are staged
  D (*cva)[2][OPHEIGHT][CACHEHEIGHT] = (D (*)[2][OPHEIGHT][CACHEHEIGHT])(((I)cvw+(CACHEHEIGHT+1)*CACHEWIDTH*sizeof(D)+(CACHELINESIZE-1))&-CACHELINESIZE);   // place where expanded rows of a are staged
  // If a is upper-triangular, we write out the entire column of z values only when we process the last section of the w stripe.  If w is also upper-triangular,
  // we stop processing sections before we get to the bottom.  So in that case (which never happens currently), clear the entire result areas leaving 0 in the untouched bits
- if((flgs&(FLGWUTRI|FLGAUTRI))==(FLGWUTRI|FLGAUTRI))mvc(m*n*SZD,zv,1,MEMSET00);  // if w is upper-triangular, we will not visit all the z values and we must clear the lower-triangular part.  Here we just clear them all
+ if(unlikely((flgs&(FLGWUTRI|FLGAUTRI))==(FLGWUTRI|FLGAUTRI)))mvc(m*n*SZD,zv,1,MEMSET00);  // if w is upper-triangular, we will not visit all the z values and we must clear the lower-triangular part.  Here we just clear them all
  // process each 64-float vertical stripe of w against the entirety of a, producing the corresponding columns of z
  D* w0base = wv; D* z0base = zv; I w0rem = n;   // w0rem counts doubles
  for(;w0rem>0;w0rem-=CACHEWIDTH,w0base+=CACHEWIDTH,z0base+=CACHEWIDTH){
@@ -305,14 +334,18 @@ _mm256_zeroupperx(VOIDARG)
     _mm256_store_pd(&(*cva)[0][0][2*NPAR],t2);  _mm256_store_pd(&(*cva)[0][0][3*NPAR],t3); _mm256_store_pd(&(*cva)[0][1][2*NPAR],t4);  _mm256_store_pd(&(*cva)[0][1][3*NPAR],t5);
     _mm256_store_pd(&(*cva)[0][2][2*NPAR],t6);  _mm256_store_pd(&(*cva)[0][2][3*NPAR],t7); _mm256_store_pd(&(*cva)[0][3][2*NPAR],t0);  _mm256_store_pd(&(*cva)[0][3][3*NPAR],t1);
    }else{  // partial block
-    for(i=0;i<OPHEIGHT;++i){I j;  // for each row (i. e. for the length of the outer product)
+    if(common(!(flgs&FLGCMP))){ //real case; contiguous, so simpler
+     for(I i=0;i<OPHEIGHT;i++){
       D *a0x=a2base0+pstored*i; a0x=i>=a2rem?missingrow:a0x;  // start of samples for the row, or a repeated row if past the end
-      if(!(flgs&(FLGCMP))){
-       for(j=0;j<(nvalidops&-NPAR);j+=NPAR){_mm256_store_pd(&(*cva)[0][i][j],_mm256_loadu_pd(a0x)); a0x+=NPAR;}  // quads as long as possible
-       for(;j<nvalidops;++j){(*cva)[0][i][j]=*a0x; ++a0x;}  // float
-      }else {for(j=0;j<nvalidops;++j){(*cva)[0][i][j]=*a0x; ++a0x; (*cva)[1][i][j]=*a0x; ++a0x;}}  // complex: real and imaginary
-     }
-    }
+      if(common(nvalidops>=4)){ //fast path: handle using overlapping accesses
+       for(I j=0;j<(nvalidops-NPAR);j+=NPAR){_mm256_store_pd(&(*cva)[0][i][j],_mm256_loadu_pd(a0x+j));}  //round down if not a whole number of quads, otherwise subtract one full quad
+       _mm256_storeu_pd(&(*cva)[0][i][nvalidops-NPAR],_mm256_loadu_pd(a0x+nvalidops-NPAR)); //to avoid doing redundant work here
+      }else{ //uncommon case; handle using scalar ops
+       for(I j=0;j<nvalidops;++j){(*cva)[0][i][j]=a0x[j];}}}}  // float
+    else{ //complex case; could be optimised
+     for(I i=0;i<OPHEIGHT;i++){
+      D *a0x=a2base0+pstored*i; a0x=i>=a2rem?missingrow:a0x;  // start of samples for the row, or a repeated row if past the end
+      for(I j=0;j<nvalidops;++j){(*cva)[0][i][j]=*a0x; ++a0x; (*cva)[1][i][j]=*a0x; ++a0x;}}}}  // complex: real and imaginary
 
     // While we are processing the sections of a, move the next cache block of w into L2 (not L1, so we don't overrun it)
     // We would like to do all the prefetches for a CACHEWIDTH at once to stay in page mode
@@ -353,8 +386,8 @@ _mm256_zeroupperx(VOIDARG)
 
       // load running total, or 0 if first time
       /*if((a3rem|a3rem-1)<1)scaf to disable*/if(!(flgs&FLGZFIRST)){
-#define ACCZ(r,c) z##r##c=_mm256_load_pd(zilblock+NPAR*(2*r+c));
-        ACCZ(0,0); ACCZ(0,1); ACCZ(1,0); ACCZ(1,1); ACCZ(2,0); ACCZ(2,1); ACCZ(3,0); ACCZ(3,1);
+#define ACCz(r,c) z##r##c=_mm256_load_pd(zilblock+NPAR*(2*r+c));
+        ACCz(0,0) ACCz(0,1) ACCz(1,0) ACCz(1,1) ACCz(2,0) ACCz(2,1) ACCz(3,0) ACCz(3,1)
       }else z31 = z30 = z21 = z20 = z11 = z10 = z01 = z00 = _mm256_setzero_pd();
 
 // we might want to prefetch a anyway in case a row is a multiple of a cache line
@@ -394,7 +427,7 @@ _mm256_zeroupperx(VOIDARG)
       }
 
 // for some reason, storing into z slows down processing by a factor of 2 when m exceeds 500 and n,p are 16 64 - even if we don't load
-// it appears that this is because the Z strip exceeds L2 cache and the bandwidth of L# is not enough to support the traffic.  So we
+// it appears that this is because the Z strip exceeds L2 cache and the bandwidth of L3 is not enough to support the traffic.  So we
 // ask the caller to split a up in units of 500 rows or less.  This might obviate the need for the Z buffer, but we keep it because
 // it allows the result to be inplaced if a doesn't have to be split, and might use cache bandwidth better since it's aligned
       if(!(flgs&FLGZLAST)){
@@ -488,41 +521,46 @@ _mm256_zeroupperx(VOIDARG)
    flgs&=~(FLGZFIRST|FLGZLAST);  // we have finished a 16x64 cache section.  That touched all the columns of z.  For the remaining sections we must accumulate into the z values.  If this was the last pass, clear that flag too, since we're finished
   }  // end of loop for each 16x64 section of w
  }  // end of loop for each 64-col slice of w
- R NANTEST==0;  // return with error (0) if any FP error
+ if(unlikely(NANTEST))__atomic_fetch_add(&pd->nanerr,1,__ATOMIC_RELAXED);//could be _fetch_or, but x86 has lock xadd
+ R 0;  // scaf should return nonzero to abort if error
 }
 // looping entry point for cached mmul
 // We split the input into products where the left arg has at most MAXAROWS rows.  This is to avoid overrunning L2 cache
 // Result is 0 if error, which must be NaN error
 // For historical reason (i. e. to match the non-AVX2 version) n and p have been multiplied by 2 for complex multiplies
 I cachedmmult(J jt,D* av,D* wv,D* zv,I m,I n,I p,I flgs){
-// TODO: bug when EMU_AVX
- int rc=1,i;
- I blocksize,nblocks,(*fn)();  // loop controls
- if(((((50-m)&(50-n)&(16-p)&(DCACHED_THRES-m*n*p))|SGNIF(flgs,FLGCMPX))&SGNIFNOT(flgs,FLGWMINUSZX))>=0){  // blocked for small arrays in either dimension (after threading); not if CMP; force if WMINUSZ (can't be both)
-  // blocked algorithm.  there is no size limit on the blocks
-  fn=blockedmmult;  // select function
-  nblocks=1; blocksize=m; // do it all in a single block
+// TODO: bug when EMU_AVX2
+ if(((((24-m)&(24-n)&(16-p)&((DCACHED_THRESn-1)-m*n*p))|SGNIF(flgs,FLGCMPX))&SGNIFNOT(flgs,FLGWMINUSZX))>=0){  // TUNE blocked for small arrays in either dimension (after threading); not if CMP; force if WMINUSZ (can't be both)
+  // small problem, not worth splitting.  there is no size limit on the blocks
+  // 16x16 multiply takes about 1us; we are guessing task-wakeup takes a similar amount of time.  So it's not worth a split unless the time gets substantially above 1us
+  R blockedmmult(jt,av,wv,zv,m,n,p,p,flgs); }
+ UI nfulltasks, nremnant, tailtasks, endtasksize, fulltasksize;
+ // big problem, split into tasks.  The tasks may be either cached or blocked
+ UI nthreads=__atomic_load_n(&(*JT(jt,jobqueue))[0].nthreads,__ATOMIC_ACQUIRE)+(jt->threadpoolno!=0);  // get # running threads, just once so we have a consistent view.  We count our thread too, if it's not in pool 0, since it runs tasks for the job
+ UI ncache=(m+CACHEHEIGHT-1)>>CACHEHEIGHTX;  // number of cacheblocks of a, including remnant
+ // The cached algorithm works on sections that are a multiple of CACHEHEIGHT high, up to MAXAROWS.  For big arguments, we spread the CACHEHEIGHT sections through the threads as evenly as possible.
+ // for modest arguments, breaking into CACHEHEIGHT blocks may not allow use of all threads.  In that case, use more threads (each of which will use the blocking algorithm)
+ if(unlikely(ncache*4<nthreads*3)){
+  // caching would leave 1/4 of the threads unused.  Do blocking
+#define THR0HEADSTART 0  // if we know the lead thread will keep running, we should assign more work to it.  But it doesn't seem to.
+  endtasksize=(((m-THR0HEADSTART-1)/nthreads)+1+3)&-4;  // # rows per thread, rounded up to multiple of 4; but reserving 8 rows for the lead thread
+  UI effthreads=(m-THR0HEADSTART+endtasksize-1)/endtasksize; nthreads=effthreads<nthreads?effthreads:nthreads;  // get the max number threads we can use
+  nfulltasks=1; fulltasksize=endtasksize+THR0HEADSTART;  // the first task, which will be handled in this thread (presumably without waiting) gets a few extra rows
+  nremnant=tailtasks=nthreads-1;   // the rest of the tasks all have the same size
  }else{
-  // cached algorithm.  blocks must not exceed MAXAROWS lines
-  fn=cachedmmultx;  // select function
-  // Figure out the number of blocks we will use, and the size of each.  We make the number of blocks a multiple of the number of threads, and round the
-  // block size up to a multiple of OPHEIGHT
-  nblocks = ((m+MAXAROWS)*0x55555555)>>(32+7);  // minimum number of blocks needed
-  blocksize=MAXAROWS;   // max size of each
+  // caching will use all the threads
+  UI nperthread=ncache/nthreads; nremnant=ncache%nthreads;  // # pieces in all threads, #threads with an extra piece
+  nfulltasks=nperthread/(MAXAROWS/CACHEHEIGHT); endtasksize=nperthread%(MAXAROWS/CACHEHEIGHT); // # full tasks per thread, # cacheblocks in final task in each thread
+  tailtasks=nremnant; tailtasks=endtasksize!=0?nthreads:tailtasks;  // number of tasks in the tail: if there is at least one block in all threads, nthreads; otherwise the number of single blocks in the remnant
+  endtasksize++;  // if there is an extra cacheblock in some threads, extend the length of the last blocks to account for it.  If there is no extra cache block, tailtasks will be 0 and this won't matter
+  endtasksize<<=CACHEHEIGHTX;  // convert # blocks at end to #rows at end
+  nfulltasks*=nthreads;  // get total# tasks using the large block
+  fulltasksize=MAXAROWS;  // in this branch, the big block is max for cachedmmult
  }
- for(i=0;i<nblocks;++i){
-  // if AUTRI, bring a in from the left and w down from the top as we proceed.  And shorten p.
-  if(0==(*fn)(jt,
-              av+(i*MAXAROWS*(p+(((flgs>>FLGAUTRIX)&1)<<(flgs&FLGCMP)))),
-              wv+((n*i*MAXAROWS)&-((flgs>>FLGAUTRIX)&1)),
-              zv+(n*i*MAXAROWS),
-              MIN(blocksize,m-i*MAXAROWS),
-              n,
-              p-(((i*MAXAROWS)&-((flgs>>FLGAUTRIX)&1))<<(flgs&FLGCMP)),
-              p,flgs)){rc=0; break;}  // set error if one was found
- }
- R rc;
-}
+ CACHEMMSTATE ctx={.av=av,.wv=wv,.zv=zv,.m=m,.n=n,.p=p,.flgs=flgs,.nbigtasks={nfulltasks,nfulltasks+nremnant},.taskm={fulltasksize,endtasksize}};
+   // number of full tasks, followed by number that have size 'endtasksize'.  Later tasks have size endtasksize-CACHEHEIGHT
+ jtjobrun(jt,cachedmmultx,&ctx,nfulltasks+tailtasks,0);  // go run the tasks - default to threadpool 0
+ R !ctx.nanerr;}
 
 #else
 // cache-blocking code
@@ -682,7 +720,7 @@ F2(jtpdt){PROLOG(0038);A z;I ar,at,i,m,n,p,p1,t,wr,wt;
  ar=AR(a); at=AT(a); at=AN(a)?at:B01;
  wr=AR(w); wt=AT(w); wt=AN(w)?wt:B01;
  if(unlikely(ISSPARSE(at|wt)))R pdtsp(a,w);  // Transfer to sparse code if either arg sparse
- if(unlikely(((at|wt)&XNUM+RAT)!=0))R df2(z,a,w,atop(slash(ds(CPLUS)),qq(ds(CSTAR),v2(1L,AR(w)))));  // On indirect numeric, execute as +/@(*"(1,(wr)))
+ if(unlikely(((at|wt)&XNUM+RAT+QP+INT2+INT4)!=0))R df2(z,a,w,atop(slash(ds(CPLUS)),qq(ds(CSTAR),v2(1L,AR(w)))));  // On nonbasic types, execute as +/@(*"(1,(wr)))
  if(unlikely(B01&(at|wt)&&TYPESNE(at,wt)&&((ar-1)|(wr-1)|(AN(a)-1)|(AN(w)-1))>=0))R pdtby(a,w);   // If exactly one arg is boolean, handle separately
  {t=maxtyped(at,wt); if(!TYPESEQ(t,AT(a))){RZ(a=cvt(t,a));} if(!TYPESEQ(t,AT(w))){RZ(w=cvt(t,w));}}  // convert args to compatible precisions, changing a and w if needed.  B01 if both empty
  ASSERT(t&NUMERIC,EVDOMAIN);
@@ -694,7 +732,7 @@ F2(jtpdt){PROLOG(0038);A z;I ar,at,i,m,n,p,p1,t,wr,wt;
  // INT multiplies convert to float, for both 32- and 64-bit systems.  It is converted back if there is no overflow
  m=t; m=t&INT?FL:m; m=t&B01?INT:m;  // type of result, promoting bool and int
  RZ(z=ipprep(a,w,m,&m,&n,&p));  // allocate the result area, with the needed shape and type
- if(AN(z)==0)R z;  // return without computing if result is empty
+ if(AN(z)==0)R z;  // return without computing if result is empty.  Type stays FL
  if(!p){mvc(AN(z)<<bplg(AT(z)),AV(z),1,MEMSET00); R z;}  // if dot-products are all 0 length, set them all to 0
  // If either arg is atomic, reshape it to a list
  if(!ar!=!wr){if(ar)RZ(w=reshape(sc(p),w)) else RZ(a=reshape(sc(p),a));}
@@ -757,7 +795,7 @@ oflo2:
    }else{
      // full matrix products
      I probsize = m*n*(IL)p;  // This is proportional to the number of multiply-adds.  We use it to select the implementation
-     if((UI)probsize < (UI)JT(jt,igemm_thres)){RZ(a=cvt(FL,a)); RZ(w=cvt(FL,w)); cachedmmult(jt,DAV(a),DAV(w),DAV(z),m,n,p,0);}  // Do our matrix multiply - converting   TUNE
+     if((UI)probsize < (UI)FLOAT16TOFLOAT(JT(jt,igemm_thres))){RZ(a=cvt(FL,a)); RZ(w=cvt(FL,w)); cachedmmult(jt,DAV(a),DAV(w),DAV(z),m,n,p,0);}  // Do our matrix multiply - converting   TUNE
      else {
       // for large problem, use BLAS
       mvc(m*n*sizeof(D),DAV(z),1,MEMSET00);
@@ -886,11 +924,11 @@ time1 ,&(x,y)"0 ((256 1e20 1e20 65536 > x*y) # 0 1 2 3) +/ lens
 #endif
 #else
    // not single column.  Choose the algorithm to use
-#if (C_AVX || EMU_AVX) && defined(PREFETCH)
+#if C_AVX2 || EMU_AVX2
     smallprob=0;  // never use Dic method; but used to detect pick up NaN errors
     D *av=DAV(a), *wv=DAV(w), *zv=DAV(z);  //  pointers to sections
     I flgs=((AFLAG(a)>>(AFUPPERTRIX-FLGAUTRIX))&FLGAUTRI)|((AFLAG(w)>>(AFUPPERTRIX-FLGWUTRIX))&FLGWUTRI);  // flags from a or w
-    if((UI)(m*n*(IL)p)>=(UI)JT(jt,dgemm_thres)){   // test for BLAS.  For AVX2 this should not be taken; for other architectures tuning is required
+    if((UI)(m*n*(IL)p)>=(UI)FLOAT16TOFLOAT(JT(jt,dgemm_thres))){   // test for BLAS.  For AVX2 this should not be taken; for other architectures tuning is required
      mvc(m*n*sizeof(D),DAV(z),1,MEMSET00);
      dgemm_nn(m,n,p,1.0,DAV(a),p,1,DAV(w),n,1,0.0,DAV(z),n,1);
     } else {
@@ -899,7 +937,7 @@ time1 ,&(x,y)"0 ((256 1e20 1e20 65536 > x*y) # 0 1 2 3) +/ lens
 #else
     I probsize = (m-1)*n*(IL)p;  // This is proportional to the number of multiply-adds.  We use it to select the implementation.  If m==1 we are doing dot-products; no gain from fancy code then
     if(!(smallprob = (m<=4||probsize<1000LL))){  // if small problem, avoid the startup overhead of the matrix version  TUNE
-     if((UI)probsize < (UI)JT(jt,dgemm_thres))
+     if((UI)probsize < (UI)FLOAT16TOFLOAT(JT(jt,dgemm_thres)))
       cachedmmult(jt,DAV(a),DAV(w),DAV(z),m,n,p,((AFLAG(a)>>(AFUPPERTRIX-FLGAUTRIX))&FLGAUTRI)|((AFLAG(w)>>(AFUPPERTRIX-FLGWUTRIX))&FLGWUTRI));  // Do our one-core matrix multiply - real   TUNE this is 160x160 times 160x160.  Tell routine if uppertri
      else{
       // If the problem is really big, use BLAS
@@ -928,7 +966,7 @@ time1 ,&(x,y)"0 ((256 1e20 1e20 65536 > x*y) # 0 1 2 3) +/ lens
    I probsize = m*n*(IL)p;  // This is proportional to the number of multiply-adds.  We use it to select the implementation
    I smallprob=probsize<1000;  // set if we do the old-fashioned way, possibly after error
    if(!smallprob){  // use old-fashioned way if small.  16b3.4 comes though here
-    if((UI)probsize<(UI)JT(jt,zgemm_thres)){smallprob=1^cachedmmult(jt,DAV(a),DAV(w),DAV(z),m,n*2,p*2,((AFLAG(a)>>(AFUPPERTRIX-FLGAUTRIX))&FLGAUTRI)|((AFLAG(w)>>(AFUPPERTRIX-FLGWUTRIX))&FLGWUTRI)|FLGCMP);}  // Do the fast matrix multiply - complex.  Change widths to widths in D atoms, not complex atoms  TUNE  this is 130x130 times 130x130
+    if((UI)probsize<(UI)FLOAT16TOFLOAT(JT(jt,zgemm_thres))){smallprob=1^cachedmmult(jt,DAV(a),DAV(w),DAV(z),m,n*2,p*2,((AFLAG(a)>>(AFUPPERTRIX-FLGAUTRIX))&FLGAUTRI)|((AFLAG(w)>>(AFUPPERTRIX-FLGWUTRIX))&FLGWUTRI)|FLGCMP);}  // Do the fast matrix multiply - complex.  Change widths to widths in D atoms, not complex atoms  TUNE  this is 130x130 times 130x130
     else {
       // Large problem - start up BLAS
       mvc(2*m*n*sizeof(D),DAV(z),1,MEMSET00);
@@ -1035,7 +1073,7 @@ static A jtipbx(J jt,A a,A w,C c,C d){A g=0,x0,x1,z;B*av,*av0,b,*v0,*v1,*zv;C c0
 static DF2(jtdotprod){A fs,gs;C c;I r;V*sv;
  ARGCHK3(a,w,self);
  sv=FAV(self); fs=sv->fgh[0]; gs=sv->fgh[1];  // op is fs . gs
- if((SGNIF(AT(a)&AT(w),B01X)&-AN(a)&-AN(w)&-(FAV(gs)->flag&VISATOMIC2))<0&&CSLASH==FAV(fs)->id&&  // fs is c/
+ if(((UI)(AT(a)&AT(w)&B01)>SGNTO0((SGNIFSPARSE(AT(a)|AT(w)))))&&(-AN(a)&-AN(w)&-(FAV(gs)->flag&VISATOMIC2))<0&&CSLASH==FAV(fs)->id&&  // fs is c/
      (c=FAV(FAV(fs)->fgh[0])->id,BETWEENC((c^(CPLUSDOT^CEQ)),CSTARDOT,CNE)))R ipbx(a,w,c,FAV(gs)->id);  // [+.*.~:]/ . boolean   swap = and +., then test for range
  r=lr(gs);   // left rank of v
  A z; R df2(z,a,w,atop(fs,qq(gs,v2(r==RMAX?r:1+r,RMAX))));  // inner product according to the Dic
@@ -1047,7 +1085,7 @@ static F1(jtminors){A d,z;
  R drop(d,df2(z,num(1),w,bsdot(ds(CLEFT))));  // 0 0 1 }. 1 [\. w 
 }
 
-static DF1(jtdet){DECLFG;A h=sv->fgh[2];I c,r,*s;
+DF1(jtdet){DECLFG;A h=sv->fgh[2];I c,r,*s;
  ARGCHK1(w);
  r=AR(w); s=AS(w);
  A z; if(h&&1<r&&2==s[r-1]&&s[r-2]==s[r-1])R df1(z,w,h);
@@ -1059,7 +1097,7 @@ static DF1(jtdet){DECLFG;A h=sv->fgh[2];I c,r,*s;
 DF1(jtdetxm){A z; R dotprod(IRS1(w,0L,1L,jthead,z),det(minors(w),self),self);}
      /* determinant via expansion by minors. w is matrix with >1 columns */
 
-F2(jtdot){A f,h=0;AF f2=jtdotprod;C c,d;
+F2(jtdot){F2PREFIP;A f,h=0;AF f2=jtdotprod;C c,d;
  ASSERTVV(a,w);
  if(CSLASH==FAV(a)->id){
   f=FAV(a)->fgh[0]; c=FAV(f)->id; d=FAV(w)->id;  // op was c/ . d
@@ -1072,8 +1110,8 @@ F2(jtdot){A f,h=0;AF f2=jtdotprod;C c,d;
 }
 
 // general LU decomp using generic arithmetic
-F1(jtludecompg){F1PREFIP;PROLOG(823);
- F1RANK(2,jtludecompg,DUMMYSELF)  // if rank > 2, call rank loop
+DF1(jtludecompg){F1PREFIP;PROLOG(823);
+ F1RANK(2,jtludecompg,self)  // if rank > 2, call rank loop
  ASSERT(AR(w)>=2,EVRANK);   // require rank>=2
  ASSERT(AS(w)[0]==AS(w)[1],EVLENGTH);  // matrix must be square
  A luvb; ASSERT(luvb=jtfindnameinscript(jt,"~addons/dev/lu/lu.ijs","Lu_j_",VERB),EVNONCE)   // error if undefined or not verb
@@ -1088,7 +1126,7 @@ F1(jtludecompg){F1PREFIP;PROLOG(823);
 // 128!:10 LU decomposition for square real arrays LU=A
 // returns permutation ; L+U-I (Doolittle form)
 // the ith element of the permutation is the original row of row i of LU
-F1(jtludecomp){F1PREFIP;PROLOG(823);
+DF1(jtludecomp){F1PREFIP;PROLOG(823);
 #if C_AVX2 || EMU_AVX2
  // We operate on 4x4 blocks of A, which we transform into 4x4 blocks of LU.  The ravel of each LU block is stored for cache ease,
  // and the U blocks are ordered in transpose form to speed up the dot-product operations.
@@ -1099,17 +1137,16 @@ F1(jtludecomp){F1PREFIP;PROLOG(823);
  // Allocate area for the cacheblocks of L and U
 #define BLKSZ 4  // size of cache block
 #define LGBLKSZ 2  // lg(BLKSZ)
-// obsolete I ndots=0,neval=0;  // total #blocks, #skips  scaf
  I nzeroblocks=0;  // number of zero blocks created.  If negative, we have given up on zero blocks
  B lookfor0blocks;  // set if we think it's worthwhile to check for sparse array
- F1RANK(2,jtludecomp,DUMMYSELF)  // if rank > 2, call rank loop
+ F1RANK(2,jtludecomp,self)  // if rank > 2, call rank loop
  ASSERT(AR(w)>=2,EVRANK);   // require rank>=2
  ASSERT(AS(w)[0]==AS(w)[1],EVLENGTH);  // matrix must be square
- if((AT(w)&SPARSE+B01+INT+FL)<=0)R jtludecompg(jt,w);  // if not real float type, use general version
+ if((AT(w)&SPARSE+B01+INT+FL)<=0)R jtludecompg(jt,w,DUMMYSELF);  // if not real float type, use general version
  if(unlikely(!(AT(w)&FL)))RZ(w=cvt(FL,w));
  I wn=AS(w)[0];  // n=size of square matrix
  // Allocate the result (possibly inplace)
- A z; GA(z,FL,wn*wn,2,AS(w)) if(unlikely(wn==0))R link(mtv,z);  // if empty result, return fast.  Now nr must be >0
+ A z; GA(z,FL,wn*wn,2,AS(w)) if(unlikely(wn==0))R jlink(mtv,z);  // if empty result, return fast.  Now nr must be >0
  I resultoffset=CAV(z)-CAV(w);  // distance between result & input data areas
  I nr=(wn+BLKSZ-1)>>LGBLKSZ;  // nr=total # blocks on a side (including partial ones)
 #define CORNERBLOCK(rc) (cb+(rc)*(nr+1))  // address of corner cblock in row&col rc
@@ -1150,8 +1187,6 @@ F1(jtludecomp){F1PREFIP;PROLOG(823);
   // zero blocks.  Since each zero block zaps multiple dot-product blocks, it doesn't take many to be worthwhile
   lookfor0blocks=nzeroblocks*64>(nr-1-r)*(2*r+1);    // # blocks so far is (nr-1-r) * (2nr-1-2*(nr-1-r)).  If 1 in 64 is 0, look for it.  But never first time
   nzeroblocks|=(lookfor0blocks|((nr-1-r)!=10))-1;    // on the 10th ring, disable zero checks if we aren't using them
-// obsolete D scafa[4][4]; _mm256_storeu_pd(&scafa[0][0],nexta0); _mm256_storeu_pd(&scafa[1][0],nexta1); _mm256_storeu_pd(&scafa[2][0],nexta2); _mm256_storeu_pd(&scafa[3][0],nexta3);
-// obsolete printf("fetching corner A from index %lld: ",wclv-DAV(w)); DO(4, I j=i; DO(4, printf(" %f",scafa[j][i]);) printf("  ");) printf("\n");  // scaf
   D *wluv=wclv; I wlustride=BLKSZ;  // pointer to next input values in A, and offset to next.  We start going east
   D (*llv)[BLKSZ][BLKSZ]=LBLOCK(nr-1-r,0), (*luv)[BLKSZ][BLKSZ]=UBLOCK(0,nr-1-r), (*prechv)[BLKSZ][BLKSZ]=luv-(nr+1);  // start point of dot-products, startpoint of next dot-product
   UI *lbv0=LBIT(nr-1-r,0), *ubv0=UBIT(0,nr-1-r);  // point to the bit vectors for the corner position.  These pointers are advanced after we finish each block, to handle the dot-product for the next block
@@ -1167,7 +1202,6 @@ F1(jtludecomp){F1PREFIP;PROLOG(823);
     // advance to following block and fetch it
     wluv+=wlustride;  // advance to beginning of next block
     nextfetchaddr=wluv;  // remember addr being fetched
-// obsolete printf("fetching A from index %lld: ",wluv-DAV(w)); DO(4, I j=i; DO(4, printf(" %f",wluv[j*wn+i]);) printf("  ");) printf("\n");  // scaf
     // Since the corner block was handled first, the block we are fetching can go out on only one side.  We fill with zeros
     if(unlikely(r0==-1)){  // fetching the LAST block in the U row
      nexta0=_mm256_maskload_pd(wluv,endmask); nexta1=_mm256_maskload_pd(wluv+1*wn,endmask); nexta2=_mm256_maskload_pd(wluv+2*wn,endmask); nexta3=_mm256_maskload_pd(wluv+3*wn,endmask);
@@ -1191,18 +1225,10 @@ F1(jtludecomp){F1PREFIP;PROLOG(823);
     // Create & use sparse sections
     // we go through the sparse maps and convert the OR of the rows & columns into a sequence of (#non0,#0) pairs which we process later
     UI4 *runv=rleb;  // pointer to next run
-// obsolete I scafn0=0;  // # nonzero blocks
     if(lookfor0blocks){  // if we think it's worthwhile to skip over zero blocks... 
      UI *lbv=lbv0, *ubv=ubv0;  // point to the start of the bit vectors
      UI polarity=~0;  // 00.00 if we are looking for 0s, 11..11 if we are looking for 1s.  We start looking for skipped blocks (1s)
      I bitsleft=nr-1-r, lensofar=0, bitsinstack;  // number of bits left to process, length carried over from previous maskword
-// obsolete // scaf
-// obsolete D (*scafblk)[BLKSZ][BLKSZ];
-// obsolete DO(nr-1-r, scafblk=llv+i; I is0=1; DO(BLKSZ, I ii=i; DO(BLKSZ, if(scafblk[0][ii][i]!=0)is0=0;)) if(!(!!(lbv0[i>>6]&(1LL<<(i&63)))==is0))SEGFAULT;)
-// obsolete DO(nr-1-r, scafblk=luv+i; I is0=1; DO(BLKSZ, I ii=i; DO(BLKSZ, if(scafblk[0][ii][i]!=0)is0=0;)) if(!(!!(ubv0[-(i>>6)]&(1LL<<(i&63)))==is0))SEGFAULT;)
-// obsolete DO(nr-1-r, if(!(ubv0[-(i>>6)]&(1LL<<(i&63)))&&!(lbv0[i>>6]&(1LL<<(i&63)))){printf("non0: %lld ",i); ++scafn0;})
-// obsolete // scaf
-// obsolete printf("reading bitmaps: loc %lld=0x%llx, loc %lld=0x%llx\n",lbv-lb,*lbv,ubv-lb,*ubv);  // scaf
      UI bitstack;
      while(1){  // loop to build the run lengths
       // we are scanning qwords looking for a mismatch, where the bits don't equal 'polarity'.  Switch the polarity so we are always looking for 0
@@ -1211,7 +1237,6 @@ F1(jtludecomp){F1PREFIP;PROLOG(823);
       bitsinstack=BW; bitsinstack=bitsleft<BW?bitsleft:bitsinstack; bitsleft-=bitsinstack;  // init # valid bits in bitstack, never more than bitsleft; predecrement bitstack to len AFTER this bitstack is processed
       while(1){  // build the run of non-polarity
        I runlen=CTTZI(bitstack); runlen=bitstack==0?bitsinstack:runlen;  // Find the lowest 1 bit
-// obsolete printf("\nbitstack=0x%llx runlen=%lld bitsinstack=%lld bitsleft=%lld lensofar=%lld polarity=0x%llx",bitstack,runlen,bitsinstack,bitsleft,lensofar,polarity);  // scaf
        lensofar+=runlen;  // presumptively add the bits to the run
        if((bitsinstack-=runlen)<=0){lensofar+=bitsinstack; if(bitsleft<=0)goto finrle; break;}  // bitstack exhausted: add valid bits to run.  If there are no more bits, exit, otherwise continue in next word
        // we found the end of a run inside the bitstring.  Out the run, change polarity, continue look
@@ -1223,7 +1248,6 @@ finrle: ;
      *runv++=lensofar;  // out the last run
     }else{
      *runv++=0; *runv++=nr-1-r;  // go through all the blocks up to the current ring in one run, which is known not to be empty
-// obsolete scafn0=nr-1-r;
     }
     UI nruns=(runv-rleb)>>1;  // number of runs, which may have only the starting component or be empty
     runv=rleb;  // point to length of first run
@@ -1235,20 +1259,10 @@ finrle: ;
     // establish pointers & offsets for the args.  We increment only the L pointer & use indexes for the rest
     D *lvv=(D*)llv; I uofst=(D*)luv-lvv, pofst=(D*)prechv-lvv;  // the 2 args+prefetch: one pointer, 2 offsets
     a10=_mm256_setzero_pd(); a11=_mm256_setzero_pd(); a12=_mm256_setzero_pd(); a13=_mm256_setzero_pd(); // clear the uninitialized accumulators
-// obsolete nruns=1;  // scaf
-// obsolete printf("nbits=%lld nruns=%lld: ",nr-1-r,nruns); // scaf
-// obsolete ndots+=nr-1-r;  // scaf
     while(nruns){
-// obsolete printf("\nskip: %d ",*runv);  // scaf
      lvv+=*runv++*BLKSZ*BLKSZ;  // skip over the zeros.
-// obsolete scafn0-=*runv;
-// obsolete printf("\npros: %d\n",*runv);  // scaf
      UI4 ndp=*runv++;  // get the length of the run
-// obsolete neval+=ndp;  // scaf
-// obsolete printf(" %d",ndp); // scaf
-// obsolete ndp=nr-1-r; // scaf
      do{
-// obsolete printf("dot-product of blocks %lld and %lld\n",(D (*)[4][4])lvv-cb,(D (*)[4][4])(lvv+uofst)-cb);  // scaf
       __m256d tmp;  // where we save a row of U to multiply by 4 scalars from L
       tmp=_mm256_loadu_pd(lvv+uofst);  // read U00-U03
       a00=_mm256_fnmadd_pd(_mm256_set1_pd(lvv[0]),tmp,a00); a01=_mm256_fnmadd_pd(_mm256_set1_pd(lvv[4]),tmp,a01); a02=_mm256_fnmadd_pd(_mm256_set1_pd(lvv[8]),tmp,a02); a03=_mm256_fnmadd_pd(_mm256_set1_pd(lvv[12]),tmp,a03);
@@ -1262,11 +1276,8 @@ finrle: ;
       PREFETCH2(lvv+pofst+8);  // prefetch for the next loop
       lvv+=BLKSZ*BLKSZ;  // advance loop pointer/counter
      }while(--ndp);
-// obsolete printf("(%d)",*runv); // scaf
      --nruns;
     };
-// obsolete if(scafn0)SEGFAULT;
-// obsolete printf("\n");
    // ****************** end of O(n^3) part **************************
    // combine the accumulators into the 0 side
     a00=_mm256_add_pd(a00,a10); a01=_mm256_add_pd(a01,a11); a02=_mm256_add_pd(a02,a12); a03=_mm256_add_pd(a03,a13);  // this finishes the 16 dot-products
@@ -1290,27 +1301,19 @@ finrle: ;
    // When we calculate the corner block we also write out coefficients that will ne needed to calculate the other blocks of L and U.
    if(r0==-r){
     // corner block.  First row of U is set.  Alternate creating columns of L and rows of U
-// obsolete D scafa[4][4]; _mm256_storeu_pd(&scafa[0][0],a00); _mm256_storeu_pd(&scafa[1][0],a01); _mm256_storeu_pd(&scafa[2][0],a02); _mm256_storeu_pd(&scafa[3][0],a03);
-// obsolete printf("corner input for index %lld: ",scv0-cb); DO(4, I j=i; DO(4, printf(" %f",scafa[j][i]);) printf("  ");) printf("\n");  // scaf
    __m256d tmp;  // where we build inverse lines to write out
     recips=_mm256_div_pd(ones,a00);  // 1/U00 x x x
-// obsolete     tmp=_mm256_blend_pd(recips,_mm256_fnmadd_pd(a00,_mm256_permute4x64_pd(recips,0b00000000),_mm256_setzero_pd()),0b1110);    // write out 1/U00 -U01/U00 -U02/U00 -U03/U00 for calculating L
-// obsolete     _mm256_storeu_pd(&uinv[0][0],tmp);
 
     a01=_mm256_blend_pd(a01,_mm256_mul_pd(a01,recips),0b0001);  // a01 is L10 A11 A12 A13
     _mm256_storeu_pd(&linv[0][0],a01);    // write out U10/U00 x x x for calculating U
     a01=_mm256_blend_pd(a01,_mm256_fnmadd_pd(a00,_mm256_permute4x64_pd(a01,0b00000000),a01),0b1110);  // a01 is A1x-L10*A0x = L10 U11 U12 U13
     recips=_mm256_blend_pd(recips,_mm256_div_pd(ones,a01),0b0010);  // 1/U00 1/U11 x x
-// obsolete     tmp=_mm256_blend_pd(_mm256_blend_pd(recips,_mm256_fnmadd_pd(a01,_mm256_permute4x64_pd(recips,0b01010101),_mm256_setzero_pd()),0b1100),ones,0b0001);    //  write out 1 1/U11 -U12/U11 -U13/U11 for calculating L
-// obsolete     _mm256_storeu_pd(&uinv[1][0],tmp);
 
     a02=_mm256_blend_pd(a02,_mm256_fnmadd_pd(a00,_mm256_permute4x64_pd(_mm256_mul_pd(a02,recips),0b00000000),a02),0b1110);  // a02 is A20 (A21..A23 - L20*U01..U03)
     a02=_mm256_blend_pd(a02,_mm256_mul_pd(a02,recips),0b0011);  // a02 is L20 L21 A22 A23
     _mm256_storeu_pd(&linv[1][0],a02);    // write out U20/U00 U21/U11 x x for calculating U
     a02=_mm256_blend_pd(a02,_mm256_fnmadd_pd(a01,_mm256_permute4x64_pd(a02,0b01010101),a02),0b1100);  // a02 is A2x-L20*A0x-L21*U1x = L20 L21 U22 U23
     recips=_mm256_blend_pd(recips,_mm256_div_pd(ones,a02),0b0100);  // 1/U00 1/U11 1/U22 x
-// obsolete     tmp=_mm256_blend_pd(_mm256_blend_pd(recips,_mm256_fnmadd_pd(a02,_mm256_permute4x64_pd(recips,0b10101010),_mm256_setzero_pd()),0b1000),ones,0b0011);    // write out 1 1 1/U22 -U23/U22 for calculating L
-// obsolete     _mm256_storeu_pd(&uinv[2][0],tmp);
 
     a03=_mm256_blend_pd(a03,_mm256_fnmadd_pd(a00,_mm256_permute4x64_pd(_mm256_mul_pd(a03,recips),0b00000000),a03),0b1110);  // a03 is A30 (A31..A33 - L30*U01..U03)
     a03=_mm256_blend_pd(a03,_mm256_fnmadd_pd(a01,_mm256_permute4x64_pd(_mm256_mul_pd(a03,recips),0b01010101),a03),0b1100);  // a03 is A30 (A31..A33 - L31*U11..U13)
@@ -1318,10 +1321,8 @@ finrle: ;
     _mm256_storeu_pd(&linv[2][0],a03);    // write out U30/U00 U31/U11 U32/U22 for calculating U
     a03=_mm256_blend_pd(a03,_mm256_fnmadd_pd(a02,_mm256_permute4x64_pd(a03,0b010101010),a03),0b1000);  // a03 is A3x-L30*A0x-L31*U1x-L32*U3x = L30 L31 L32 U33
     recips=_mm256_blend_pd(recips,_mm256_div_pd(ones,a03),0b1000);  // 1/U00 1/U11 1/U22 1/U33
-// obsolete     _mm256_storeu_pd(&uinv[3][0],_mm256_div_pd(ones,_mm256_blend_pd(a03,ones,0b0111)));  // write out 1 1 1 1/U33 for calculating L
 
     _mm256_storeu_pd(&scv0[0][0][0],a00); _mm256_storeu_pd(&scv0[0][1][0],a01); _mm256_storeu_pd(&scv0[0][2][0],a02); _mm256_storeu_pd(&scv0[0][3][0],a03);  // Store the 4x4 in the corner
-// obsolete printf("writing corner block %lld:",scv0-cb); DO(4, I j=i; DO(4, printf(" %f",scv0[0][j][i]);) printf("  ");) printf("\n");  // scaf
 
     // Now calculate uinv, the inverse of the remaining U matrix.  Do this by backsubstitution up the line.  Leave register a00-a03 holding the block result
     a13=_mm256_blend_pd(_mm256_setzero_pd(),recips,0b1000);
@@ -1380,14 +1381,12 @@ finrle: ;
      // check for all-zero block, and update the sparse bitmap
      a10=_mm256_or_pd(a01,a00); a11=_mm256_or_pd(a02,a03); a10=_mm256_or_pd(a11,a10);  // OR of all values
      a10=_mm256_cmp_pd(a10,_mm256_setzero_pd(),_CMP_NEQ_OQ); I blkis0=_mm256_testz_pd(a10,a10)==1;  // see if block is all 0
-// obsolete printf("writing %lld to bitmask loc %lld mask 0x%llx\n",blkis0,bma-lb,1LL<<bmx);  // scaf
      *bma=((*bma)&~(1LL<<bmx))|(blkis0<<bmx);  //  set bit to (all values are not NE)
      nzeroblocks+=blkis0;  // increment count of zero blocks
     }
     // write the block to the result address from before update
     _mm256_storeu_pd(&scvi[0][0][0],a00); _mm256_storeu_pd(&scvi[0][1][0],a01); _mm256_storeu_pd(&scvi[0][2][0],a02); _mm256_storeu_pd(&scvi[0][3][0],a03);  // Store the 4x4 in the corner
 
-// obsolete printf("writing %c block %lld:",r0<=0?'U':'L',scvi-cb); DO(4, I j=i; DO(4, printf(" %f",scvi[0][j][i]);) printf("  ");) printf("\n");  // scaf
    }
    // write the block result to the overall result area.  We do this now because it's going to be a cache miss and we want to dribble out the data during the processing.  Also, the data is in registers now so we don't have to read it
    // the output area has the same relative offset in the output as the read area in the input
@@ -1408,22 +1407,9 @@ finrle: ;
   wclv+=BLKSZ*(wn+1);  // move input pointer to corner block of next ring
   scv0+=nr+1; suv0-=nr;  // advance storage pointers to next ring.
  }
-// obsolete  // move the result from cblock ordering to the desired ordering.  Left-to-right, top-to-bottom in the output area, a 4x4 at a time
-// obsolete  D *zv0=DAV(z); D (*lcv0)[BLKSZ][BLKSZ]=cb; D (*uv0)[BLKSZ][BLKSZ]=UBLOCK(0,1);  // lcv0 points to first block in current row of lc, advances east; uv0 points to first block in current row of u, advances northwest
-// obsolete #define COPYCB(z,x) _mm256_storeu_pd((z),_mm256_loadu_pd(&(x)[0][0][0])); _mm256_storeu_pd((z)+wn,_mm256_loadu_pd(&(x)[0][1][0])); _mm256_storeu_pd((z)+2*wn,_mm256_loadu_pd(&(x)[0][2][0])); _mm256_storeu_pd((z)+3*wn,_mm256_loadu_pd(&(x)[0][3][0]));
-// obsolete #define COPYCBR(z,x) _mm256_maskstore_pd((z),endmask,_mm256_loadu_pd(&(x)[0][0][0])); _mm256_maskstore_pd((z)+wn,endmask,_mm256_loadu_pd(&(x)[0][1][0])); _mm256_maskstore_pd((z)+2*wn,endmask,_mm256_loadu_pd(&(x)[0][2][0])); _mm256_maskstore_pd((z)+3*wn,endmask,_mm256_loadu_pd(&(x)[0][3][0]));
-// obsolete #define COPYCBB(z,x,m) _mm256_storeu_pd((z),_mm256_loadu_pd(&(x)[0][0][0])); if((m)>0){_mm256_storeu_pd((z)+wn,_mm256_loadu_pd(&(x)[0][1][0]));  if((m)>1){_mm256_storeu_pd((z)+2*wn,_mm256_loadu_pd(&(x)[0][2][0]));  if((m)>2){_mm256_storeu_pd((z)+3*wn,_mm256_loadu_pd(&(x)[0][3][0]));}}}
-// obsolete #define COPYCBBR(z,x,m) _mm256_maskstore_pd((z),endmask,_mm256_loadu_pd(&(x)[0][0][0]));  if((m)>0){_mm256_maskstore_pd((z)+wn,endmask,_mm256_loadu_pd(&(x)[0][1][0]));  if((m)>1){_mm256_maskstore_pd((z)+2*wn,endmask,_mm256_loadu_pd(&(x)[0][2][0]));  if((m)>2){_mm256_maskstore_pd((z)+3*wn,endmask,_mm256_loadu_pd(&(x)[0][3][0]));}}}
-// obsolete  DO(nr-1, I j=i; D *zv=zv0; D (*cv)[BLKSZ][BLKSZ]=lcv0; DQ(j+1, COPYCB(zv,cv); zv+=BLKSZ; ++cv;) cv=uv0; DQ(nr-1-(j+1), COPYCB(zv,cv) zv+=BLKSZ; cv-=nr+1;)  // first the full blocks
-// obsolete   COPYCBR(zv,cv)  // copy the possibly-partial block
-// obsolete   zv0+=wn<<LGBLKSZ; lcv0+=nr; uv0-=nr;  // advance to next output row 
-// obsolete  )
-// obsolete  // Now the last row of cbs, which has 1-4 rows ending with the last corner block
-// obsolete  DQ(nr-1, COPYCBB(zv0,lcv0,(wn-1)&(BLKSZ-1)); zv0+=BLKSZ; ++lcv0;) COPYCBBR(zv0,lcv0,(wn-1)&(BLKSZ-1));
-// obsolete printf("number of dot-product blocks=%lld, number of evals=%lld\n",ndots,neval);  // scaf
- EPILOG(link(IX(wn),z));
+ EPILOG(jlink(IX(wn),z));
 #endif
  // here if fast FP code not supported, either because we don't have AVX or the input is not float.  Fall back to general version
- R jtludecompg(jt,w);
+ R jtludecompg(jt,w,DUMMYSELF);
 }
 

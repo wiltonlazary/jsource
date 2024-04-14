@@ -1,4 +1,4 @@
-/* Copyright 1990-2010, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Representations: Linear and Paren                                       */
@@ -64,7 +64,7 @@ static F1X(jtltiea){F1PREFIP;A t,*v,*wv,x,y;B b;C c;I n;
  ARGCHK1(w);
  n=AN(w); wv=AAV(w);  RZ(t=spellout(CGRAVE));
  GATV0(y,BOX,n+n,1); v=AAV(y);
- DO(n, *v++=i?t:mtv; x=wv[i]; c=ID(x); RZ(x=lrr(x)); 
+ DO(n, *v++=i?t:mtv; x=C(wv[i]); c=ID(x); RZ(x=lrr(x)); 
      b=BETWEENC(c,CHOOK,CFORK)||i&&(lp(x)>0); RZ(*v++=parfn(jtinplace,b,x)););
  R raze(y);
 }
@@ -75,7 +75,7 @@ static F1X(jtltieb){F1PREFIP;A pt,t,*v,*wv,x,y;B b;C c,*s;I n;
  n=AN(w); wv=AAV(w);  RZ(t=spellout(CGRAVE)); RZ(pt=over(scc(')'),t));
  GATV0(y,BOX,n+n,1); v=AAV(y);
  if(1>=n)x=mtv; else{GATV0(x,LIT,n-2,1); s=CAV(x); DQ(n-2, *s++='(';);}
- DO(n, x=i==1?t:x; x=i>1?pt:x; *v++=x; x=wv[i]; c=ID(x); RZ(x=lrr(x)); 
+ DO(n, x=i==1?t:x; x=i>1?pt:x; *v++=x; x=C(wv[i]); c=ID(x); RZ(x=lrr(x)); 
      b=BETWEENC(c,CHOOK,CFORK)||i&&(lp(x)>0); RZ(*v++=parfn(jtinplace,b,x)););
  R raze(y);
 }
@@ -125,15 +125,15 @@ static F1X(jtlbox){F1PREFIP;A p,*v,*vv,*wv,x,y;B b=0;I n;
  ARGCHK1(w);
  if(equ(ds(CACE),w)&&B01&AT(AAV(w)[0]))R cstr("a:");
  n=AN(w); wv=AAV(w); 
- DO(n, x=wv[i]; if(BOX&AT(x)){b=1; break;}); b|=1==n;
+ DO(n, x=C(wv[i]); if(BOX&AT(x)){b=1; break;}); b|=1==n;
  GATV0(y,BOX,n+n-(1^b),1); v=vv=AAV(y);
  if(b){
   RZ(p=cstr("),(<"));
-  DO(n, x=wv[i]; *v++=p; RZ(*v++=lnoun(x)););
+  DO(n, x=C(wv[i]); *v++=p; RZ(*v++=lnoun(x)););
   RZ(*vv=cstr(1==n?"<":"(<")); if(1<n)RZ(vv[n+n-2]=cstr("),<"));
   R over(lshape(w),raze(y));
  }
- DO(n, x=wv[i]; if((AR(x)^1)|(~AT(x)&LIT)){b=1; break;});
+ DO(n, x=C(wv[i]); if((AR(x)^1)|(~AT(x)&LIT)){b=1; break;});
  if(!b){C c[256],d,*t;UC*s;
   mvc(sizeof(c),c,1,MEMSET01); 
   RZ(x=raze(w)); s=UAV(x);
@@ -141,35 +141,37 @@ static F1X(jtlbox){F1PREFIP;A p,*v,*vv,*wv,x,y;B b=0;I n;
   if(c[CQUOTE]&&equ(w,words(x)))R over(cstr(";:"),lchar(x));
   if(c[d=' ']||c[d='|']||c[d='/']||c[d=',']||c[d=';']){
    GATV0(y,LIT,n+AN(x),1); t=CAV(y);
-   DO(n, x=wv[i]; *t++=d; MC(t,AV(x),AN(x)); t+=AN(x););
+   DO(n, x=C(wv[i]); *t++=d; MC(t,AV(x),AN(x)); t+=AN(x););
    RZ(y=lchar(y));
    R over(lshape(w),over(cstr(isdigit(CAV(y)[0])?"<;.(_1) ":"<;._1 "),y));
  }}
  RZ(p=cstr(";"));
- DO(n-1, RZ(*v++=lcpx(lnoun(wv[i]))); *v++=p;);
+ DO(n-1, RZ(*v++=lcpx(lnoun(C(wv[i])))); *v++=p;);
  RZ(*v=lnoun(wv[n-1]));
  R over(lshape(w),raze(y));
 }    /* non-empty boxed array */
 
 A jtdinsert(J jt,A w,A ic,I ix){A l=sc4(INT,ix); R over(over(take(l,w),ic),drop(l,w));}   /* insert ic before position ix in w */
-A jtdcapp(J jt,A w,C c,A ap){R (memchr(CAV(w),c,AN(w)))?w:over(w,ap);}  /* conditionally append ap to w if it doesn't contain c */
 
 // Apply decoration as needed to a numeric character string w to give it the correct type t
+// We know the string is a generated number, so it doesn't contain suffixes in the middle of the string
 // Result is A block for decorated string
 A jtdecorate(J jt,A w,I t){
  if(AN(w)==0)R w;  // if empty string, don't decorate
  if(t&FL){
-  // float: make sure there is a . somewhere, or infinity/indefinite ('_' followed by space/end/.), else put '.' at end
+  // float: make sure there is a . somewhere, or infinity/indefinite ('_' followed by space/end/.), else put '.' at end, floated back over exponent if any
   B needdot = !memchr(CAV(w),'.',AN(w));  // check for decimal point
   if(needdot){DO(AN(w), if(CAV(w)[i]=='_' && (i==AN(w)-1 || CAV(w)[i+1]==' ')){needdot=0; break;} )}  // check for infinity
   if(needdot){w=over(w,scc('.')); RZ(w=mkwris(w)); DQ(AN(w) , if(CAV(w)[i]==' ')R w;  if(CAV(w)[i]=='e'){C f='.'; C *s=&CAV(w)[i]; DO(AN(w)-i, C ff=s[i]; s[i]=f; f=ff;)}) }
- }else if(t&INT){
+ }else if(t&INT+INT2+INT4){
  // integer: if the string contains nothing but one-digit 0/1 values, insert '0' before last number
   I l=AN(w); C *s=CAV(w); NOUNROLL do{if((*s&-2)!='0')break; ++s; if(--l==0)break; if(*s!=' ')break; ++s;}while(--l);
   if(l==0){I ls=0; DQ(AN(w), if(CAV(w)[i]==' ') ls=i;); w=ls?jtdinsert(jt,w,scc('0'),ls+1):over(scc('0'),w);}
- }else if(t&XNUM) w=jtdcapp(jt, w,'x',scc('x')); // extended: make sure there is an x somewhere in the string, else put 'x' at end
- else if(t&RAT) w=jtdcapp(jt, w,'r',cstr("r1")); // rational: make sure there is an r somewhere in the string, else put 'r1' at end
- else if(t&CMPX) w=jtdcapp(jt, w,'j',cstr("j0")); // complex: make sure there is a j somewhere in the string, else put "j0" at end
+ }else if(t&XNUM+RAT+CMPX+QP+SP){
+  C srch='x'; srch=t&RAT?'r':srch; srch=t&CMPX?'j':srch; srch=t&QP+SP?'f':srch;
+  char *rep="x"; rep=t&RAT?"r1":rep; rep=t&CMPX?"j0":rep; rep=t&QP?"fq":rep; rep=t&SP?"fs":rep;
+  if(!memchr(CAV(w),srch,AN(w)))w=over(w,cstr(rep));
+ }
  R w;
 }
 
@@ -177,7 +179,8 @@ A jtdecorate(J jt,A w,I t){
 static F1X(jtlnum1){F1PREFIP;A z,z0;I t;
  ARGCHK1(w);
  t=AT(w);
- RZ(z=t&FL+CMPX?df1(z0,w,fit(ds(CTHORN),sc((I)18))):thorn1(w));
+ // use full for float values not going to screen; otherwise the default 
+ RZ(z=(t&FL+CMPX+QP)&&!((I)jtinplace&JTPRFORSCREEN)?df1(z0,w,fit(ds(CTHORN),sc((I)(t&QP?35:18)))):thorn1(w));
  R decorate(z,t);
 }    /* dense non-empty numeric vector */
 
@@ -220,7 +223,7 @@ static F1X(jtlsparse){F1PREFIP;A a,e,q,t,x,y,z;B ba,be,bn;I j,r,*v;P*p;
  if(bn||!AS(y)[0])R z;
  if(AN(a)){
   RZ(x=lcpx(lnoun(x)));
-  RZ(y=1==r?lnoun(ravel(y)):over(cstr("(<\"1)"),lnoun(y)));
+  RZ(y=1==r?lnoun(ravel(y)):over(cstr("(<)"),lnoun(y)));
   RZ(t=over(x,over(cstr(" ("),over(y,cstr(")}"))))); 
  }else RZ(t=over(lcpx(lnoun(head(x))),cstr(" a:}"))); 
  ba=0; v=AV(a); DO(AN(a), if(i!=*v++){ba=1; break;});
@@ -245,6 +248,7 @@ static F1X(jtlnoun0){F1PREFIP;A s,x;B r1;
   case B01X:  R apip(s,cstr("$0"     ));
   case FLX:   R apip(s,cstr("$0."    ));
   case CMPXX: R apip(s,cstr("$0j0"   ));
+  case QPX:   R apip(s,cstr("$0fq"   ));
   case XNUMX: R apip(s,cstr("$0x"    ));
   case RATX:  R apip(s,cstr("$0r0"   ));
   case SBTX:  R apip(s,cstr("$s: ' '"));
@@ -267,23 +271,19 @@ static F1X(jtlnoun){F1PREFIP;I t;
 }
 
 static A jtlsymb(J jt,C c,A w,A *ltext){F1PREFIP;A t;C buf[20],d,*s;I*u;V*v=FAV(w);
- if(VDDOP&v->flag){
-  u=AV(v->fgh[2]); s=buf; 
-  *s++=' '; *s++='('; s+=sprintf(s,FMTI,*u); spellit(CIBEAM,s); s+=2; s+=sprintf(s,FMTI,u[1]); *s++=')';
-  RZ(t=str(s-buf,buf)); 
- }else{RZ(t=spella(w)); if(AN(t)==1&&(CAV(t)[0]=='{'||CAV(t)[0]=='}')){RZ(t=mkwris(t)); AS(t)[0]=AN(t)=2; CAV(t)[1]=' '; }}  // add trailing space to { } to avoid DD codes
- d=cf(t);
+ {RZ(t=spella(w)); if(AN(t)==1&&(CAV(t)[0]=='{'||CAV(t)[0]=='}')){RZ(t=mkwris(t)); AS(t)[0]=AN(t)=2; CAV(t)[1]=' '; }}  // add trailing space to { } to avoid DD codes
+ d=CAV(t)[0];
  R d==CESC1||d==CESC2?over(chrspace,t):t;
 }
 
 static B laa(A a,A w){C c,d;
  if(!(a&&w))R 0;
- c=ctype[(UC)cl(a)]; d=ctype[(UC)cf(w)];
+ c=ctype[(UC)CAV(a)[AN(a)-1]]; d=ctype[(UC)CAV(w)[0]];
  R ((c|d)&(0xf&~(CA|C9)))^1;  // 1 if c,d both alphameric
 }
 
 // Is a string a number?  Must start with a digit and end with digit, x, or .
-static B lnn(A a,A w){C c; if(!(a&&w))R 0; c=cl(a); R ('x'==c||'.'==c||C9==ctype[(UC)c])&&C9==ctype[(UC)cf(w)];}
+static B lnn(A a,A w){C c; if(!(a&&w))R 0; c=CAV(a)[AN(a)-1]; R ('x'==c||'.'==c||C9==ctype[(UC)c])&&C9==ctype[(UC)CAV(w)[0]];}
 
 // ? insert spacing between components of trains
 static F2X(jtlinsert){F1PREFIP;A*av,f,g,h,t,t0,t1,t2,*u,y;B b,ft,gt,ht;C c,id;I n;V*v;
@@ -291,28 +291,26 @@ static F2X(jtlinsert){F1PREFIP;A*av,f,g,h,t,t0,t1,t2,*u,y;B b,ft,gt,ht;C c,id;I 
  n=AN(a); av=AAV(a);  
  v=VAV(w); id=v->id;
  b=id==CCOLON&&VXOP&v->flag;  // b if operator, which is spaced as if a hook/fork: u body [v]
- I fndx=(id==CBDOT)&&!v->fgh[0]; A fs=v->fgh[fndx]; A gs=v->fgh[fndx^1]; A hs=v->fgh[2];  // In verb for m b., if f is empty look to g for the left arg.  It would be nice to be more general
+ I fndx=(id==CBDOT)&&!v->fgh[0]; A fs=CNULL(v->fgh[fndx]); A gs=CNULL(v->fgh[fndx^1]); A hs=CNULL(v->fgh[2]);  // In verb for m b., if f is empty look to g for the left arg.  It would be nice to be more general
+ if(id==CIBEAM&&!(AT(w)&CONJ)){fs=scib(FAV(w)->localuse.lu1.foreignmn[0]); gs=scib(FAV(w)->localuse.lu1.foreignmn[1]);}  // scb to simplify display
  if(id==CFORK&&hs==0){hs=gs; gs=fs; fs=ds(CCAP);}  // reconstitute capped fork
 // ?t tells whether () is needed around the f/g/h component
- if(1<=n){f=av[0]; t=fs; c=ID(t); ft=BETWEENC(c,CHOOK,CADVF)||(b||id==CFORK)&&NOUN&AT(t)&&(lp(f)>0);}  // f: () if it's invisible   or   noun left end of nvv or n (op)
- if(2<=n){g=av[1]; t=gs; c=ID(t); gt=VERB&AT(w)    ?BETWEENC(c,CHOOK,CADVF):((BETWEENC(id,CHOOK,CADVF))|lp(g))>0;}  // g: paren any invisible modifier
- if(3<=n){h=av[2]; t=hs; c=ID(t); ht=VERB&AT(w)&&!b?c==CHOOK:((BETWEENC(id,CHOOK,CADVF)&&!b)|lp(h))>0;}  // h: in verb fork, paren hook; in trident, paren any train
+ if(1<=n){f=C(av[0]); t=fs; c=ID(t); ft=BETWEENC(c,CHOOK,CADVF)||(b||id==CFORK)&&NOUN&AT(t)&&(lp(f)>0);}  // f: () if it's invisible   or   noun left end of nvv or n (op)
+ if(2<=n){g=C(av[1]); t=gs; c=ID(t); gt=VERB&AT(w)    ?BETWEENC(c,CHOOK,CADVF):((BETWEENC(id,CHOOK,CADVF))|lp(g))>0;}  // g: paren any invisible modifier
+ if(3<=n){h=C(av[2]); t=hs; c=ID(t); ht=VERB&AT(w)&&!b?c==CHOOK:((BETWEENC(id,CHOOK,CADVF)&&!b)|lp(h))>0;}  // h: in verb fork, paren hook; in trident, paren any train
  switch(!(b||BETWEENC(id,CHOOK,CADVF))?id:2==n?CHOOK:CFORK){  // if operator or invisible, ignore the type and space based on length
   case CADVF:
   case CHOOK:
    GAT0(y,BOX,3,1); u=AAV(y);
    u[0]=f=parfn(jtinplace,ft||lnn(f,g),f);
-// obsolete    if(!(AT(gs)&NOUN)&&(FAV(gs)->fgh[0]==0&&FAV(gs)->fgh[1]==0))gt=0;  // never parenthesize a primitive or noun
    u[2]=g=parfn(jtinplace,gt||b,       g);
-   u[1]=str(' '==cf(g)||id==CADVF&&!laa(f,g)&&!((lp(f)>0)&&(lp(g)>0))?0L:1L," ");
+   u[1]=str(' '==CAV(g)[0]||id==CADVF&&!laa(f,g)&&!((lp(f)>0)&&(lp(g)>0))?0L:1L," ");
    RE(0); R raze(y);
   case CFORK:
    GAT0(y,BOX,5,1); u=AAV(y);
    RZ(u[0]=f=parfn(jtinplace,ft||lnn(f,g),   f));
-// obsolete  if(!(AT(gs)&NOUN)&&(FAV(gs)->fgh[0]==0&&FAV(gs)->fgh[1]==0))gt=0;  // never parenthesize a primitive or noun
-   RZ(u[2]=g=parfn(jtinplace,gt||lnn(g,h)||b,g)); RZ(u[1]=str(' '==cf(g)?0L:1L," "));
-// obsolete   if(!(AT(hs)&NOUN)&&(FAV(hs)->fgh[0]==0&&FAV(hs)->fgh[1]==0))ht=0;  // never parenthesize a primitive or noun
-   RZ(u[4]=h=parfn(jtinplace,ht,             h)); RZ(u[3]=str(' '==cf(h)?0L:1L," "));
+   RZ(u[2]=g=parfn(jtinplace,gt||lnn(g,h)||b,g)); RZ(u[1]=str(' '==CAV(g)[0]?0L:1L," "));
+   RZ(u[4]=h=parfn(jtinplace,ht,             h)); RZ(u[3]=str(' '==CAV(h)[0]?0L:1L," "));
    R raze(y);
   default:
    t0=parfn(jtinplace,ft||NOUN&AT(fs)&&!(VGERL&v->flag)&&(lp(f)>0),f);
@@ -325,23 +323,26 @@ static F2X(jtlinsert){F1PREFIP;A*av,f,g,h,t,t0,t1,t2,*u,y;B b,ft,gt,ht;C c,id;I 
 }
 
 // create linear rep for m : n
+// JT has valence-suppression flags
 static F1X(jtlcolon){F1PREFIP;A*v,x,y;C*s,*s0;I m,n;
- RZ(y=unparsem(num(1),w));
- n=AN(y); v=AAV(y); RZ(x=lrr(VAV(w)->fgh[0]));
- if(2>n||2==n&&1==AN(v[0])&&':'==CAV(v[0])[0]){
-  if(!n)R over(x,str(5L," : \'\'"));
-  y=lrr(v[2==n]);
-  if(2==n)y=over(str(5L,"\':\'; "),y);
-  R over(over(x,str(3L," : ")),lcpx(y));
+ RZ(y=jtunparsem(jtinplace,num(1),w));   // extract the valences of w, run together: a list of boxes
+ n=AN(y); v=AAV(y); RZ(x=lrr(C(VAV(w)->fgh[0])));  // n=#lines, v->line 0, get x=linear rep for m (string form of a digit)
+ if(!((I)jtinplace&JTEXPVALENCEOFF)&&(2>n||2==n&&1==AN(v[0])&&':'==CAV(C(v[0]))[0])){  // if all valences requested, and only one line, or monadic valence empty (i. e. first line is ':')
+  // return one-line definition m : 'string'.  m will come from x
+  if(!n)R over(x,str(5L," : \'\'"));  // empty string, return m : ''
+  y=lrr(C(v[2==n]));   // convert n to string form, with quotes
+  if(2==n)y=over(str(5L,"\':\'; "),y);  // If the line was from the dyad, prepend  ':'; (which will get parenthesized) (could be adv/conj)
+  R over(over(x,str(3L," : ")),lcpx(y));  // m : 'string'
  }
- m=0; DO(n, m+=AN(v[i]););
- GATV0(y,LIT,2+n+m,1);
- s=s0=CAV(y);
- DO(n, *s++=CLF; y=v[i]; m=AN(y); MC(s,CAV(y),m); s+=m;);
- *s++=CLF; *s++=')'; 
- RZ(y=str(s-s0,s0));
+ // multiline definition (or single valence requested).  Append the body to ltext, return the (m : 0) as the main result
+ m=0; DO(n, m+=AN(v[i]););   // add up string lengths
+ GATV0(y,LIT,2+n+m,1);    // allocate
+ s=s0=CAV(y);   // point to start of result area
+ DO(n, *s++=CLF; y=C(v[i]); m=AN(y); MC(s,CAV(y),m); s+=m;);  // copy each line as a new line starting with LF
+ *s++=CLF; *s++=')';   // append ) line to end definition
+ RZ(y=str(s-s0,s0));   // append new lines to ltext
  *ltext=*ltext?over(*ltext,y):y;
- R over(x,str(4L," : 0"));
+ R over(x,str(4L," : 0"));   // result is m : 0
 }
 
 // Main routine for () and linear rep.  w is to be represented
@@ -349,30 +350,38 @@ static DF1X(jtlrr){F1PREFIP;A hs,t,*tv;C id;I fl,m;V*v;
  ARGCHK1(w);
  // If name, it must be in ".@'name', or (in debug mode) the function name, which we will discard
  if(AT(w)&NAME){RZ(w=sfn(0,w));}
- if(AT(w)&NOUN)R lnoun(w);
+ if(AT(w)&NOUN)R lnoun(C(w));
  v=VAV(w); id=v->id;  // outer verb, & its id
  // if f is 0, we take f from g.  In other words, adverbs can put their left arg in either f or g.  u b. uses g so that it can leave f=0 to allow it to function as an ATOMIC2 op
- I fndx=(id==CBDOT)&&!v->fgh[0]; A fs=v->fgh[fndx]; A gs=v->fgh[fndx^1];  // In verb for m b., if f is empty look to g for the left arg.  It would be nice to be more general
- hs=v->fgh[2]; fl=v->flag; if(id==CBOX)gs=0;  // ignore gs field in BOX, there to simulate BOXATOP
+ I fndx=(id==CBDOT)&&!v->fgh[0]; A fs=CNULL(v->fgh[fndx]); A gs=CNULL(v->fgh[fndx^1]);  // In verb for m b., if f is empty look to g for the left arg.  It would be nice to be more general
+ if(id==CATCO&&AT(w)&VERB&&FAV(gs)->id==CTDOT)R lrr(gs);  // if <@:t. discard the <@:
+ if(id==CIBEAM&&!(AT(w)&CONJ)){fs=scib(FAV(w)->localuse.lu1.foreignmn[0]); gs=scib(FAV(w)->localuse.lu1.foreignmn[1]);}  // scb to simplify display
+ hs=CNULL(v->fgh[2]); fl=v->flag; if(id==CBOX)gs=0;  // ignore gs field in BOX, there to simulate BOXATOP
  if(id==CFORK&&hs==0){hs=gs; gs=fs; fs=ds(CCAP);}  // reconstitute capped fork
  if(fl&VXOPCALL)R lrr(hs);   // pseudo-named entity created during debug of operator.  The defn is in h
  m=(I)!!fs+(I)(gs&&id!=CBOX)+(I)(BETWEENC(id,CFORK,CADVF)&&hs)+(I)(hs&&id==CCOLON&&VXOP&fl);  // BOX has g for BOXATOP; ignore it; get # nonzero values in f g h
  if(!m)R lsymb(id,w);  // if none, it's a primitive, out it
  if(evoke(w)){RZ(w=sfne(w)); if(FUNC&AT(w))w=lrr(w); R w;}  // keep named verb as a string, UNLESS it is NMDOT, in which case use the (f.'d) verb value
- if(!(VXOP&fl)&&hs&&BOX&AT(hs)&&id==CCOLON)R lcolon(w);  // x : boxed - must be explicit defn
+ if(!(VXOP&fl)&&hs&&BOX&AT(hs)&&id==CCOLON)R jtlcolon(jtinplace,w,ltext);  // x : with boxed h - must be explicit defn, for which we might suppress a valence
+ // display of a single valence applies only to an explicit definition.  It wouldn't be a bad idea for others, but that would require inspecting the op to see
+ // which valences are active on each side.  For the nonce we display everything
+ jtinplace=(J)((I)jtinplace&~JTEXPVALENCEOFF);  // display both valences of compounds
  GATV0(t,BOX,m,1); tv=AAV(t);
  if(2<m)RZ(tv[2]=incorp(lrr(hs)));   // fill in h if present
+ // we emulate Fold in an explicit defn which has the parts of f and h: in that case we pull g from h
  // for top-level of gerund (indicated by self!=0), any noun type could not have come from an AR, so return it as is
- if(1<m)RZ(tv[1]=incorp(fl&VGERR?tiefn(jtinplace,fxeach(gs,(A)&jtfxself[!!self]),ltext):lrr(gs)));  // fill in g if present
+ if(1<m)RZ(tv[1]=incorp(fl&VGERR?tiefn(jtinplace,fxeach(BETWEENC(id,CFDOT,CFCODOT)?hs:gs,(A)&jtfxself[!!self]),ltext):lrr(BETWEENC(id,CFDOT,CFCODOT)?hs:gs)));  // fill in g if present
  if(0<m)RZ(tv[0]=incorp(fl&VGERL?tiefn(jtinplace,fxeach(fs,(A)&jtfxself[!!self]),ltext):lrr(fs)));  // fill in f (always present)
  R linsert(t,w);
 }
 
 // Create linear representation of w.  Call lrr, which creates an A for the text plus ltext which is appended to it.
-// jt flags indicate the handling of adding enclosing () and handling `
+// jt flags in subroutines indicate the handling of adding enclosing () and handling `
+// JTEXPVALENCEOFF (bits 2-3) indicate explicit valences that are suppressed
+// JTPRFORSCREEN indicates that the result is for the user, not 5!:5
 // This routine MUST NOT be called with normal inplacing bits
-F1(jtlrep){PROLOG(0056);A z;A ltextb=0, *ltext=&ltextb;
- RE(z=jtlrr(jt,w,w,ltext));  // the w for self is just any nonzero to indicate top-level call.  Exit if error
+F1(jtlrep){F1PREFIP;PROLOG(0056);A z;A ltextb=0, *ltext=&ltextb;
+ RE(z=jtlrr((J)((I)jtinplace&~(JTNORESETERR|JTPARENS)),w,w,ltext));  // the w for self is just any nonzero to indicate top-level call.  Clear paren flags to start.  Exit if error
  if(*ltext)z=apip(z,*ltext);
  EPILOG(z);
 }

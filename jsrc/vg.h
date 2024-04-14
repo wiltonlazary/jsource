@@ -1,4 +1,4 @@
-/* Copyright 1990-2004, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Grades                                                                  */
@@ -12,6 +12,10 @@ extern B compcu(I,UC*,UC*);
 extern B compcd(I,UC*,UC*);
 extern B compuu(I,US*,US*);
 extern B compud(I,US*,US*);
+extern B compsu(I,I2*,I2*);
+extern B compsd(I,I2*,I2*);
+extern B complu(I,I4*,I4*);
+extern B compld(I,I4*,I4*);
 extern B comptu(I,C4*,C4*);
 extern B comptd(I,C4*,C4*);
 extern B compr(I,A*,A*);
@@ -37,14 +41,14 @@ extern I grcol2(I,I,US*,I,I*,I*,const I,US*,I);
 
 extern void msort(SORT *,I,void**,void**,I);
 
-// Convert 2 Booleans to a code 0-3
+// Convert 2 Booleans to a code 0-3.  The input must be construed as bigendian
 #if C_LE
-#define IND2(x) {US xx = (x); ii = ((xx<<9)|xx)>>8;}
+#define IND2(x) {US xx = (x); xx = ((xx<<9)|xx); ii=xx>>8;}
 #else
 #define IND2(x) {US xx = (x); ii = 0x3&((xx>>7)|xx);}
 #endif
 
-// Convert 4 Booleans to a code 0-15
+// Convert 4 Booleans to a code 0-15.  The input must be construed as bigendian
 #if C_LE
 #define IND4(x) {UINT xx = (x); xx|=xx<<9; xx|=xx<<18; ii = xx>>24;}  // first byte (bit 0) is the MSB when a word is loaded
 #else

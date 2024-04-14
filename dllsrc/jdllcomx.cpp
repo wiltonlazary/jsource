@@ -1,6 +1,8 @@
-/* Copyright (c) 1990-2000, Iverson Software Inc.  All rights reserved.    */
-/* Licensed to Jsoftware Inc.                                              */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
+/* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
+/* J Windows dll and com interface (old jcom.c, jdll.c, jwin32.c)          */
+
 // included in both JEXE and JDLL servers
 
 // #undef _UNICODE
@@ -290,9 +292,9 @@ STDMETHODIMP CJServer::Invoke(DISPID dispID, REFIID riid
 // JDLLServer methods
 BOOL CJServer::Init(void)
 {
-    LPUNKNOWN       pIUnknown=this;
+//?    LPUNKNOWN       pIUnknown=this;
 
-    if (NULL!=m_pUnkOuter) pIUnknown=m_pUnkOuter;
+//?    if (NULL!=m_pUnkOuter) pIUnknown=m_pUnkOuter;
 	m_pjst = JInit();
 	return m_pjst ? 1 : 0;
 }

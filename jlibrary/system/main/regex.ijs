@@ -16,7 +16,7 @@ ischar=: 2=3!:0
 NB. =========================================================
 NB. user compilation flags (0=off, 1=on)
 RX_OPTIONS_MULTILINE=: 1  NB. enable newline support, default on
-RX_OPTIONS_UTF8=: 1  NB. enable UTF-8 support, default on
+RX_OPTIONS_UTF8=: 1  NB. enable UTF-8 support
 
 NB. =========================================================
 NB. clear last values, not saved compiles
@@ -34,7 +34,7 @@ regfree''
 lastpattern=: y
 msg=. ,2
 off=. ,2
-flg=. PCRE2_MULTILINE*RX_OPTIONS_MULTILINE
+flg=. (PCRE2_UTF*RX_OPTIONS_UTF8)+PCRE2_MULTILINE*RX_OPTIONS_MULTILINE
 lastcomp=: 0 pick rc=. jpcre2_compile (,y);(#y);flg;msg;off;<<0
 'msg off'=. 4 5{rc
 if. 0=lastcomp do. regerror msg,off end.
@@ -169,6 +169,7 @@ NB. compile flags:
 PCRE2_NOTBOL=: 16b1
 PCRE2_NOTEOL=: 16b2
 PCRE2_MULTILINE=: 16b400
+PCRE2_UTF=: 16b80000
 
 NB. info types:
 PCRE2_INFO_SIZE=: 22
@@ -179,8 +180,7 @@ NB. pcre2 library is in bin or tools/regex
 select. UNAME
 case. 'Win' do. t=. 'jpcre2.dll'
 case. 'Darwin' do. t=. 'libjpcre2.dylib'
-case. 'Linux' do. t=. 'libjpcre2.so'
-case. 'Android' do. t=. 'libjpcre2.so'
+case. do. t=. 'libjpcre2.so'
 end.
 
 f=. BINPATH,'/',t
@@ -189,10 +189,8 @@ if. 0 = 1!:4 :: 0: <f do.
 end.
 
 NB. fall back one more time
-if. ('Android'-:UNAME) *. 0 = 1!:4 :: 0: <f do.
-  f=. (({.~i:&'/')LIBFILE),'/',t
-elseif. ('Linux'-:UNAME) *. (IFUNIX>'/'e.LIBFILE) *. 0 = 1!:4 :: 0: <f do.
-  f=. 'libpcre2-8.so.0'
+if. IFUNIX *. 0 = 1!:4 :: 0: <f do.
+  f=. unxlib 'pcre2'
 elseif. 0 = 1!:4 :: 0: <f do.
   f=. t
 end.
@@ -350,7 +348,9 @@ pat=. >{.x
 new=. {:x
 if. L. pat do. 'pat ndx'=. pat else. ndx=. ,0 end.
 if. 1 ~: #$ ndx do. 13!:8[3 end.
-mat=. ({.ndx) {"2 pat rxmatches y
+m=. pat rxmatches y
+if. 0 e. $m do. y return. end.
+mat=. ({.ndx) {"2 m
 new mat rxmerge y
 )
 

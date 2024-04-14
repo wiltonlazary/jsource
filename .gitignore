@@ -8,9 +8,15 @@ jsrc/jversion.h
 *.so
 !asm/*.o
 
+# mpir
+!mpir/**/libgmp.so
+
 # temp scripts used for debugging
 *makevs/jdll/*.ijs
+foo.ijs
 jj.ijs
+test*.txt
+*.tmp
 
 # windows - most output files go to %userprofile%\jbld\jout
 # some end up in the project folder and are marked here
@@ -40,6 +46,7 @@ jj.ijs
 
 # mac
 .DS_Store
+*.dSYM/
 
 #android
 android/libs/
@@ -59,14 +66,30 @@ release
 
 # build folders
 bin/
-make2/
-jlibrary/addons/
-jlibrary/bin/
+!pthreads4w/bin/
+!pthreads4w/bin/pthreadVC3.dll
+make2/obj/
+
+#github workflow action folders
+j64/
+tools/
+system/
+addons/
+
+# addons
+jlibrary/addons
+!jlibrary/addons/data/jfiles
+!jlibrary/addons/data/jmf
+!jlibrary/addons/dev/eformat
+!jlibrary/addons/dev/fold
+!jlibrary/addons/dev/lu
+
+# other jlibrary
 jlibrary/bin32/
-jlibrary/system/
-jlibrary/system/config/
-jlibrary/system/main/
-jlibrary/tools/
+!jlibrary/system/
+!jlibrary/system/config/
+!jlibrary/tools/
+!jlibrary/bin
 
-
-
+# misc
+jsrc/toc.txt

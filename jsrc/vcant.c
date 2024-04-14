@@ -1,4 +1,4 @@
-/* Copyright 1990-2006, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Verbs: Transpose                                                        */
@@ -102,10 +102,10 @@ static F2(jtcanta){A m,s,t,z;C*wv,*zv;I*av,j,*mv,r,*sv,*tv,wf,wr,*ws,zn,zr,ms[4]
  RETF(z);
 }    /* dyadic transpose in APL\360, a f"(1,r) w where 1>:#$a  */
 
-F1(jtcant1){I r; A z;
+DF1(jtcant1){I r; A z;
  F1PREFIP;ARGCHK1(w);
  r=(RANKT)jt->ranks; r=AR(w)<r?AR(w):r;   // no RESETRANK; we pass the rank of w on
-#if 0  //  (C_AVX2&&SY_64) || EMU_AVX2
+#if 0  //  C_AVX2 || EMU_AVX2
  // This attempt to transpose in 4x4 blocks fails because the stores are very slow if not aligned, and cannot be aligned if the array has odd size.
  // It took 2.6 clocks/atom (instead of the expected 0.5) because of the store penalties
  if((-((r^2)|(AR(w)^2))|(AT(w)&(SPARSE|INT|FL)))>0){  // rank 2, FL/INT, not sparse
@@ -191,7 +191,7 @@ F2(jtcant2){A*av,p,t,y;I j,k,m,n,*pv,q,r,*v;
   RZ(y=pfill(r,t=raze(a))); v=AV(y);
   GATV0(p,INT,AN(y),1); pv=AV(p);
   m=AN(a); n=AN(t); av=AAV(a); 
-  j=0; DO(r-n,pv[*v++]=j++;); DO(m, k=AN(av[i]); DQ(k,pv[*v++]=j;); j+=(k!=0););
+  j=0; DO(r-n,pv[*v++]=j++;); DO(m, k=AN(C(av[i])); DQ(k,pv[*v++]=j;); j+=(k!=0););
  }else RZ(p=pinv(pfill(r,a)));
  A z; IRS2(p,w,0L,1L,r,jtcanta,z); RZ(z);  // Set rank for w in canta.  p is now INT type.  No need to check agreement since a has rank 1
  // We extracted from w, so mark it (or its backer if virtual) non-pristine.  If w was pristine and inplaceable, transfer its pristine status to the result

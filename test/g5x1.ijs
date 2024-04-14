@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g5x1.ijs'
+prolog './g5x1.ijs'
 NB. 5!:1 ----------------------------------------------------------------
 
 ar  =: 5!:1
@@ -41,6 +41,18 @@ fork =: (plus,or) f.
 (ar <'over') -: <,','
 (ar <'hook') -: <(,'2');<ar ;:'plus      or'
 (ar <'fork') -: <(,'3');<ar ;:'plus over or'
+fold =: plus F. or f.
+(ar <'fold') -: <'F.';<;:'++.'
+fold =: plus F.. or f.
+(ar <'fold') -: <'F..';<;:'++.'
+fold =: plus F.: or f.
+(ar <'fold') -: <'F.:';<;:'++.'
+fold =: plus F: or f.
+(ar <'fold') -: <'F:';<;:'++.'
+fold =: plus F:. or f.
+(ar <'fold') -: <'F:.';<;:'++.'
+fold =: plus F:: or f.
+(ar <'fold') -: <'F::';<;:'++.'
 
 f =: ":@'abc'
 (ar <'f') -: < (,'@') ,&< ('":' ,&< (,'0') ,&< 'abc')
@@ -153,12 +165,18 @@ f=: ;.
 (<';.') -: ar <'f'
 f=: @
 (<,'@') -: ar <'f'
+f=: @:
+(<,'@:') -: ar <'f'
 f=: "
 (<,'"') -: ar <'f'
 f=: &
 (<,'&') -: ar <'f'
 f=: &.
 (<'&.') -: ar <'f'
+f=: &:
+(<'&:') -: ar <'f'
+f=: &.:
+(<'&.:') -: ar <'f'
 f=: !.
 (<'!.') -: ar <'f'
 
@@ -174,7 +192,10 @@ x=:y=:f=:&
 -:&ar / ;:'f x'
 -:&ar / ;:'f y'
 
-4!:55 ;:'a adv ar c conj dr f fnn fork fvv g gd hook mtv n3 nar '
+4!:55 ;:'a adv ar c conj dr f fnn fold fork fvv g gd hook mtv n3 nar '
 4!:55 ;:'one or over plus tv two x y'
 
+
+
+epilog''
 

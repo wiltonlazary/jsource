@@ -1,10 +1,9 @@
-/* Copyright 1990-2004, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Verbs: Domino                                                           */
 
 #include "j.h"
-
 
 static F1(jtnorm){R sqroot(pdt(w,conjug(w)));}
 
@@ -28,7 +27,7 @@ static A jtrinvip(J jt,A w,I n,I ncomp){PROLOG(0066);A ai,bx,di,z;I m;
   // Don't bother marking so small a matrix as uppertri
  }
  // fall through for other types & shapes
- if(1>=n)R recip(w);  // if an atom, inverse = reciprocal.  Must be CMPX or RAT
+ if(1>=n)R recip(w);  // if an atom, inverse = reciprocal.  Must be CMPX/RAT/QP
  m=n>>1; I tom=(0x01222100>>((n&7)<<2))&3; m=(m+tom<n)?m+tom:m;  // Minimize number of wasted multiply slots, processing in batches of 4
  // construe w as a block-matrix Wij where w00 and w11 are upper-triangular, w10 is 0, and w01 is a full matrix
  ai=jtrinvip(jt,take(v2(m,m),w),m,ncomp);  // take inverse of w00  kludge could use faux block to avoid take overhead esp for 2x2 FL results
@@ -54,9 +53,9 @@ static A jtrinvip(J jt,A w,I n,I ncomp){PROLOG(0066);A ai,bx,di,z;I m;
 
 
 // 128!:1 Invert Upper-triangular matrix R
-F1(jtrinv){
+DF1(jtrinv){
  ARGCHK1(w);
- F1RANK(2,jtrinv,DUMMYSELF);
+ F1RANK(2,jtrinv,self);
  ASSERT(AR(w)==2,EVRANK);  // rank at least 2
  ASSERT(AS(w)[0]==AS(w)[1],EVLENGTH);  // error if not square
  if(!AN(w))R w;  // if empty, return empty
@@ -72,22 +71,22 @@ static F1(jtqrr){PROLOG(0067);A a1,q,q0,q1,r,r0,r1,t,*tv,t0,t1,y,z;I m,n,p,*s;
   t=norm(ravel(w));  // norm of col 
   ASSERT(!AN(w)||!equ(t,num(0)),EVDOMAIN);  // norm must not be 0 unless column is empty
   RZ(q=tymes(w,recip(t)));
-  R link(2>AR(q)?table(q):q,reshape(v2(n,n),p?t:num(1)));
+  R jlink(2>AR(q)?table(q):q,reshape(v2(n,n),p?t:num(1)));
  }
  // construe w as w0 w1 w0t w1t
  RZ(t0=qrr(take(v2(p,m),w)));  // find QR of w0 pxm   w0t
- tv=AAV(t0); q0=*tv++; r0=*tv;  // point to Q and R of w0  pxm mxm  w0t    
+ tv=AAV(t0); q0=C(tv[0]); r0=C(tv[1]);  // point to Q and R of w0  pxm mxm  w0t    
  RZ(a1=drop(v2(0L,m),w));  // a1=w1  pxn-m  w1t
  RZ(y=pdt(conjug(cant1(q0)),a1));  // q0* w1 mxpxn-m     w1t q0t*   q0t*=/q0      result is mxn-m
  RZ(t1=qrr(minus(a1,pdt(q0,y))));  // pxmxn-m  get QR of w1-(q0 q0* w1)    w1t-(w1t q0t* q0t)    
- tv=AAV(t1); q1=*tv++; r1=*tv;  
+ tv=AAV(t1); q1=C(tv[0]); r1=C(tv[1]);  
  RZ(q=stitch(q0,q1));  // overall q is q0t    Q of (w1t-(w1t q0t* q0t))
  RZ(r=over(stitch(r0,y),take(v2(n-m,-n),r1)));
  // r is   r0    q0* w1
  //        0     R of w1-(q0 q0* w1)
  // qr is  q0 r0    (q0 q0* w1) + (Q of w1-(q0 q0* w1))(R of w1-(q0 q0* w1))
  // = w0 w1 = w
- z=link(q,r); EPILOG(z);
+ z=jlink(q,r); EPILOG(z);
 }
 
 #define verifyinplace(to,from) if(to!=from){MC(CAV(to),CAV(from),AN(to)<<bplg(AT(to)));}
@@ -95,7 +94,7 @@ static F1(jtqrr){PROLOG(0067);A a1,q,q0,q1,r,r0,r1,t,*tv,t0,t1,y,z;I m,n,p,*s;
 // q is the ADJOINT of the original q matrix
 // result is adjoint of the L in LQ decomp, therefore upper-triangular
 static F1(jtltqip){PROLOG(0067);A l0,l1,y,z;
-#if C_AVX || EMU_AVX
+#if C_AVX2 || EMU_AVX2
  D ipa[8], *ipv;
 #endif
 ARGCHK1(w);
@@ -103,7 +102,7 @@ ARGCHK1(w);
  I rw=AS(w)[0]; I cl=AS(w)[1];  // # rows, # columns
   // handle case of 2 rows
  if(rw<=2) {
-#if C_AVX || EMU_AVX
+#if C_AVX2 || EMU_AVX2
   if(rw==2 && AT(w)&FL){
    // We calculate the 2-row case rather than recurring to handle the rows individually, because we can keep the multipliers busy
    // Let Pij be the inner product of row i and row j.  Then
@@ -145,7 +144,7 @@ ARGCHK1(w);
  RZ(l0=jtltqip(jt,q0));  // form q0 in place, return l0
  A q1; fauxblock(virtwq1);  fauxvirtual(q1,virtwq1,w,2,ACUC1|ACINPLACE); AK(q1)+=(m*cl)<<bplg(AT(w)); AS(q1)[0]=rw-m; AS(q1)[1]=cl; AN(q1)=(rw-m)*cl; 
  // calculate w1 - (w1 q0*) q0
-#if C_AVX || EMU_AVX
+#if C_AVX2 || EMU_AVX2
  if(AT(w)&FL && (m<50 || m*m*cl<(64*64*64))){
   // floating-point w that isn't larger than L2 cache.  (1) use inner-products to calculate w1 q0* (2) use blockedmmult to calculate final product
   if((m*(rw-m))>(int)(sizeof(ipa)/sizeof(ipa[0]))){
@@ -186,13 +185,13 @@ ARGCHK1(w);
 }
 
 // qr (?) decomposition of w, returns q;r
-F1(jtqr){A r,z;D c=inf,d=0,x;I n1,n,*s,wr;
- F1RANK(2,jtqr,DUMMYSELF);
+DF1(jtqr){A r,z;D c=inf,d=0,x;I n1,n,*s,wr;
+ F1RANK(2,jtqr,self);
  ASSERT(!ISSPARSE(AT(w)),EVNONCE);
- ASSERT(AT(w)&B01+INT+FL+CMPX,EVDOMAIN);
+ ASSERT(AT(w)&B01+INT+FL+CMPX+QP,EVDOMAIN);
  wr=AR(w); s=AS(w);
  ASSERT(2>wr||s[0]>=s[1],EVLENGTH);
- RZ(z=qrr(w)); r=AAV(z)[1]; n=AS(r)[0]; n1=1+n;
+ RZ(z=qrr(w)); r=C(AAV(z)[1]); n=AS(r)[0]; n1=1+n;
  if(FL&AT(r)){D*v=DAV(r);  DQ(n, x= ABS(*v); if(x<c)c=x; if(x>d)d=x; v+=n1;);}
  else        {Z*v=ZAV(r);  DQ(n, x=zmag(*v); if(x<c)c=x; if(x>d)d=x; v+=n1;);}
  ASSERT(!n||c>d*FUZZ,EVDOMAIN);
@@ -204,7 +203,7 @@ RETF(z);
 static A jtlq(J jt,A w,D *det){A l;D c=inf,d=0,x;I n1,n,*s,wr;
  F1RANK(2,jtqr,DUMMYSELF);
  ASSERT(!ISSPARSE(AT(w)),EVNONCE);
- ASSERT(AT(w)&B01+INT+FL+CMPX,EVDOMAIN);
+ ASSERT(AT(w)&B01+INT+FL+CMPX+QP,EVDOMAIN);
  wr=AR(w); s=AS(w);
  ASSERT(2>wr||s[0]>=s[1],EVLENGTH);
  if(ISDENSETYPE(AT(w),B01+INT))RZ(w=cvt(FL,w));  // convert boolean/integer to real
@@ -233,8 +232,8 @@ static A jticor(J jt,A  w,D d){D *v;
 static A jtminvdet(J jt,A w,D *det){PROLOG(0068);A q,y,z;I m,n,*s,t,wr;
  F1RANK(2,jtminv,DUMMYSELF);
  t=AT(w); wr=AR(w); s=AS(w); m=wr?s[0]:1; n=1<wr?s[1]:1;
- if(!wr)R recip(w);
- if(!AN(w)){ASSERT(1==wr||m>=n,EVLENGTH); R cant1(w);}
+ if(!wr){*det=0.0; R recip(w);}
+ if(!AN(w)){ASSERT(1==wr||m>=n,EVLENGTH); *det=0.0; R cant1(w);}
  if(AN(w)&&t&RAT+XNUM){
   ASSERT(m>=n,EVLENGTH);
   if(t&XNUM)RZ(w=cvt(RAT,w));
@@ -286,8 +285,8 @@ static F2(jtmdivsp){A a1,x,y;I at,d,m,n,t,*v,xt;P*wp;
 
 
 // a %. w  for all types
-F2(jtmdiv){PROLOG(0069);A z;I t;
- F2RANK(RMAX,2,jtmdiv,DUMMYSELF);
+DF2(jtmdiv){PROLOG(0069);A z;I t;
+ F2RANK(RMAX,2,jtmdiv,self);
  if(ISSPARSE(AT(a)))RZ(a=denseit(a));
  t=AT(w);
  if(ISSPARSE(t))R mdivsp(a,w);

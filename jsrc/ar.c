@@ -1,7 +1,7 @@
-/* Copyright 1990-2014, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
-/* Adverbs: Reduce (Insert), Outer Product, and Fold                              */
+/* Adverbs: Reduce (Insert), Outer Product, and Fold                       */
 
 #include "j.h"
 #include "vasm.h"
@@ -14,29 +14,12 @@ static DF1(jtreduce);
 
 #define PARITYW(s) (s=BW>32?s^s>>32:s, s^=s>>16, s^=s>>8)  // parity of a word full of Bs.  Upper bits are garbage
 
-#if 0&&SY_ALIGN
-#define VDONE(T,PAR)  \
- {I q=n/sizeof(T);T s,*y=(T*)x; DQ(m, s=0; DQ(q, s^=*y++;); PAR; *z++=b==pc;);}
-
-static void vdone(I m,I n,B*x,B*z,B pc){B b,*u;
- if(1==m){UI s,*xi;
-  s=0; b=0;
-  xi=(UI*)x; DQ(n>>LGSZI, s^=*xi++;); 
-  u=(B*)xi; DQ(n&(SZI-1), b^=*u++;);
-  u=(B*)&s; DQ(SZI,   b^=*u++;);
-  *z=b==pc;
- }else if(0==(n&(sizeof(UI  )-1)))VDONE(UI,  PARITYW)
- else  if(0==(n&(sizeof(UINT)-1)))VDONE(UINT,PARITY4)
- else  if(0==(n&(sizeof(US  )-1)))VDONE(US,  PARITY2)
- else  DQ(m, b=0; DQ(n, b^=*x++;); *z++=b==pc;);
-}
-#else
 // vdo for eq/ne. take parity of *x over n bytes, store into *z; invert if !pc; repeat for m cells
 static void vdone(I m,I n,B*x,B*z,B pc){
  I nfull=(n-1)>>LGSZI; I ndisc=(-n)&(SZI-1); // number of full Is, and number of bytes to discard from the next I
  DQ(m, I s=pc^1; I *y=(I*)x; DQ(nfull, s^=*y++;); s^=(*y<<(ndisc<<3)); PARITYW(s); *z++=s; x+=n;);  // parity, discarding trailing bytes of overfetch
 }
-#endif
+
 #if SY_ALIGN
 #define RBFXODDSIZE(pfx,bpfx)  RBFXLOOP(C,bpfx)
 #define REDUCECFX              REDUCEBFX
@@ -201,7 +184,6 @@ REDUCCPFX(tymesinsO, D, I, TYMESO)
 
 #define redprim256rk1(prim,identity) \
  __m256i endmask; /* length mask for the last word */ \
- _mm256_zeroupperx(VOIDARG) \
  /* prim/ vectors */ \
  __m256d idreg=_mm256_broadcast_sd(&identity); \
  endmask = _mm256_loadu_si256((__m256i*)(validitymask+((-n)&(NPAR-1))));  /* mask for 00=1111, 01=1000, 10=1100, 11=1110 */ \
@@ -227,15 +209,13 @@ REDUCCPFX(tymesinsO, D, I, TYMESO)
   acc0=prim(acc0,_mm256_blendv_pd(idreg,_mm256_maskload_pd(x,endmask),_mm256_castsi256_pd(endmask))); x+=((n-1)&(NPAR-1))+1; \
   acc1=prim(acc1,acc5); acc2=prim(acc2,acc6); acc3=prim(acc3,acc7); acc0=prim(acc0,acc4); \
   acc2=prim(acc2,acc3); acc0=prim(acc0,acc1); acc0=prim(acc0,acc2); /* combine accumulators vertically */ \
-  acc0=prim(acc0,_mm256_permute2f128_pd(acc0,acc0,0x01)); acc0=prim(acc0,_mm256_permute_pd(acc0,0xf));   /* combine accumulators horizontally  01+=23, 0+=1 */ \
-  *(I*)z=_mm256_extract_epi64(_mm256_castpd_si256(acc0),0x0); ++z;  /* store the single result from 0 */ \
+  acc0=prim(acc0,_mm256_permute4x64_pd(acc0,0b11111110)); acc0=prim(acc0,_mm256_permute_pd(acc0,0xf));   /* combine accumulators horizontally  01+=23, 0+=1 */ \
+  *(I*)z=_mm256_extract_epi64(_mm256_castpd_si256(acc0),0x0); /* AVX2 *z=_mm256_cvtsd_f64(acc0); */ ++z;  /* store the single result */ \
  )
-// obsolete   _mm_storel_pd(z++,_mm256_castpd256_pd128 (acc0)); /* store the single result */ \
 
 // f/ on rank>1, going down columns to save bandwidth
 #define redprim256rk2(prim,identity) \
  __m256i endmask; /* length mask for the last word */ \
- _mm256_zeroupperx(VOIDARG) \
  __m256d idreg=_mm256_broadcast_sd(&identity); \
  endmask = _mm256_loadu_si256((__m256i*)(validitymask+((-d)&(NPAR-1))));  /* mask for 00=1111, 01=1000, 10=1100, 11=1110 */ \
  I xstride1=d*SZD; I xstride3=3*xstride1; I xstride5=5*xstride1; I xstride7=xstride5+2*xstride1; \
@@ -282,9 +262,9 @@ REDUCCPFX(tymesinsO, D, I, TYMESO)
 
 AHDRR(plusinsD,D,D){I i;D* RESTRICT y;
   NAN0;
-  // latency of add is 4, so use 8 accumulators for 2 reads per cycle
+  // latency of add is 2, so use 4 accumulators for 2 reads per cycle
   if(d==1){
-#if (C_AVX&&SY_64) || EMU_AVX
+#if C_AVX2 || EMU_AVX2
    redprim256rk1(_mm256_add_pd,dzero)
 #else
   DQ(m, I n0=n; D acc0=0.0; D acc1=0.0; D acc2=0.0; D acc3=0.0;
@@ -298,7 +278,7 @@ AHDRR(plusinsD,D,D){I i;D* RESTRICT y;
 #endif
   }
   else{
-#if (C_AVX&&SY_64) || EMU_AVX
+#if C_AVX2 || EMU_AVX2
    redprim256rk2(_mm256_add_pd,dzero)
 #elif 1
    // add down the columns to reduce memory b/w.  4 accumulators
@@ -318,12 +298,6 @@ AHDRR(plusinsD,D,D){I i;D* RESTRICT y;
     )
     x=x0-(d-1); 
    )
-#else
-   z+=(m-1)*d; x+=(m*n-1)*d;
-   for(i=0;i<m;++i,z-=d){I rc;
-    y=x; x-=d; if(255&(rc=plusDD(1,d,x,y,z,jt)))R rc; x-=d;
-    DQ(n-2,    if(255&(rc=plusDD(1,d,x,z,z,jt)))R rc; x-=d; );
-   }
 #endif
   }
   R NANTEST?EVNAN:EVOK;
@@ -331,6 +305,50 @@ AHDRR(plusinsD,D,D){I i;D* RESTRICT y;
 
 REDUCENAN( plusinsZ, Z, Z, zplus, plusZZ )
 REDUCEPFX( plusinsX, X, X, xplus, plusXX, plusXX )
+
+static OP1XYZ(plus,I,I2,I2,pfxplus)
+OP1XYZ(plus,I,I2,I,pfxplus)
+REDUCEPFX( plusinsI2, I, I2, pfxplus, plus1I2I2I, plus1I2II )
+static OP1XYZ(plus,I,I4,I4,pfxplus)
+OP1XYZ(plus,I,I4,I,pfxplus)
+REDUCEPFX( plusinsI4, I, I4, pfxplus, plus1I4I4I, plus1I4II )
+
+
+#if C_AVX2 || EMU_AVX2
+// version for QP with AVX2.  Bandwidth is not an issue, so we accumulate into memory for rank > 1
+I plusinsE(I d,I n,I m,E* RESTRICTI x,E* RESTRICTI z,J jt){I i;  // m is # cells to operate on; n is # items in 1 such cell; d is # atoms in one such item
+  if(d==1){x += m*n; z+=m;
+   __m256d sgnbit=_mm256_broadcast_sd((D*)&Iimin); __m256d mantmask=_mm256_broadcast_sd((D*)&(I){0x000fffffffffffff});  /* needed masks: sign, mantissa */
+   /* we will read twice, masking.  We may read the first half twice to avoid overfetch */
+   __m256i rdmask=_mm256_castps_si256(_mm256_permutevar_ps(_mm256_castpd_ps(_mm256_broadcast_sd((D*)&maskec4123[n&(NPAR-1)])),_mm256_loadu_si256((__m256i*)&validitymask[2]))); /* masks for the 2 reads */
+   for(i=m;i;--i){   /* for each accumulated row */
+    I rematom;  /* # atoms to accumulate */
+    __m256d x0,x1,y0,y1,z0,z1;
+    x -= ((n-1)&(NPAR-1))+1;  /* back up to beginning of last NPAR-atom section */
+    x0=_mm256_maskload_pd((D*)(x),rdmask);
+    x1=_mm256_maskload_pd((D*)(x+((n-1)&(NPAR/2))),_mm256_slli_epi64(rdmask,1));
+    SHUFIN(0,x0,x1,z0,z1);
+    for(rematom=(n-1)&-NPAR;rematom;rematom-=NPAR){  /* for each full batch */
+     x-=NPAR; x0=_mm256_loadu_pd((D*)x); x1=_mm256_loadu_pd((D*)(x+NPAR/2)); SHUFIN(0,x0,x1,y0,y1);  /* read 4 values, put into lanes */ 
+     PLUSEE(y0,y1,z0,z1,z0,z1);  /* add to total */
+    }
+    y0=_mm256_permute_pd(z0,0b1111); y1=_mm256_permute_pd(z1,0b1111);  /* atoms 0+1, 2+3 */
+    PLUSEE(y0,y1,z0,z1,z0,z1);
+    y0=_mm256_permute4x64_pd(z0,0b10101010); y1=_mm256_permute4x64_pd(z1,0b10101010);  /* atoms 0+2 */
+    PLUSEE(y0,y1,z0,z1,z0,z1);
+    CANONE(z0,z1)
+    --z; *(I*)&z->hi=_mm256_extract_epi64(_mm256_castpd_si256(z0),0x0); *(I*)&z->lo=_mm256_extract_epi64(_mm256_castpd_si256(z1),0x0);
+   }
+  }else{z+=(m-1)*d; x+=(m*n-1)*d;                                       
+   for(i=0;i<m;++i,z-=d){I rc;                                   
+    E* RESTRICT y=x; x-=d; if(255&(rc=plusEE(1,d,x,y,z,jt), rc=rc<0?EWOVIP+EWOVIPMULII:rc))R rc; x-=d;       
+    DQ(n-2,    if(255&(rc=plusEE(1,d,x,z,z,jt), rc=rc<0?EWOVIP+EWOVIPMULII:rc))R rc; x-=d;);       
+  }
+ }
+ R EVOK;
+}
+#endif
+
 
 REDUCEPFX(minusinsB, I, B, MINUS, minusBB, minusBI ) 
 REDUCENAN(minusinsD, D, D, MINUS, minusDD ) 
@@ -372,10 +390,9 @@ DF1(jtcompsum){
  // Do the operation
  NAN0;
  D *wv=DAV(w), *zv=DAV(z);
-#if (C_AVX&&SY_64) || EMU_AVX
+#if C_AVX2 || EMU_AVX2
  __m256d __attribute__((aligned(64))) accc[2][8];   // accumulators and error terms
  __m256i endmask; /* length mask for the last word */
- _mm256_zeroupperx(VOIDARG);
  if(d==1){
   // rank-1 case: operate across the row, with 4 accumulators
   endmask = _mm256_loadu_si256((__m256i*)(validitymask+((-n)&(NPAR-1))));  /* mask for 00=1111, 01=1000, 10=1100, 11=1110 */
@@ -386,42 +403,20 @@ DF1(jtcompsum){
 // the launch rate of 2 cycles per iteration.  This requires spilling results to memory, which will add more latency, but it's still better than unrolling only 4.
 // Unfortunately, clang goes nuts trying to handle this loop, and ends up doing 14 loads and 14 stores for every iteration.  So we have to unroll it
 // by hand using an array to hold the state
-#if 0
-   acc0=acc1=acc2=acc3=c0=c1=c2=c3=_mm256_setzero_pd();
-   UI n2=DUFFLPCT(n-1,2);  /* # turns through duff loop */
-   if(n2>0){
-    UI backoff=DUFFBACKOFF(n-1,2);
-    wv+=(backoff+1)*NPAR;
-    switch(backoff){
-    do{
-    case -1: KAHAN(_mm256_loadu_pd(wv),0)
-    case -2: KAHAN(_mm256_loadu_pd(wv+1*NPAR),1)
-    case -3: KAHAN(_mm256_loadu_pd(wv+2*NPAR),2)
-    case -4: KAHAN(_mm256_loadu_pd(wv+3*NPAR),3)
-    case -5: KAHAN(_mm256_loadu_pd(wv+3*NPAR),4)
-    case -6: KAHAN(_mm256_loadu_pd(wv+1*NPAR),5)
-    case -7: KAHAN(_mm256_loadu_pd(wv+2*NPAR),6)
-    case -8: KAHAN(_mm256_loadu_pd(wv+3*NPAR),7)
-    wv+=4*NPAR;
-    }while(--n2!=0);
-    }
-   }
-#else
    mvc(sizeof(accc),accc,1,MEMSET00);
    UI nlp=(n-1)>>LGNPAR; 
    for(;nlp;--nlp){KAHANA(_mm256_loadu_pd(wv),nlp&7) wv+=NPAR;}
-#endif
    KAHANA(_mm256_maskload_pd(wv,endmask),7) wv+=((n-1)&(NPAR-1))+1;
    __m256d sgnbit=_mm256_broadcast_sd((D*)&Iimin);
    // add all the low parts together into c0 - the low bits of the low will not make it through to the result
-#if 0
+#if 0  // clang
    c1=_mm256_add_pd(c1,c5); c2=_mm256_add_pd(c2,c6); c3=_mm256_add_pd(c3,c7); c0=_mm256_add_pd(c0,c4);
 #else
    c0=_mm256_add_pd(accc[1][6],accc[1][5]); c1=_mm256_add_pd(accc[1][4],accc[1][3]); c2=_mm256_add_pd(accc[1][2],accc[1][1]); c3=_mm256_add_pd(accc[1][0],accc[1][7]);
 #endif 
    c0=_mm256_add_pd(c0,c1); c2=_mm256_add_pd(c2,c3); c0=_mm256_add_pd(c0,c2);
    // TWOSUM the accumulators into acc0, adding all the resulting low parts into c0
-#if 0
+#if 0  // clang
    TWOSUM(acc0,acc4,acc0,c1) c0=_mm256_add_pd(c0,c1); TWOSUM(acc1,acc5,acc1,c1) c0=_mm256_add_pd(c0,c1); 
    TWOSUM(acc2,acc6,acc2,c1) c0=_mm256_add_pd(c0,c1); TWOSUM(acc3,acc7,acc3,c1) c0=_mm256_add_pd(c0,c1);
 #else
@@ -431,13 +426,12 @@ DF1(jtcompsum){
    TWOSUM(acc0,acc1,acc0,c1) c0=_mm256_add_pd(c0,c1); TWOSUM(acc2,acc3,acc2,c1) c0=_mm256_add_pd(c0,c1);    // add 0+1, 2+3; combine all low parts of Kahan corrections into low total
    TWOSUM(acc0,acc2,acc0,c1) c0=_mm256_add_pd(c0,c1);  // 0+2, bringing along low part
   // acc0/c0 survive.  Combine horizontally
-   c0=_mm256_add_pd(c0,_mm256_permute2f128_pd(c0,c0,0x01)); acc1=_mm256_permute2f128_pd(acc0,acc0,0x01);  // c0: 01+=23, acc1<-23
+   c0=_mm256_add_pd(c0,_mm256_permute4x64_pd(c0,0b11111110)); acc1=_mm256_permute4x64_pd(acc0,0b11111110);  // c0: 01+=23, acc1<-23
    TWOSUM(acc0,acc1,acc0,c1); c0=_mm256_add_pd(c0,c1); // combine p=01+23
    c0=_mm256_add_pd(c0,_mm256_permute_pd(c0,0xf)); acc1=_mm256_permute_pd(acc0,0xf);   // combine c0+c1, acc1<-1
    TWOSUM(acc0,acc1,acc0,c1); c0=_mm256_add_pd(c0,c1);    // combine 0123, combine all low parts
    acc0=_mm256_add_pd(acc0,c0);  // add low parts back into high in case there is overlap
-   *(I*)zv=_mm256_extract_epi64(_mm256_castpd_si256(acc0),0x0); ++zv;  // store the single result
-//    _mm_storel_pd(zv++,_mm256_castpd256_pd128(acc0));
+   *(I*)zv=_mm256_extract_epi64(_mm256_castpd_si256(acc0),0x0); /* AVX2 *zv=_mm256_cvtsd_f64(acc0);*/ ++zv;  // store the single result
   }
  }else{
   // rank>1, going down columns to save bandwidth and add accuracy
@@ -447,7 +441,7 @@ DF1(jtcompsum){
    __m256d acc0; __m256d acc1; __m256d acc2; __m256d acc3; __m256d c0; __m256d c1; __m256d c2; __m256d c3;  // accumulators, error terms
    DQ((d-1)>>LGNPAR,
     wv0=wv;
-#if 0
+#if 0  // clang
     n0=n; acc0=acc1=acc2=acc3=c0=c1=c2=c3=_mm256_setzero_pd();
     switch(n0&3){
     label1:
@@ -472,7 +466,7 @@ DF1(jtcompsum){
    )
    // repeat for partial column
    wv0=wv;
-#if 0
+#if 0  // clang
    n0=n; acc0=acc1=acc2=acc3=c0=c1=c2=c3=_mm256_setzero_pd();
    switch(n0&3){
    label2:
@@ -504,7 +498,8 @@ DF1(jtcompsum){
   DQ(m, D *wv0; DQ(d, wv0=wv; D acc=0.0; D c=0.0; DQ(n, y=*wv0-c; t=acc+y; acc=t-acc; c=acc-y; acc=t; wv0+=d;) *zv++=acc; ++wv;) wv=wv0-(d-1); )
  }
 #endif
- NAN1;
+ if(unlikely(NANTEST))R reduce(w,FAV(self)->fgh[0]);  // in NaN error, fail over to normal summation.  Infinities can cause it.  Ranks still set
+
  RETF(z);
 }
 
@@ -536,16 +531,16 @@ static DF1(jtredg){F1PREFIP;PROLOG(0020);DECLF;AD * RESTRICT a;I i,n,r,wr;
  k<<=bplg(AT(w)); // k now=length of input cell in bytes, where it will remain
  AK(wfaux)+=(n-1)*k; AK(a)+=(n-2)*k; MCISH(AS(wfaux),AS(w)+1,r-1); MCISH(AS(a),AS(w)+1,r-1);  // make the virtual block look like the tail, except for the offset
  // Calculate inplaceability.  We can inplace the left arg, which is always virtual, if w is inplaceable and (w is direct or fs is &.>)
+ // and the input jtinplace.  We turn off WILLBEOPENED status in jtinplace for the callee.
  // We include contextual inplaceability (from jtinplace) here because if the block is returned, its pristinity will be checked if it is inplaceable.  Thus
  // we do not want to call a faux argument inplaceable if it really isn't.  This gives us leeway with jtinplace itself
  I aipok = (SGNIF((I)jtinplace&(((AT(w)&TYPEVIPOK)!=0)|f2==jtevery2self),JTINPLACEWX)&AC(w))+ACUC1;   // requires JTINPLACEWX==0.  This is 1 or 8..1
  // We can inplace the right arg the first time if it is direct inplaceable, and always after that (assuming it is an inplaceable result).
- // and the input jtinplace.  We turn off WILLBEOPENED status in jtinplace for the callee.
  ACINIT(wfaux,aipok)   // first cell is inplaceable if second is
  jtinplace = (J)(intptr_t)(((I)jt) + (JTINPLACEW+JTINPLACEA)*((FAV(fs)->flag>>(VJTFLGOK2X-JTINPLACEWX)) & JTINPLACEW));  // all items are used only once
 
  // We need to free memory in case the called routine leaves it unfreed (that's bad form & we shouldn't expect it), and also to free the result of the
- // previous iteration.  We don't want to free every time, though, because that does ra() on w which could be a costly traversal if it's a nonrecusive recursible type.
+ // previous iteration.  We don't want to free every time, though, because that does ra() on w which could be a costly traversal if it's a nonrecursive recursible type.
  // As a compromise we free every few iterations: at least one per 8 iterations, and at least 8 times through the process
 #define LGMINGCS 3  // lg2 of minimum number of times we call gc
 #define MINGCINTERVAL 8  // max spacing between frees
@@ -595,20 +590,23 @@ static A jtredsp1(J jt,A w,A self,C id,VARPSF ado,I cv,I f,I r,I zt){A e,x,z;I m
 }    /* f/"r w for sparse vector w */
 
 DF1(jtredravel){A f,x,z;I n;P*wp;
- F1PREFIP;
+ F1PREFIP;PROLOG(0000);
  ARGCHK1(w);
  f=FAV(self)->fgh[0];  // f/
- if(likely(!ISSPARSE(AT(w))))R reduce(jtravel(jtinplace,w),f);
- // The rest is sparse
- wp=PAV(w); x=SPA(wp,x); n=AN(x);
- I rc=EVOK;
- while(1){  // Loop to handle restart on overflow
-  VARPS adocv; varps(adocv,f,AT(x),0);
-  ASSERT(adocv.f,EVNONCE);
-  GA00(z,rtype(adocv.cv),1,0);
-  if(n){rc=((AHDRRFN*)adocv.f)((I)1,n,(I)1,AV(x),AV(z),jt);}  // mustn't adocv on empty
-  rc&=255; if(rc)jsignal(rc); if(rc<EWOV){if(rc)R0; R redsp1a(FAV(FAV(f)->fgh[0])->id,z,SPA(wp,e),n,AR(w),AS(w));}  // since f has an insert fn, its id must be OK
+ if(likely(!ISSPARSE(AT(w)))){RZ(z=reduce(jtravel(jtinplace,w),f));
+ }else{
+  // The rest is sparse
+  wp=PAV(w); x=SPA(wp,x); n=AN(x);
+  I rc=EVOK;
+  while(1){  // Loop to handle restart on overflow
+   VARPS adocv; varps(adocv,f,AT(x),0);
+   ASSERT(adocv.f,EVNONCE);
+   GA00(z,rtype(adocv.cv),1,0);
+   if(n){rc=((AHDRRFN*)adocv.f)((I)1,n,(I)1,AV(x),AV(z),jt);}  // mustn't adocv on empty
+   rc&=255; if(rc)jsignal(rc); if(rc<EWOV){if(rc)R0; RZ(z=redsp1a(FAV(FAV(f)->fgh[0])->id,z,SPA(wp,e),n,AR(w),AS(w))); break;}  // since f has an insert fn, its id must be OK
+  }
  }
+ EPILOG(z);
 }  /* f/@, w */
 
 static A jtredspd(J jt,A w,A self,C id,VARPSF ado,I cv,I f,I r,I zt){A a,e,x,z,zx;I c,m,n,*s,t,*v,wr,*ws,xf,xr;P*wp,*zp;
@@ -868,7 +866,7 @@ static DF1(jtreduce){A z;I d,f,m,n,r,t,wr,*ws,zt;
  PROD(m,f,ws);
  RESETRANK;   // clear rank now that we've used it - not really required here?
  // Allocate the result area
- zt=rtype(adocv.cv);
+ zt=rtype(adocv.cv); zt=(adocv.cv&VRESMSK)==0?wt:zt;  // Use specified type if given, otherwise use type of argument
  GA(z,zt,m*d,MAX(0,wr-1),ws); if(1<r)MCISH(f+AS(z),f+1+ws,r-1);  // allocate, and install shape
  if(m*d==0){RETF(z);}  // mustn't call the function on an empty argument!
  // Convert inputs if needed 
@@ -878,7 +876,7 @@ static DF1(jtreduce){A z;I d,f,m,n,r,t,wr,*ws,zt;
  // if return is EWOV, it's an integer overflow and we must restart, after restoring the ranks
  // EWOV1 means that there was an overflow on a single result, which was calculated accurately and stored as a D.  So in that case all we
  // have to do is change the type of the result.
- if(255&rc){if(jt->jerr==EWOV1){AT(z)=FL;RETF(z);}else {jsignal(rc); RETF(rc>=EWOV?IRS1(w,self,r,jtreduce,z):0);}} else {RETF(adocv.cv&VRI+VRD?cvz(adocv.cv,z):z);}
+ if(unlikely((255&~EVNOCONV)&rc)){if(unlikely(rc==EVNOCONV))R z; if(jt->jerr==EWOV1){AT(z)=FL;RETF(z);}else {jsignal(rc); RETF(rc>=EWOV?IRS1(w,self,r,jtreduce,z):0);}} else {RETF((adocv.cv&VRI+VRD)&&rc!=EVNOCONV?cvz(adocv.cv,z):z);}
 }    /* f/"r w main control */
 
 static A jtredcatsp(J jt,A w,A z,I r){A a,q,x,y;B*b;I c,d,e,f,j,k,m,n,n1,p,*u,*v,wr,*ws,xr;P*wp,*zp;
@@ -919,7 +917,7 @@ A jtredcatcell(J jt,A w,I r){A z;
  F1PREFIP;ARGCHK1(w);
  I wr=AR(w);  // get original rank, which may change if we inplace into the same block
  if(r>=wr-1)R RETARG(w);  // if only 1 axis left to run together, return the input
- if((ASGNINPLACESGN(SGNIF((I)jtinplace,JTINPLACEWX)&(-r),w) && !(AFLAG(w)&AFUNINCORPABLE))){  // inplace allowed, usecount is right
+ if((ASGNINPLACESGN(SGNIF(jtinplace,JTINPLACEWX)&(-r),w) && !(AFLAG(w)&AFUNINCORPABLE))){  // inplace allowed, usecount is right
   // operation is loosely inplaceable.  Just shorten the shape to frame,(#atoms in cell).  We do this here rather than relying on
   // the self-virtual-block code in virtual() because we can do it for indirect types also, since we know we are not changing
   // the number of atoms
@@ -950,9 +948,9 @@ DF1(jtredcat){A z;B b;I f,r,*s,*v,wr;
  }
 }    /* ,/"r w */
 
-static DF1(jtredsemi){I f,n,r,*s,wr;
+static DF1(jtredsemi){I f,n,r,wr;
  ARGCHK1(w);
- wr=AR(w); r=(RANKT)jt->ranks; r=wr<r?wr:r; f=wr-r; s=AS(w); SETICFR(w,f,r,n);   // let the rank run into tail   n=#items  in a cell of w
+ wr=AR(w); r=(RANKT)jt->ranks; r=wr<r?wr:r; f=wr-r; SETICFR(w,f,r,n);   // let the rank run into tail   n=#items in a cell of w
  if(2>n){ASSERT(n!=0,EVDOMAIN); R tail(w);}  // rank still set
  if(BOX&AT(w))R jtredg(jt,w,self);  // the old way failed because it did not mimic scalar replication; revert to the long way.  ranks are still set
  else{A z; R IRS1(w,0L,r-1,jtbox,z);}  // unboxed, just box the cells
@@ -964,7 +962,7 @@ static DF1(jtredstitch){A c,y;I f,n,r,*s,*v,wr;
  s=AS(w); SETICFR(w,f,r,n);
  ASSERT(n!=0,EVDOMAIN);
  if(1==n)R IRS1(w,0L,r,jthead,y);
- if(1==r){if(2==n)R RETARG(w); A z1,z2,z3; RZ(IRS2(num(-2),w,0L,0L,1L,jtdrop,z1)); RZ(IRS2(num(-2),w,0L,0L,1L,jttake,z2)); R IRS2(z1,z2,0L,1L,0L,jtover,z3);}
+ if(1==r){if(2==n)R RETARG(w); A z1,z2,z3; RZ(IRS2(num(-2),w,0L,0L,1L,jtdrop,z1)); RZ(IRS2(num(-2),w,0L,0L,1L,jttake,z2)); R IRS2(z1,z2,self,1L,0L,jtover,z3);}
  if(2==r)R IRS1(w,0L,2L,jtcant1,y);
  RZ(c=apvwr(wr,0L,1L)); v=AV(c); v[f]=f+1; v[f+1]=f; RZ(y=cant2(c,w));  // transpose last 2 axes
  if(unlikely(ISSPARSE(AT(w)))){A x;
@@ -982,8 +980,8 @@ static DF1(jtredstiteach){A*wv,y;I n,p,r,t;
  ARGCHK1(w);
  n=AN(w);
  if(!(2<n&&1==AR(w)&&BOX&AT(w)))R reduce(w,self);
- wv=AAV(w);  y=wv[0]; SETIC(y,p); t=AT(y);
- DO(n, y=wv[i]; r=AR(y); if(!((((r-1)&-2)==0)&&p==SETIC(y,n)&&TYPESEQ(t,AT(y))))R reduce(w,self););  // rank 1 or 2, rows match, equal types
+ wv=AAV(w);  y=C(wv[0]); SETIC(y,p); t=AT(y);
+ DO(n, y=C(wv[i]); r=AR(y); if(!((((r-1)&-2)==0)&&p==SETIC(y,n)&&TYPESEQ(t,AT(y))))R reduce(w,self););  // rank 1 or 2, rows match, equal types
  R box(razeh(w));
 }    /* ,.&.>/ w */
 
@@ -1006,9 +1004,10 @@ static DF1(jtredcateach){A*u,*v,*wv,x,*xv,z,*zv;I f,m,mn,n,r,wr,*ws,zm,zn;I n1=0
 static DF2(jtoprod){A z; R df2(z,a,w,FAV(self)->fgh[2]);}  // x u/ y - transfer to the u"lr,_ verb (precalculated)
 
 
-F1(jtslash){A h;AF f1;C c;V*v;I flag=0;
+F1(jtslash){F1PREFIP;A h;AF f1;C c;V*v;I flag=0;
  ARGCHK1(w);
  if(NOUN&AT(w))R evger(w,sc(GINSERT));  // treat m/ as m;.6.  This means that a node with CSLASH never contains gerund u
+ A z; fdefallo(z)
  v=FAV(w); 
  switch(v->id){  // select the monadic case
   case CCOMMA:  f1=jtredcat; flag=VJTFLGOK1;   break;
@@ -1018,10 +1017,9 @@ F1(jtslash){A h;AF f1;C c;V*v;I flag=0;
   default: f1=jtreduce; flag=(v->flag&VJTFLGOK2)>>(VJTFLGOK2X-VJTFLGOK1X); break;  // monad is inplaceable if the dyad for u is
  }
  RZ(h=qq(w,v2(lr(w),RMAX)));  // create the rank compound to use if dyad
- RZ(h=fdef(0,CSLASH,VERB, f1,jtoprod, w,0L,h, flag|FAV(ds(CSLASH))->flag, RMAX,RMAX,RMAX));
+ fdeffillall(z,0,CSLASH,VERB, f1,jtoprod, w,0L,h, flag|FAV(ds(CSLASH))->flag, RMAX,RMAX,RMAX,fffv->localuse.lu0.cachedloc=0,FAV(z)->localuse.lu1.redfn=v->flag&VISATOMIC2?((VA*)((I)va+v->localuse.lu1.uavandx[1]))->rps:&rpsnull);
  // set localuse to point to the VARPSA block for w if w is atomic dyad; otherwise to the null VARPSA block
- FAV(h)->localuse.lu1.redfn=v->flag&VISATOMIC2?((VA*)((I)va+v->localuse.lu1.uavandx[1]))->rps:&rpsnull;
- R h;
+ R z;
 }
 
 A jtaslash (J jt,C c,    A w){RZ(   w); A z; R df1(z,  w,   slash(ds(c))     );}
@@ -1057,15 +1055,19 @@ static DF2(jtfoldx){F2PREFIP;  // this stands in place of jtxdefn, which inplace
 }
 
 // entry point for monad and dyad F. F.. F.: F: F:. F::
-DF2(jtfold){
+DF2(jtfold){F2PREFIP;
  // Apply Fold_j_ to the input arguments, creating a derived verb to do the work
  A foldconj; ASSERT(foldconj=jtfindnameinscript(jt,"~addons/dev/fold/foldr.ijs","Foldr_j_",CONJ),EVNONCE);
- A derivvb; RZ(derivvb=unquote(a,w,foldconj));
+ A derivvb; RZ(derivvb=jtunquote((J)((I)jt|JTXDEFMODIFIER),a,w,foldconj));
+ // If the returned verb has VXOPCALL set, that means we are in debug and a namerefop has been interposed for Foldr_j_.  We don't want that - get the real verb
+ if(unlikely(FAV(derivvb)->flag&VXOPCALL))derivvb=FAV(derivvb)->fgh[2];  // the verb is saved in h of the reference
  // Modify the derived verb to go to our preparatory stub.  Save the dyadic entry point for the derived verb so the stub can call it
  FAV(derivvb)->localuse.lu1.foldfn=FAV(derivvb)->valencefns[1];
  FAV(derivvb)->valencefns[0]=FAV(derivvb)->valencefns[1]=jtfoldx;
  // Tell the stub what the original fold type was
  FAV(derivvb)->lc=FAV(self)->id;
+ // For display purposes, give the fold the spelling of the original
+ FAV(derivvb)->id=FAV(self)->id;
  R derivvb;
 }
 

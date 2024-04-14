@@ -145,6 +145,8 @@ while. #d do.
     data=. count{.512}.d
     d=. (512*1+>.count%512)}.d
     assert. (#data)=data fwrite f
+  case. 'g';'x' do.    NB. type in POSIX.1-2001 standard (pax) ignored
+    d=. (512*1+>.count%512)}.d
   case. do.
     assert. 'bad file'
   end.

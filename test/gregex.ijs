@@ -1,7 +1,10 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './gregex.ijs'
+prolog './gregex.ijs'
 NB. regex ------------------------------------------------------------------
 
 load 'regex'
+
+echo pcre2dll_jregex_
+jpcre2_compile_jregex_
 
 rxutf8 1
 
@@ -20,3 +23,6 @@ E=: '\x{306f}' NB. codepoint of D
 (,:6 3) -: E rxmatch A
 
 4!:55 ;:'A B C D E'
+
+epilog''
+

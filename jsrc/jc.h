@@ -1,4 +1,4 @@
-/* Copyright 1990-2006, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Character Definitions                                                   */
@@ -35,34 +35,6 @@
 // Internal IDs
 // Affinities:
 // oblique  + comp, min/max B0001 B0110 B0111
-
-// used
-// = ~: < <: > >: -: e. I. i: ~. * <. >. | +. *. #: -. x: /. $. E. ^ p. ^: # {. {: , ,. ,: ; |. $ ": C. ~
-// inverses + * - % %: ^ ^. j. r. { :: p.. x: |. o. $. #: i. ": ~ s: u: |: p: q: !. # ^: , #. A. C. }. %. . " \ !: b. p.
-//  add on   +. *. \: ;: ! $. &. FORK & @ &: @: / :: \. ;. HOOK
-// iden   , . %. C. { / + - | ~: < > +. j. r. * % ^ %: ! = >: <: *. >. <. &. @ b.
-// / /. @ & &: &. &.: ADVF HOOK FORK @. `: !: u. v. ~ :: :.
-// < -. /: / # * >. <. I. ? ?. ; /. " ^ & 
-// < ^ -. /: >. <. ? ?. I. & / # * ;
-// # $ {. {: , [ ] < @ @: & &:
-// # [ ] , FORK /
-//  # / FORK
-// , ,. ; &.
-// < /: / >. <. ;
-// # $ {. {: /
-// /. # #: i. i: {
-// + * = ~: - %
-// ? ?. I. / 0: ;
-// + * = ~:
-// > FORK &
-// + * j. ,: ; , ^
-// u. v. ~ : @. `:
-// $: @. `:
-// [: / & FORK @
-// <. * *. >. +. = ~: < <: > >: *: +: 
-// <.  >. = ~: < <: > >:
-// + +. * *. >. <. = ~:
-// e. E.   put these after comparatives
 
 // Current primitive order:
 // fills with inverses to populate the area near 0
@@ -104,36 +76,36 @@
 #define CNOT       (C)0x0f  // -.
 #define CLESS      (C)0x0f  // -.
 #define CICAP      (C)0x10  // I.
-#define CQUERY     (C)0x11  //
+#define CQUERY     (C)0x11  // ?
 #define CQRYDOT    (C)0x12  // ?.
 #define CFCONS     (C)0x13  // 0: 1: 2: etc.
 #define CUNDER     (C)0x14  // &.
 #define CCOMDOT    (C)0x15  // ,.
 #define CLEFT      (C)0x16  // [   must be paired with CRIGHT
-#define CRIGHT     (C)0x17  // }
+#define CRIGHT     (C)0x17  // ]
 #define CLAMIN     (C)0x18  // ,:
-#define CCOMMA     (C)0x19  //
-#define CSEMICO    (C)0x1a  //
+#define CCOMMA     (C)0x19  // ,
+#define CSEMICO    (C)0x1a  // ;
 #define CRAZE      (C)0x1a  //
 #define CJDOT      (C)0x1b  // j.
 #define CGRADE     (C)0x1c  // /:
-#define CEXP       (C)0x1d  //
-#define CDIV       (C)0x1e  //
-#define CMINUS     (C)0x1f  //
+#define CEXP       (C)0x1d  // ^
+#define CDIV       (C)0x1e  // %
+#define CMINUS     (C)0x1f  // -
 #define CSTARCO    (C)0x20  // *:  20-2f used in cip.c and ar.c
 #define CPLUSCO    (C)0x21  // +:
-#define CSTAR      (C)0x22  //
+#define CSTAR      (C)0x22  // *
 #define CPLUS      (C)0x23  // + +. *. must stay in order.  Low digit is combining type-1
 #define CPLUSDOT   (C)0x24  // +.  +. *. x ~:  are so tested
 #define CSTARDOT   (C)0x25  // *.
-#define CEQ        (C)0x26 // =   must be paired with ~:  = through e. are in the order used by comparison combination
-#define CNE        (C)0x27 // ~:
-#define CLT        (C)0x28 // <   must be paired with <:
-#define CBOX       (C)0x28 // <
-#define CLE        (C)0x29 // <:
-#define CGE        (C)0x2a // >:   must be paired with >
-#define COPE       (C)0x2b // >
-#define CGT        (C)0x2b // >
+#define CEQ        (C)0x26  // =   must be paired with ~:  = through e. are in the order used by comparison combination
+#define CNE        (C)0x27  // ~:
+#define CLT        (C)0x28  // <   must be paired with <:
+#define CBOX       (C)0x28  // <
+#define CLE        (C)0x29  // <:
+#define CGE        (C)0x2a  // >:   must be paired with >
+#define COPE       (C)0x2b  // >
+#define CGT        (C)0x2b  // >
 #define CEBAR      (C)0x2c  // E.  must pair with e.
 #define CEPS       (C)0x2d  // e.
 #define CMIN       (C)0x2e  // <.
@@ -153,7 +125,7 @@
 #define CATDOT     (C)0x3a  // @. paired with `:
 #define CGRCO      (C)0x3b  // `:
 #define CSELF      (C)0x3c  // $: @. `: $: all in a row
-#define CCOLON     (C)0x3d  //
+#define CCOLON     (C)0x3d  // :
 #define CUDOT      (C)0x3e  // u.  must be paired v.
 #define CVDOT      (C)0x3f  // v.
 #define CTAIL      (C)0x40  // {:
@@ -161,10 +133,10 @@
 #define CHEAD      (C)0x41  // {.
 #define CPOUND     (C)0x42  // #  must pair with $
 #define CDOLLAR    (C)0x43  // $
-#define CTILDE     (C)0x44  //
+#define CTILDE     (C)0x44  // ~
 #define CSLDOT     (C)0x45  // /.
 #define CADVERSE   (C)0x46  // ::
-#define CQQ        (C)0x47  //     double quote
+#define CQQ        (C)0x47  // "    double quote
 #define CIOTA      (C)0x48  // i. i. and i: must be 2 apart.  low digit is combining code
 #define CABASE     (C)0x49  // #:
 #define CICO       (C)0x4a  // i:
@@ -188,7 +160,7 @@
 #define CATOMIC    (C)0x5a  // A.
 #define CPCO       (C)0x5b  // p:
 #define CQCO       (C)0x5c  // q:
-#define CDOT       (C)0x5d  //
+#define CDOT       (C)0x5d  // .
 #define CDOMINO    (C)0x5e  // %.
 #define CCYCLE     (C)0x5f  // C.
 #define CSTILE     (C)0x60  // |
@@ -197,8 +169,7 @@
 #define CROOT      (C)0x62  // %:
 #define CBANG      (C)0x63  // !
 #define CBDOT      (C)0x64  // b.
-// obsolete #define CDEFUZZ    (C)0x65  // ((> |) * ])   code is not used in id (fork is), but we reserve a slot for an atomic ds
-// obsolete #define CCKFUZZ    (C)0x66  // (> |)  code is not used (hook is); we use the slot to give a display and to allow the monad to function
+#define CSLDOTDOT  (C)0x65  // /..
 
 #define CGRAVE     (C)0x67 // `
 #define CINF       (C)0x68  //  infinity
@@ -231,42 +202,41 @@
 #define CLEV       (C)0x84  // [.
 #define CDEX       (C)0x85  // ].
 #define CIDENT     (C)0x86  // ]:
+#define CDUMMY     (C)0x87  // no graphic - holds DUMMYSELF, which is used for flags only.  Must be >= 0x80 so will not look like a character
+#define CENQUEUE   (C)0x88  // no graphic - when used in AR, produces a single space.  Used to create recognizable AR to send to eformat from enqueue
+// 88-af free
+#define CEXEC      (C)0xb0       /* 176 260 b0 ".                           */
+#define CGRDOT     (C)0xb2       /* 178 262 b2 `.                           */
 
+#define CQRYCO     (C)0xb9       /* 185 271 b9 ?:                           */
+#define CALP       (C)0xba       /* 186 272 ba a.                           */
+#define CACE       (C)0xbc       /* 188 274 bc a:                           */
+#define CCDOT      (C)0xbe       /* 190 276 be c.                           */
+#define CFIX       (C)0xc6       /* 198 306 c6 f.                           */
+#define CFCAPCO    (C)0xc7       /* 199 307 c7 F:                           */
+#define CHGEOM     (C)0xc8       /* 200 310 c8 H.                           */
+#define CICAPCO    (C)0xcc       /* 204 314 cc I:                           */
+#define CLDOT      (C)0xce       /* 206 316 ce L.                           */
+#define CLCAPCO    (C)0xcf       /* 207 317 cf L:                           */
+#define CMCAP      (C)0xd1       /* 209 321 d1 M.                           */
+#define CTDOT      (C)0xd3  // t.
+#define CTCAPDOT   (C)0xd4  // T.
+#define CQCAPCO    (C)0xd6       /* 214 326 d6 Q:                           */
+#define CMDOT      (C)0xd9       /* 217 331 d9 m.                           */
+#define CSCAPCO    (C)0xda       /* 218 332 da S:                           */
+// db-e8 free
 
-// 135 free
-
-
-
-#define CEXEC      (C)'\260'       /* 176 260 b0 ".                           */
-#define CGRDOT     (C)'\262'       /* 178 262 b2 `.                           */
-
-#define CALP       (C)'\272'       /* 186 272 ba a.                           */
-#define CACE       (C)'\274'       /* 188 274 bc a:                           */
-#define CCDOT      (C)'\276'       /* 190 276 be c.                           */
-#define CFIX       (C)'\306'       /* 198 306 c6 f.                           */
-#define CFCAPCO    (C)'\307'       /* 199 307 c7 F:                           */
-#define CHGEOM     (C)'\310'       /* 200 310 c8 H.                           */
-#define CICAPCO    (C)'\314'       /* 204 314 cc I:                           */
-#define CLDOT      (C)'\316'       /* 206 316 ce L.                           */
-#define CLCAPCO    (C)'\317'       /* 207 317 cf L:                           */
-#define CMDOT      (C)'\320'       /* 208 320 d0 m.                           */
-#define CMCAP      (C)'\321'       /* 209 321 d1 M.                           */
-#define CNDOT      (C)'\322'       /* 210 322 d2 n.                           */
-#define CQCAPCO    (C)'\326'       /* 214 326 d6 Q:                           */
-#define CSCAPCO    (C)'\332'       /* 218 332 da S:                           */
-// 228-231 free
-#define CQRYCO     (C)'\271'       /* 185 271 b9 ?:                           */
-
-#define CAMIP      (C)'\351'       /* 233 351 e9 }   amend in place           */
-#define CCASEV     (C)'\352'       /* 234 352 ea }   case in place            */
-#define CFETCH     (C)'\353'       /* 235 353 eb {::                          */
-#define CMAP       (C)'\354'       /* 236 354 ec {::                          */
-#define CEMEND     (C)'\355'       /* 237 355 ed }::                          */
-#define CFDOT      (C)'\360'       // 240 360 f0 F.  the ID codes are used as flags
-#define CFDOTCO    (C)'\361'       // 241 361 f1 F.:
-#define CFDOTDOT   (C)'\362'       // 242 362 f2 F..
-#define CZCO       (C)'\363'       // 243 363 f3 Z:
-#define CFCO       (C)'\364'       // 244 364 f4 F:
-#define CFCOCO     (C)'\365'       // 245 365 f5 F::
-#define CFCODOT    (C)'\366'       // 246 366 f6 F:.
+#define CAMIP      (C)0xe9       /* 233 351 e9 }   amend in place           */
+#define CCASEV     (C)0xea       /* 234 352 ea }   case in place            */
+#define CFETCH     (C)0xeb       /* 235 353 eb {::                          */
+#define CMAP       (C)0xec       /* 236 354 ec {::                          */
+#define CEMEND     (C)0xed       /* 237 355 ed }::                          */
+#define CFDOT      (C)0xf0       // 240 360 f0 F.  the ID codes are used as flags
+#define CFDOTCO    (C)0xf1       // 241 361 f1 F.:
+#define CFDOTDOT   (C)0xf2       // 242 362 f2 F..
+#define CZCO       (C)0xf3       // 243 363 f3 Z:
+#define CFCO       (C)0xf4       // 244 364 f4 F:
+#define CFCOCO     (C)0xf5       // 245 365 f5 F::
+#define CFCODOT    (C)0xf6       // 246 366 f6 F:.
 #define CCYCITER   (C)0xf7  // cyclic iterator
+// f8-ff free

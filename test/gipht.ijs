@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './gipht.ijs'
+prolog './gipht.ijs'
 NB. prehashed i. family of functions ------------------------------------
 
 randuni''
@@ -38,7 +38,7 @@ x f0 0+x=: j./_1e4+2 1e4 4 ?@$ 2e4
 x f0 0+x=:        x: 1e4   ?@$ 3e3
 x f0 0+x=:        x: 1e4 4 ?@$ 3e3
 x f0 0+x=: %/x:0 1+2 1e4   ?@$ 3e3
-x f0 0+x=: %/x:0 1+2 1e4 4 ?@$ 3e3
+x f0 0+x=: %/x:0 1+(QKTEST{::2 1e4 4;2 100 4) ?@$ 3e3
 1 [ 9!:57 (2)
 
 NB. possible garbage collect can louse up timing
@@ -79,3 +79,6 @@ f1"0 ]1e1 1e3 1e5 1e7 1e9
 4!:55 ;:'adot1 adot2 sdot0 f f0 f1 g m mean t x xx y yy'
 randfini''
  
+
+epilog''
+

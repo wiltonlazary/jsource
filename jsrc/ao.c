@@ -1,4 +1,4 @@
-/* Copyright 1990-2008, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Adverbs: Oblique and Key                                                */
@@ -15,7 +15,7 @@ static DF1(jtoblique){A x,y,z;I m,n,r;D rkblk[16];
  r=AR(w);  // r = rank of w
  // create y= ,/ w - the _2-cells of w arranged in a list (virtual block)
  RZ(y=redcat(w,self)); if(1>=r){m=AN(w); n=1;}else{m=AS(w)[0]; n=AS(w)[1];}
- // Create x=+"0 1&i./ 2 {. $y
+ // Create x=+"0 1&i./ 2 {. $w
  A xm; RZ(xm=IX(m)); A xn; RZ(xn=IX(n));
  RZ(x=ATOMIC2(jt,xm,xn,rkblk,0L,1L,CPLUS)); AR(x)=1; AS(x)[0]=AN(x);
  // perform x f/. y, which does the requested operation, collecting the identical keys
@@ -39,13 +39,13 @@ static DF1(jtoblique){A x,y,z;I m,n,r;D rkblk[16];
  }
 
 // Derived verb for f//. y for atomic f
-static DF1(jtobqfslash){A y,z;B b=0,p;C er,id,*wv;I c,d,k,m,m1,mn,n,n1,r,*s,wt;
+static DF1(jtobqfslash){A y,z;B b=0,p;C er,id,*wv;I c,d,k,m,m1,n,n1,r,*s,wt;
  ARGCHK1(w);
  r=AR(w); s=AS(w); wt=AT(w); wv=CAV(w);
  if((-AN(w)&(1-r)&SGNIFDENSE(wt))>=0)R oblique(w,self);  // revert to default if rank<2, empty, or sparse.  This implies m/n below are non0
  y=FAV(self)->fgh[0]; y=FAV(y)->fgh[0]; id=FAV(y)->id;
  m=s[0]; m1=m-1;
- n=s[1]; n1=n-1; mn=m*n; d=m+n-1; PROD(c,r-2,2+s);
+ n=s[1]; n1=n-1; d=m+n-1; PROD(c,r-2,2+s);
  if(((1-m)&(1-n))>=0){GA(z,wt,AN(w),r-1,1+s); AS(z)[0]=d; MC(AV(z),wv,AN(w)<<bplg(wt)); R z;}  // m=1 or n=1, return item of input
  if(wt&FL+CMPX)NAN0;
  if(1==c)switch(OBQCASE(CTTZ(wt),id)){
@@ -70,8 +70,8 @@ static DF1(jtobqfslash){A y,z;B b=0,p;C er,id,*wv;I c,d,k,m,m1,mn,n,n1,r,*s,wt;
   case OBQCASE(XNUMX,CMAX    ): OBQLOOP(X,X,wt,x=*u, x=1==xcompare(x,*u)? x:*u); break;
   case OBQCASE(XNUMX,CMIN    ): OBQLOOP(X,X,wt,x=*u, x=1==xcompare(x,*u)?*u: x); break;
   case OBQCASE(XNUMX,CPLUS   ): OBQLOOP(X,X,wt,x=*u, x=xplus(x,*u)); break;
-  case OBQCASE(RATX, CMAX    ): OBQLOOP(Q,Q,wt,x=*u, x=1==QCOMP(x,*u)? x:*u); break;
-  case OBQCASE(RATX, CMIN    ): OBQLOOP(Q,Q,wt,x=*u, x=1==QCOMP(x,*u)?*u: x); break;
+  case OBQCASE(RATX, CMAX    ): OBQLOOP(Q,Q,wt,x=*u, x=0<QCOMP(x,*u)? x:*u); break;
+  case OBQCASE(RATX, CMIN    ): OBQLOOP(Q,Q,wt,x=*u, x=0<QCOMP(x,*u)?*u: x); break;
   case OBQCASE(RATX, CPLUS   ): OBQLOOP(Q,Q,wt,x=*u, x=qplus(x,*u)); break;
   case OBQCASE(INTX, CBW0001 ): OBQLOOP(I,I,wt,x=*u, x&=*u        ); break;
   case OBQCASE(INTX, CBW0110 ): OBQLOOP(I,I,wt,x=*u, x^=*u        ); break;
@@ -84,7 +84,7 @@ static DF1(jtobqfslash){A y,z;B b=0,p;C er,id,*wv;I c,d,k,m,m1,mn,n,n1,r,*s,wt;
    break;
  }
  if(wt&FL+CMPX)NAN1; RE(0);
- R b?z:oblique(w,self);
+ R b?z:oblique(w,self);  // handle cases not treated specially above
 }    /* f//.y for atomic f */
 
 
@@ -165,31 +165,57 @@ DF2(jtpolymult){A f,g,z;B b=0;C*av,c,d,*wv;I at,i,j,k,m,m1,n,p,t,wt,zn;V*v;
 // start of x f/. y (Key)
 static DF2(jtkey);
 
+
+static DF2(jtkeyi){PROLOG(0009);A j,p,z;B*pv;I*av,c,d=-1,n,*jv;
+ ARGCHK2(a,w);
+ SETIC(a,n); av=AV(a);
+ RZ(j=grade1(a)); jv=AV(j);  // get grading permutation for the self-indexes.  This groups the partitions
+ GATV0(p,B01,n,1); pv=BAV(p);   // allocate boolean fret mask
+ DO(n, c=d; d=av[*jv++]; *pv++=c<d;);  // d=self-index of current output value (always ascending).  When the value changes, that's a fret
+ df2(z,p,from(j,w),cut(VAV(self)->fgh[0],zeroionei(1)));  // z = frets u;.1 j{w
+ EPILOG(z);
+}    /* a f/. w where a is i.~x for dense x  */
+
 static DF2(jtkeysp){PROLOG(0008);A b,by,e,q,x,y,z;I j,k,n,*u,*v;P*p;
  ARGCHK2(a,w);
+ ASSERT(FAV(self)->id==CSLDOT,EVNONCE);  // /.. not supported for sparse
  {I t2; ASSERT(SETIC(a,n)==SETIC(w,t2),EVLENGTH);}  // verify agreement.  n is # items of a
  RZ(q=indexof(a,a)); p=PAV(q); 
- x=SPA(p,x); u=AV(x);
- y=SPA(p,i); v=AV(y);
- e=SPA(p,e); k=i0(e); 
- j=0; DO(AN(x), if(k<=u[i])break; if(u[i]==v[i])++j;);
- RZ(b=ne(e,x));
- RZ(by=repeat(b,y));
- RZ(x=key(repeat(b,x),from(ravel(by),w),self));
- GASPARSE0(q,B01,1,1); AS(q)[0]=n;  /* q=: 0 by}1$.n;0;1 */
- p=PAV(q); SPB(p,a,iv0); SPB(p,e,num(1)); SPB(p,i,by); SPB(p,x,reshape(tally(by),num(0)));
- RZ(z=over(df1(b,repeat(q,w),VAV(self)->fgh[0]),x));
- z=j?cdot2(box(IX(1+j)),z):z;
+ x=SPA(p,x); u=AV(x); I c=AN(x);  // u-> values of i.~ w
+ y=SPA(p,i); v=AV(y);  // v-> indexes of i.~ w
+ e=SPA(p,e); k=i0(e); // k is the sparse element in the rep of i.~ a sc. the index of the first occurrence of a sparse element in a
+ j=0; DO(c, if(u[i]>=k){break;} if(u[i]==v[i])++j;);  // j = # unique values in w before the first fill element
+ RZ(b=ne(e,x));  // b = mask of values in i.~ w that are different from the sparse element  ?? can't be any
+ RZ(by=repeat(b,y));   // by=indexes of values in i.~ a that are different from the sparse element 
+ RZ(z=key(repeat(b,x),from(ravel(by),w),self));  // run the key operation on the non-sparse elements
+ if(AN(by)<n){  // if the number of non-sparse items is less than the number of items, we must work on a sparse cell
+  // Create a partition for the sparse cells.  We create a sparse vector with 1 as the sparse element
+  GASPARSE0(q,B01,1,1); AS(q)[0]=n;  /* q=: 0 by}1$.n;0;1 */
+  p=PAV(q); SPB(p,a,iv0); SPB(p,e,num(1)); SPB(p,i,by); SPB(p,x,reshape(tally(by),num(0)));  // q is a mask: all 1s, but 0 on the non-sparse elements of w
+  RZ(z=over(df1(b,repeat(q,w),VAV(self)->fgh[0]),z));  // (u q#(fill ele for w)) , (result on non-sparse)  ?? bug if u result has rank too high, the call to C. will fail with agreement
+  z=j?ccapdot2(box(IX(1+j)),z):z;  // Use C. to rotate the sparse result into proper position
+ }
  EPILOG(z);
-}
+}  // a f/. w  for sparse a
+
+static DF2(jtkeyspw){PROLOG(0011); I ica, icw;
+ RZ(a&&w);
+ SETIC(a,ica); SETIC(w,icw);
+ ASSERT(ica==icw,EVLENGTH);
+ if(SPARSE&AT(a))R keysp(a,w,self);
+ A z=keyi(indexof(a,a),w,self);
+ EPILOG(z);
+}    // a f/. w for sparse w
+
 
 static DF2(jtkey){F2PREFIP;R jtkeyct(jtinplace,a,w,self,jt->cct);}
 
-// a u/. w.  Self-classify a, then rearrange w and call cut.  Includes special cases for f//.
+// a u/.[.] w.  Self-classify a, then rearrange w and call cut.  Includes special cases for f//.
 // toler is the ct to use for the classification
 A jtkeyct(J jt,A a,A w,A self,D toler){F2PREFIP;PROLOG(0009);A ai,z=0;I nitems;
  ARGCHK2(a,w);
- if(unlikely(ISSPARSE(AT(a))))R keysp(a,w,self);  // if sparse, go handle it
+ if(unlikely(ISSPARSE(AT(a))))R keysp(a,w,self);  // if a sparse, go handle it
+ if(unlikely(ISSPARSE(AT(w))))R jtkeyspw(jt,a,w,self);  // if w sparse, go handle it
  {I t2; ASSERT(SETIC(a,nitems)==SETIC(w,t2),EVLENGTH);}  // verify agreement.  nitems is # items of a
  PUSHCCT(toler);  // now that partitioning is over, reset ct for the executions of u
  RZ(ai=indexofsub(IFORKEY,a,a));   // self-classify the input using ct
@@ -377,10 +403,10 @@ A jtkeyct(J jt,A a,A w,A self,D toler){F2PREFIP;PROLOG(0009);A ai,z=0;I nitems;
     }
    }
    // Finally, if this was mean, divide the total by the frequency
-   if(unlikely(((FAV(self)->flag&VFKEYSLASHF)>>VFKEYSLASHFX)==3)){z=divideAW(z,freq);}  // always inplaceable
+   if(unlikely((((FAV(self)->flag&VFKEYSLASHF)==(3<<VFKEYSLASHFX))))){z=divideAW(z,freq);}  // always inplaceable
    EPILOG(z);
   }  // end 'locally handled arg types'
- }
+ }  // end 'u//. handled specially'
 
  // ** Here it wasn't fspecial//. - reorder the input and create frets
  // Allocate the area for the reordered copy of the input.  Do these calls early to free up registers for the main loop
@@ -403,44 +429,45 @@ A jtkeyct(J jt,A a,A w,A self,D toler){F2PREFIP;PROLOG(0009);A ai,z=0;I nitems;
  I localfrets[32];  // if we don't have too many frets, we can put them on the C stack
  if(!((I)ai&1)){
   // NOT small-range processing: go through the index+size table to create the frets and reordered data for passing to cut
-  nfrets=AM(ai);  //fetch # frets before we possibly clone ai
+  nfrets=AM(ai);  // fetch # frets before we possibly clone ai
   I maxfretsize=(nitems>>8); maxfretsize=maxfretsize<nfrets?nfrets:maxfretsize; maxfretsize=4*maxfretsize+nfrets+1;  // max # bytes needed for frets, if some are long
   if((UI)maxfretsize<sizeof(localfrets)-NORMAH*SZI){frets=(A)localfrets; AT(frets)=0; AR(frets)=0; if(MEMAUDIT&0xc)AFLAGFAUX(frets,0)} // Cut tests the type field - only.  If debug, the flag also  rank must be valid in case we call rankex
   else if((I)jtinplace&(I)((AFLAG(w)&(AFVIRTUAL|AFNJA))==0)&((UI)((-(I )(AT(w)&DIRECT))&AC(w)&(4-celllen)&((I )(SZI==4)-AR(w)))>>(BW-1-JTINPLACEWX)))frets=w;
   else GATV0(frets,LIT,maxfretsize,0);   // 1 byte per fret is adequate, since we have padding
   fretp=CUTFRETFRETS(frets);  // Place where we will store the fret-lengths.  They are 1 byte normally, or 5 bytes for groups longer than 254
 
-  makewritable(ai);  // we modify the size+index info to be running endptrs into the reorder area
+  makewritable(ai);  // we modify the size+index info to be running endptrs into the reorder area, an AM to hold a
   // pass through the input, incrementing each reference
-  I *av=IAV(ai);  // av->a data
+  I *av=IAV(ai);  // av->selfclassify data
   // Now each item av[i] is either (1) smaller than i, which means that it is extending a previous key; or (2) greater than i, which
   // means it starts a new partition whose length is a[i]-i.  Process the values in order, creating partitions as they come up, and
   // moving the data for each input value in turn, reading in order and scatter-writing.
-  I i; I nextpartitionx;  // loop index, address of place to store next partition
-  I * RESTRICT wv=IAV(w);   // source & target pointers
-  for(i=0, nextpartitionx=(I)IAV(wperm);i<nitems;++i){
-   I * RESTRICT partitionptr;  // pointer to where output will go
+  I i; I nextpartitionx;  // loop index, cell index of place to store next partition
+  I * RESTRICT wv=IAV(w);   // source pointer: w cells in order
+  C * RESTRICT wpermv0=CAV(wperm);   // target pointer: the permuted w area
+  NOUNROLL for(i=0, nextpartitionx=0;i<nitems;++i){
+   I partitionptr;  // index to where output will go
    I avvalue=av[i];  // fetch partition length/index
    if(avvalue<i){  // this value extends its partition
-    partitionptr=(I*)av[avvalue];  // addr of end of selected partition
+    partitionptr=av[avvalue];  // index of current end of selected partition
    }else{
     // start of new partition.  Figure out the length; out new partition; replace length with starting pointer; Use length to advance partition pointer
     avvalue-=i;  // length of partition
     if(avvalue<255)*fretp++ = (UC)avvalue; else{*fretp++ = 255; *(UI4*)fretp=(UI4)avvalue; fretp+=SZUI4;}
-    partitionptr=(I*)nextpartitionx;  // copy this item's data to the start of the partition
-    nextpartitionx+=avvalue*celllen;  // reserve output space for the partition
+    partitionptr=nextpartitionx;  // set copy index to the start of the partition
+    nextpartitionx+=avvalue;  // reserve output space for the partition
     avvalue=i;   // shift meaning of avvalue from length to index, where the partition pointer will be stored
    }
 
-   av[avvalue]=(I)partitionptr+celllen;  // store updated end-of-partition after move
-   JMCR(partitionptr,wv,celllen,1,endmask); wv = (I*)((C*)wv+celllen);  // Don't overwrite, since we are scatter-writing
+   av[avvalue]=partitionptr+1;  // update/init end-of-partition after move; always points to last moved data+1
+   JMCR(wpermv0+partitionptr*celllen,wv,celllen,1,endmask); wv=(I*)((C*)wv+celllen);  // Don't overwrite, since we are scatter-writing
 
   }
  }else{I *av;  // running pointer through the inputs
-  // indexofsub detected that small-range processing is in order.  Information about the range is secreted in fields of a
+  // indexofsub detected that small-range processing is in order.  Information about the range is secreted in fields of ai
   ai=(A)((I)ai-1); I k=AN(ai); I datamin=AK(ai); I p=AM(ai);  // get size of an item, smallest item, range+1
-  // allocate a tally area and clear it.  Could use narrower table perhaps
-  A ftbl; GATV0(ftbl,INT,p,1); I *ftblv=IAV(ftbl); mvc(p<<LGSZI,ftblv,1,MEMSET00);
+  // allocate a tally area and clear it.  Could use narrower table perhaps, with ramifications in ;. .  Use FL+INT to indicate smallrange
+  A ftbl; GATV0(ftbl,FL+INT,p,1); I *ftblv=IAV1(ftbl); mvc(p<<LGSZI,ftblv,1,MEMSET00);  // rank 1 to match result of self-classify, so that ai always has rank 1
   // pass through the inputs, counting the negative of the number of slots mapped to each index
   I valmsk=(UI)~0LL>>(((-k)&(SZI-1))<<LGBB);  // mask to leave the k lowest bytes valid
   ftblv-=datamin;  // bias starting addr so that values hit the table
@@ -448,8 +475,11 @@ A jtkeyct(J jt,A a,A w,A self,D toler){F2PREFIP;PROLOG(0009);A ai,z=0;I nitems;
   av=IAV(a); DQ(nitems, I tval=ftblv[*av&valmsk]; ftblv[*av&valmsk]=tval-1; nfrets-=SGNTO0(tval); av=(I*)((I)av+k);)   // build (negative) frequency table; sub 1 for each non-fret
   // now that we have the number of frets, we can allocate the fret block
   I maxfretsize=(nitems>>8); maxfretsize=maxfretsize<nfrets?nfrets:maxfretsize; maxfretsize=4*maxfretsize+nfrets+1;  // max # bytes needed for frets
+  // use local fretblock if there are few frets
   if((UI)maxfretsize<sizeof(localfrets)-NORMAH*SZI){frets=(A)localfrets; AT(frets)=0; AR(frets)=0; if(MEMAUDIT&0xc)AFLAGFAUX(frets,0)} // Cut tests the type field - only; for memaudit we need flag too, and rank in case we rank2ex
-  else if((I)jtinplace&(I)((AFLAG(w)&(AFVIRTUAL|AFNJA))==0)&((UI)((-(I)(AT(w)&DIRECT))&AC(w)&(4-celllen)&((I)(SZI==4)-AR(w)))>>(BW-1-JTINPLACEWX)))frets=w;
+  // we can write the frets over w if w is inplaceable, DIRECT, has items as big as an I4, not 32-bit or atom, and not u/..~  w has always been copied to a new buffer by the sort
+  else if((I)jtinplace&(I)((AFLAG(w)&(AFVIRTUAL|AFNJA))==0)&((w!=a)|(FAV(self)->id!=CSLDOTDOT))&((UI)((-(I)(AT(w)&DIRECT))&AC(w)&(4-celllen)&((I)(SZI==4)-AR(w)))>>(BW-1-JTINPLACEWX)))
+   frets=w;
   else GATV0(frets,LIT,maxfretsize,0);   // 1 byte per fret is adequate, since we have padding
   fretp=CUTFRETFRETS(frets);  // Place where we will store the fret-lengths.  They are 1 byte normally, or 5 bytes for groups longer than 254
 
@@ -483,19 +513,29 @@ A jtkeyct(J jt,A a,A w,A self,D toler){F2PREFIP;PROLOG(0009);A ai,z=0;I nitems;
 
    av=(I*)((I)av+k);  // advance to next input value
   }
+  // frets have been created
+  ai=ftbl;  // we will be passing the tally table into cut - always writable rank 1
+  AK(ai)=datamin;  // copy the min range over
  }
 
  // Frets are calculated and w is reordered.  Call cut to finish the job.  We have to store the count and length of the frets
  CUTFRETCOUNT(frets)=nfrets;  // # frets is #bytes stored, minus the length of the extended encodings
  CUTFRETEND(frets)=(I)fretp;   // pointer to end+1 of data
+ ai->mback.aarg=a;  // through ai, pass the address of the original a
+ wperm->mback.aarg=ai;  // pass ai into ;.
+ 
  // wperm is always inplaceable.  If u is inplaceable, make the call to cut inplaceable
  // Transfer pristinity of w to wperm so we can see if it went away, but only if w is pristine inplaceable.  We want to leave
  // wperm pristine so it can be used, but it's pristine only is w is zombie.  We sacrifice pristinity to inplaceability
- AFLAGINIT(wperm,AFLAG(wperm)|AFLAG(w)&AFPRISTINE&REPSGN(AC(w)&SGNIF(jtinplace,JTINPLACEWX)))
+ // the AM field of wperm is destroyed but that's OK because it never becomes a result
+ I wprist=AFLAG(w)&AFPRISTINE;
+ I wpprist=wprist&REPSGN(AC(w)&SGNIF(jtinplace,JTINPLACEWX));  // original pristinity of wperm
+ AFLAGINIT(wperm,AFLAG(wperm)|wpprist)
  // We pass the self pointer for /. into cut, as it uses the id therein to interpret a
  z=jtcut2((J)(intptr_t)((I)jt+((FAV(self)->flag&VGERL)?0:(FAV(FAV(self)->fgh[0])->flag>>(VJTFLGOK1X-JTINPLACEWX))&JTINPLACEW)),frets,wperm,self);
- // If the operation turned off pristinity of wperm, do the same for w.  Remember that pristinity only matters if the block is inplaceable
- AFLAGAND(w,AFLAG(wperm)|~AFPRISTINE)
+ // If the operation turned off pristinity of wperm, do the same for w.  Pristinity only matters if the block is inplaceable, but our tests expect that
+ // assigned values retain their pristinity, so we have to clear pristinity of w whenever wperm ends non-prist
+ if(unlikely(wprist>(AFLAG(wperm)&AFPRISTINE)))AFLAGCLRPRIST(w)  // if pristinity of wperm was turned off, do the same in w
  EPILOG(z);
 }    /* a f/. w for dense x & w */
 
@@ -646,14 +686,15 @@ static F1(jtkeytallysp){PROLOG(0015);A b,e,q,x,y,z;I c,d,j,k,*u,*v;P*p;
  ARGCHK1(w);
  RZ(q=indexof(w,w));
  p=PAV(q); 
- x=SPA(p,x); u=AV(x); c=AN(x);
- y=SPA(p,i); v=AV(y);
- e=SPA(p,e); k=i0(e); 
- j=0; DO(c, if(k<=u[i])break; if(u[i]==v[i])++j;);
- RZ(b=ne(e,x));
- RZ(x=repeat(b,x)); RZ(x=keytally(x,x,mark)); u=AV(x); d=AN(x);
- GATV0(z,INT,1+d,1); v=AV(z);
- DQ(j, *v++=*u++;); *v++=SETIC(w,k)-bsum(c,BAV(b)); DQ(d-j, *v++=*u++;);
+ x=SPA(p,x); u=AV(x); c=AN(x);  // u-> values of i.~ w
+ y=SPA(p,i); v=AV(y);  // v-> indexes of i.~ w
+ e=SPA(p,e); k=i0(e); // k is the sparse element in the rep of i.~ w
+ j=0; DO(c, if(k<=u[i])break; if(u[i]==v[i])++j;);  // j = # unique values in w before the first fill element
+ RZ(b=ne(e,x));  // b = mask of values in x that are different from the sparse element
+ RZ(x=repeat(b,x)); RZ(x=keytally(x,x,mark)); u=AV(x); d=AN(x);  // u now -> #/.~ of the non-sparse items, d=count thereof
+ I nfills=SETIC(w,k)-bsum(c,BAV(b));  // number of cells of fill
+ GATV0(z,INT,d+(nfills!=0),1); v=AV(z);  // allocate result: one for each unique non-fill, plus one for the fills if any
+ DQ(j, *v++=*u++;); if(nfills)*v++=nfills; DQ(d-j, *v++=*u++;);  // copy in the counts
  EPILOG(z);
 }    /* x #/.y , sparse x */
 
@@ -721,7 +762,7 @@ DF2(jtkeyheadtally){F2PREFIP;PROLOG(0017);A f,q,x,y,z;I b;I at,*av,k,n,r,*qv,*u,
   k=bsum(n,p); m=i+j?1:0;  // k=# 1s  m is 1 if there are 0s and 1s
   GATV0(x,INT,m+1,1); v=AV(x); v[m]=i+j; v[0]=0;  // 0=index of first item (always 0); 1 if it exists is the other
   GATV0(y,INT,m+1,1); v=AV(y); j=n-k; k=i?j:k; k&=-m; v[0]=k; v[m]=n-k;  // if 1st value is 0, complement k; if only 1 value, clear k
-  if(!(wt&VERB))RZ(x=from(x,w)); w=x; x=b?x:y; y=b?y:w; R stitch(x,y);  // select using index (unless i.@#, then keep index); set order & ,.
+  if(!(wt&VERB))RZ(x=fromA(x,w)); w=x; x=b?x:y; y=b?y:w; R stitch(x,y);  // select using index (unless i.@#, then keep index); set order & ,.
  }
  // for other types of a, we handle it quickly only if w is B01/INT/FL or i.@# which has type of VERB
  if(wt&B01+INT+FL+VERB){
@@ -780,11 +821,12 @@ DF2(jtkeyheadtally){F2PREFIP;PROLOG(0017);A f,q,x,y,z;I b;I at,*av,k,n,r,*qv,*u,
  EPILOG(z);
 }    /* x ({.,#)/.y or x (#,{.)/. y */
 
-
-F1(jtsldot){A h=0;AF f1=jtoblique,f2;C c,d,e;I flag=VJTFLGOK1|VJTFLGOK2;V*v;
+// f/.
+F1(jtsldot){F1PREFIP;A h=0;AF f1=jtoblique,f2;C c,d,e;I flag=VJTFLGOK1|VJTFLGOK2;V*v;
 // NOTE: u/. is processed using the code for u;.1 and passing the self for /. into the cut verb.  So, the self produced
 // by /. and ;.1 must be the same as far as flags etc.
  ARGCHK1(w);
+ A z; fdefallo(z)
  if(NOUN&AT(w)){flag|=VGERL; RZ(h=fxeachv(1L,w));}
  v=VAV(w);
  switch(ID(w)){  // no default for f2: every path must set it
@@ -807,5 +849,16 @@ F1(jtsldot){A h=0;AF f1=jtoblique,f2;C c,d,e;I flag=VJTFLGOK1|VJTFLGOK2;V*v;
                // otherwise (including keymean) fall through to...
   default: f2=jtkey; flag |= (FAV(w)->flag&VASGSAFE); break;  // pass through ASGSAFE.
  }
- R fdef(0,CSLDOT,VERB, f1,f2, w,0L,h, flag, RMAX,RMAX,RMAX);
+ fdeffill(z,0,CSLDOT,VERB, f1,f2, w,0L,h, flag, RMAX,RMAX,RMAX); R z;
 }
+
+// f/.. - looks like /. except for id
+F1(jtsldotdot){F1PREFIP;A h=0; I flag=VJTFLGOK1|VJTFLGOK2;
+// NOTE: u/. is processed using the code for u;.1 and passing the self for /. into the cut verb.  So, the self produced
+// by /. and ;.1 must be the same as far as flags etc.
+ ARGCHK1(w);
+ if(NOUN&AT(w)){flag|=VGERL; RZ(h=fxeachv(1L,w));}
+ AF f2=jtkey; flag |= (FAV(w)->flag&VASGSAFE);  // pass through ASGSAFE.
+ R fdef(0,CSLDOTDOT,VERB,jtvalenceerr,f2, w,0L,h, flag, RMAX,RMAX,RMAX);
+}
+

@@ -1,17 +1,26 @@
 vpath % ../../../../jsrc:../../../../jsrc/blis:../../../../jsrc/openssl/sha:../../../../jsrc/openssl/sha/asm:../../../../dllsrc
 
-ifndef jplatform
-jplatform=linux
-endif
-ifndef j64x
-j64x=j64
+ifndef jplatform64
+jplatform64=linux/j64x
 endif
 
-ODIR=../../../../bin/$(jplatform)/$(j64x)
+ODIR=../../../../bin/$(jplatform64)
 
 .SUFFIXES: .o
 
+# note: the slowest builds have been placed at the top, to avoid starvation in parallel builds
+# (viavx is still longer than everything else combined--should maybe be broken up into multiple tus...)
 OBJS=  \
+ viavx.o \
+ viavx1-2.o \
+ viavx1-4.o \
+ viavx2.o \
+ viavx3.o \
+ viavx4.o \
+ viavx5.o \
+ viavx6.o \
+ vi.o \
+ vcompsc.o \
  a.o \
  ab.o \
  aes-c.o \
@@ -63,9 +72,11 @@ OBJS=  \
  io.o \
  j.o \
  jdlllic.o \
+ jgmpinit.o \
  k.o \
  m.o \
  mbx.o \
+ mt.o \
  p.o \
  pv.o \
  px.o \
@@ -96,7 +107,6 @@ OBJS=  \
  vcatsp.o \
  vchar.o \
  vcomp.o \
- vcompsc.o \
  vd.o \
  vdx.o \
  ve.o \
@@ -109,9 +119,8 @@ OBJS=  \
  vgcomp.o \
  vgranking.o \
  vgsort.o \
+ vgsortiqavx512.o \
  vgsp.o \
- vi.o \
- viavx.o \
  viix.o \
  visp.o \
  vm.o \
@@ -149,6 +158,8 @@ OBJS=  \
  xt.o \
  xu.o \
  crc32c.o \
+ str.o \
+ strptime.o \
  keccak1600.o \
  md4_dgst.o \
  md4_one.o \
@@ -169,20 +180,30 @@ OBJS=  \
 %.o: %.S
 	$(CC) $(GASM_FLAGS) -c -o $@ $<
 
+%.o: %.asm
+	nasm $(NASM_FLAGS) -felf64 -o $@ $<
+
 $(OBJS_FMA) : CFLAGS_FMA := -mfma
 $(OBJS_AESNI) : CFLAGS_AESNI := -maes
 $(OBJS_AESARM) : CFLAGS_AESARM := -march=armv8-a+crc+crypto
 $(OBJS_SLEEF) : CFLAGS_SLEEF := $(FLAGS_SLEEF) -DSLEEF_STATIC_LIBS -DNDEBUG -DDORENAME=1 -Wno-sign-compare -ffp-contract=off -fno-math-errno -fno-trapping-math -I../../../../sleef/src/arch -I../../../../sleef/src/common
 $(OBJS_BASE64) : CFLAGS_BASE64 := $(FLAGS_BASE64)
-$(ODIR)/$(TARGET) : $(OBJS) $(OBJS_BASE64) $(OBJS_FMA) $(OBJS_AESNI) $(OBJS_AESARM) $(OBJS_SLEEF) $(SRC_ASM) $(DLLOBJS) $(LIBJRES)
-	$(CC) -o $@ $(OBJS) $(OBJS_FMA) $(OBJS_AESNI) $(OBJS_AESARM) $(OBJS_SLEEF) $(OBJS_BASE64) $(OBJS_ASM) $(SRC_ASM) $(DLLOBJS) $(LIBJDEF) $(LIBJRES) $(LDFLAGS)
+ifdef TARGET
+$(ODIR)/$(TARGET) : $(OBJS) $(OBJS_BASE64) $(OBJS_FMA) $(OBJS_AESNI) $(OBJS_AESARM) $(OBJS_SLEEF) $(OBJS_SIMDUTF8) $(SRC_ASM) $(DLLOBJS) $(LIBJRES)
+	$(CC) -o $@ $(OBJS) $(OBJS_FMA) $(OBJS_AESNI) $(OBJS_AESARM) $(OBJS_SLEEF) $(OBJS_SIMDUTF8) $(OBJS_BASE64) $(OBJS_ASM) $(SRC_ASM) $(DLLOBJS) $(LIBJDEF) $(LIBJRES) $(LDFLAGS)
+endif
+
+ifdef TARGET_a
+$(ODIR)/$(TARGET_a) : $(OBJS) $(OBJS_BASE64) $(OBJS_FMA) $(OBJS_AESNI) $(OBJS_AESARM) $(OBJS_SLEEF) $(OBJS_SIMDUTF8) $(SRC_ASM) $(DLLOBJS) $(LIBJRES)
+	$(AR) $(LDFLAGS_a) $@ $(OBJS) $(OBJS_FMA) $(OBJS_AESNI) $(OBJS_AESARM) $(OBJS_SLEEF) $(OBJS_SIMDUTF8) $(OBJS_BASE64) $(OBJS_ASM) $(SRC_ASM) $(DLLOBJS) $(LIBJDEF) $(LIBJRES) $(LDFLAGS_b)
+endif
 
 $(LIBJRES): jdll.rc
 	$(WINDRES) -o$@ $^
 
-all: $(ODIR)/$(TARGET)
+all: $(ODIR)/$(TARGET) $(ODIR)/$(TARGET_a)
 
 clean:
-	rm -f $(OBJS) $(OBJS_FMA) $(OBJS_AESNI) $(OBJS_AESARM) $(OBJS_SLEEF) $(OBJS_BASE64) $(SRC_ASM) $(DLLOBJS) $(LIBJRES)
+	rm -f $(OBJS) $(OBJS_FMA) $(OBJS_AESNI) $(OBJS_AESARM) $(OBJS_SLEEF) $(OBJS_SIMDUTF8) $(OBJS_BASE64) $(SRC_ASM) $(DLLOBJS) $(LIBJRES)
 
 .PHONY: all clean

@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g210a.ijs'
+prolog './g210a.ijs'
 NB. $ shape overflow ----------------------------------------------------
 
 NB. Some tests fail because memory is obtained in 65536 word increments, 
@@ -6,7 +6,7 @@ NB. and malloc does not always fail gracefully.
 NB. Other tests fail because they try to grab the entire result array
 NB. at the outset, and fail with a limit error or an out of memory.
 
-test  =: 1 : '<@(u etx) e. (''out of memory'';''limit error'')"_'
+test  =: 1 : '<@(u etx) e. (''out of memory'';''limit error'';''domain error'')"_'
 
 m     =: <. 2^IF64{16 32
 m2    =: <. m%2
@@ -370,4 +370,7 @@ f=: 4 : 'x>.y'
 
 4!:55 ;:'f m m2 m4 test'
 
+
+
+epilog''
 

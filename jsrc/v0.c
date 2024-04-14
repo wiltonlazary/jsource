@@ -1,17 +1,16 @@
-/* Copyright 1990-2008, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Verbs: Polynomial Roots & Polynomial Evaluation                         */
 
 #include "j.h"
 
-
 #define EPS            (FUZZ)
 
 #define dplus(x,y)     (x+y)
 #define dtymes(x,y)    (x*y)
 #define dnegate(x)     (-x)
-#define QNEGATE(x)     (qminus(zeroQ,x))
+#define QNEGATE(x)     ({Q neg= x; neg.n= XnegX(neg.n); neg;})
 
 #define CFR(f,T,TYPE,fplus,ftymes,fnegate)  \
  F2(f){PROLOG(0060);A z;I j,n;T d,*t,*u,*v;            \
@@ -22,11 +21,11 @@
    DQ(j, *t=fplus(t[-1],ftymes(d,*t)); --t;);   \
    *v=ftymes(d,*v);                              \
   }                                              \
-  RE(z); EPILOG(z);                              \
+  RE(0); EPILOG(z);                              \
  }
 
 static CFR(jtcfrd,D,FL,  dplus,dtymes,dnegate)
-static CFR(jtcfrx,X,XNUM,xplus,xtymes, negate)
+static CFR(jtcfrx,X,XNUM,xplus,xtymes, XnegX) // FIXME: optimize negate
 static CFR(jtcfrq,Q,RAT, qplus,qtymes,QNEGATE)
 
 static F1(jtrsort){A t,z;
@@ -55,16 +54,18 @@ static F2(jtcfrz){A z;B b=0,p;I j,n;Z c,d,*t,*u,*v;
 static F1(jtcfr){A c,r,*wv;I t;
  ASSERT((-AR(w)&-(AN(w)^2))>=0,EVLENGTH);
  wv=AAV(w); 
- if(AR(w)){c=wv[0]; r=wv[1];}else{c=num(1); r=wv[0];}
+ if(AR(w)){c=C(wv[0]); r=C(wv[1]);}else{c=num(1); r=C(wv[0]);}
  ASSERT(((AR(c)-1)&(AR(r)-2))<0,EVRANK);
  ASSERT((-(NUMERIC&AT(c))&((AN(r)-1)|-(NUMERIC&AT(r))))<0,EVDOMAIN);
  t=AT(r); t=AN(r)?t:B01; if(t&B01+INT)t=XNUM; t=maxtyped(t,AT(c));
+ ASSERT(!(t&QP),EVNONCE)  // no qp support
  if(TYPESNE(t,AT(c)))RZ(c=cvt(t,c));
  if(TYPESNE(t,AT(r)))RZ(r=cvt(t,r));
  AF tf; tf=(AF)jtcfrd; tf=t&CMPX?(AF)jtcfrz:tf; tf=t&XNUM?(AF)jtcfrx:tf; tf=t&RAT?(AF)jtcfrq:tf;
  R (*tf)(jt,c,r);
 }    /* coefficients from roots */
 
+// TODO: replace this solver with one based on EISCOR: "Fast and Backward Stable Computation of Roots", Aurentz et al.
 
 static D jtsummag(J jt,A w){A t=aslash(CPLUS,mag(w)); R t?DAV(t)[0]:0.0;}
 
@@ -86,7 +87,7 @@ static Z jtnewt(J jt,I m,Z*a,Z x,I n){I i,j;D e=EPS/1024.0;Z c,p,q,*v;
 
 static B jtdeflateq(J jt,B k,I m,Q*v,Q x){Q q,r,*u;
  u=v+m; q=*u--; DQ(m, r=*u--;       q=qplus(r,qtymes(q,x)););
- RE(0); if(!(QEQ(q,zeroQ)))R 0;
+ RE(0); if(XSGN(q.n))R 0;
  u=v+m; q=*u--; DQ(m, r=*u; *u--=q; q=qplus(r,qtymes(q,x)););
  R 1;
 }    /* deflate by x which may or may not be a root. result is 1 iff x is a root. k is ignored. */
@@ -125,7 +126,7 @@ static Z jtlaguerre(J jt,I m,Z*a,Z x){D ax,e;I i,j;Z b,c,d,dx,g,g2,h,p,q,s,sq,y,
   if(zmag(zminus(x,y))<=EPS*zmag(x))R x;  // if we didn't move much, call it converged.  We hope it's a root.
   // This algorithm is subject to hitting limit cycles (_48 1 0 0 0 1 is an example)
   // To prevent that, every so often we make a partial move
-  if(!--kicktimer){kicktimer=CSZ1; x=zplus(x,ztymes(dx,zrj0(cyclefracs[(i>>3)&8])));}
+  if(!--kicktimer){kicktimer=CSZ1; x=zplus(x,ztymes(dx,zrj0(cyclefracs[(i+(i>>2))&7])));} //since CSZ1 shares no factors with 8, i&7 will cycle through all elements of cyclefracs, howbeit not in order
 }}   // Press et al., "Numerical Recipes in C" with additions from 2d edition
 
 static Q jtmultiple(J jt,D x,Q m){A y;Q q1,q2,q1r2;
@@ -214,7 +215,7 @@ static A jtrfcz(J jt,I m,A w){A x,y,z;B bb=0,real;D c,d;I i;Z r,*xv,*yv,*zv;
    // If we failed on an iteration, perturb the highest coefficient a little bit and see if we can solve that instead.
    if(real){RZ(x1=cvt(FL,vec(CMPX,1+m,xv))); u=  DAV(x1)+m-1;      if(*u)*u*=1+1e-12; else *u=1e-12;}
    else    {RZ(x1=       vec(CMPX,1+m,xv) ); u=&(ZAV(x1)+m-1)->re; if(*u)*u*=1+1e-12; else *u=1e-12;}
-   RZ(z=rfcz(m,x1)); zv=ZAV(z);
+   STACKCHKOFL RZ(z=rfcz(m,x1)); zv=ZAV(z);
    DO(m, zv[i]=newt(m,xv,zv[i],10L););
  }}
  if(real){B b=1; DO(m, if(zv[i].im){b=0; break;}); if(b)z=cvt(FL,z);}
@@ -226,27 +227,28 @@ static F1(jtrfc){A r,w1;I m=0,n,t;
  n=AN(w); t=AT(w);  // n=#coeffs, t=type
  if(n){
   ASSERT(ISDENSETYPE(t,NUMERIC),EVDOMAIN);  // coeffs must be dense numeric
-  RZ(r=jico2(ne(w,num(0)),num(1))); m=AV(r)[0]; m=(m==n)?0:m;  // r=block for index of last nonzero; m=degree of polynomial (but 0 if all zeros)
+  ASSERT(!(t&QP),EVNONCE);  // No qp support yet
+  RZ(r=jico2(ne(w,num(0)),num(1))); RZ(r=mkwris(r)) m=AV(r)[0]; m=(m==n)?0:m;  // r=block for index of last nonzero; m=degree of polynomial (but 0 if all zeros)
   ASSERT(m||equ(num(0),head(w)),EVDOMAIN);  // error if unsolvable constant polynomial
  }
  // switch based on degree of polynomial
  switch(m){
   case 1:  r=ravel(negate(aslash(CDIV,take(num(2),w)))); break;  // linear - return solution, whatever its type
-  case 0:  R link(num(0),mtv);  // degree 0 - return 0;''
+  case 0:  R jlink(num(0),mtv);  // degree 0 - return 0;''
   default: if(t&CMPX)r=rfcz(m,w);  // higher order - if complex, go straight to complex solutions
            else{RZ(rfcq(m,w,&r,&w1)); if(m>AN(r))r=over(r,rfcz(m-AN(r),w1));} // otherwise, find rational solutions in r, and residual polynomial in w1.
             // if there are residual (complex) solutions, go find them
  }
  // Return result, which is leading nonzero coeff;roots
- R link(from(sc(m),w),rsort(r));
+ R jlink(from(sc(m),w),rsort(r));
 }
 
 // entry point for p. y
-F1(jtpoly1){A c,e,x;
- F1RANK(1L,jtpoly1,DUMMYSELF);
+DF1(jtpoly1){A c,e,x;
+ F1RANK(1L,jtpoly1,self);
  // If y is not boxed, it's a list of coefficients.  Get the roots
  if((-AN(w)&SGNIF(AT(w),BOXX))>=0)R rfc(w);
- x=AAV(w)[0];
+ x=C(AAV(w)[0]);
  // If there is more than one box, or the first box has rank <= 1, it's scale;roots form - go handle it
  if(((AN(w)-2)&(1-AR(x)))>=0)R cfr(w);
  // Must be exponent form: a single box containing a table with 2-atom rows
@@ -265,7 +267,7 @@ static A jtmnomx(J jt,I m,A w){A s,*wv,x,z=w,*zv;I i,n,r;
   n=AN(w); wv=AAV(w);  RZ(s=sc(m));
   GATV(z,BOX,n,AR(w),AS(w)); zv=AAV(z);
   for(i=0;i<n;++i){
-   x=wv[i]; r=AR(x); 
+   x=C(wv[i]); r=AR(x); 
    ASSERT(1>=r,EVRANK); 
    ASSERT(!r||m==AN(x),EVLENGTH); 
    zv[i]=incorp(m<=1?x:reshape(s,x));
@@ -282,8 +284,8 @@ static F2(jtpoly2a){A c,e,x;I m;D rkblk[16];
  ASSERT(AT(a)&NUMERIC,EVDOMAIN);
  ASSERT(2==AR(a),EVRANK);
  ASSERT(0<m,EVLENGTH);
- RZ(IRS1(a,0L,1L,jthead,c  ) ); 
- RZ(e=cant1(IRS1(a,0L,1L,jtbehead,e)));
+ RZ(IRS1(a,0L,1L,jthead,c  ) );   // c={."1 a
+ RZ(e=cant1(IRS1(a,0L,1L,jtbehead,e)));  // e =. }."1 a
  RZ(x=mnomx(m,w));
  if(1==m){A er; RZ(er=ravel(e)); R pdt(ATOMIC2(jt,x,er,rkblk,0L,2L,CEXP),c);}else{A z; R pdt(df2(z,x,e,dot(slash(ds(CSTAR)),ds(CEXP))),c);}
 }    /* multinomial: (<c,.e0,.e1,.e2) p. <x0,x1,x2, left argument opened */
@@ -297,19 +299,19 @@ DF2(jtpoly2){F2PREFIP;A c,za;I b;D*ad,d,p,*x,u,*z;I an,at,j,t,n,wt;Z*az,e,q,*wz,
  an=AN(a); at=AT(a); b=BOX&at;   // b if mplr/roots form or multinomial; otherwise coeff
  n=AN(w); wt=AT(w);
  ASSERT(!ISSPARSE(at),EVNONCE);  // sparse polynomial not supported
- ASSERT((-an&-(at&NUMERIC+BOX))<0,EVDOMAIN);  // error if degree<0 
+ ASSERT((-an&((at&NUMERIC+BOX)-1))>=0,EVDOMAIN);  // error if nonnumeric unless degree __ 
  // if we are applying f@:p, revert if not sum-of-powers form
  I postfn=FAV(self)->flag&VFATOPPOLY;  //  index of function to apply after p. 0=none 1=^
- if(b){A*av=AAV(a); 
+ if(b){A*av=AAV(a); // mplr/roots or multinomial
   if(postfn)R jtupon2cell(jt,a,w,self);  // revert if ^@:p.   must do before a is modified
   ASSERT(2>=an,EVLENGTH);
-  c=1==an?num(1):av[0]; a=av[1!=an]; // c=mplr, a=roots
-  if((an^1)+(AR(a)^2)==0)R poly2a(a,w);  // if coeff is 1 and exponent-list is a table, go do multinomial
+  c=1==an?num(1):C(av[0]); a=C(av[1!=an]); // c=mplr, a=roots
+  if((an^1)+(AR(a)^2)==0)R poly2a(a,w);  // if coeff is 1 and exponent-list is a table, go do multinomial and return
   an=AN(a); at=AT(a);
   ASSERT(NUMERIC&(at|AT(c)),EVDOMAIN);
   ASSERT(!AR(c),EVRANK);
   ASSERT(1>=AR(a),EVRANK); if(!AR(a))RZ(a=ravel(a));  // treat atomic a as list
- }
+ }  // if mplr/roots form, a has been replace by the roots and c is the coeff
  t=maxtyped(at,wt); if(b)t=maxtyped(t,AT(c)); if(!(t&XNUM+RAT))t=maxtyped(t,FL);  // promote B01/INT to FL
  if(TYPESNE(t,at))RZ(a=cvt(t,a)); ad=DAV(a); az=ZAV(a);
  if(TYPESNE(t,wt)){RZ(w=cvt(t,w)); jtinplace=(J)(intptr_t)((I)jtinplace|JTINPLACEW);} x=DAV(w); wz=ZAV(w);
@@ -326,21 +328,22 @@ DF2(jtpoly2){F2PREFIP;A c,za;I b;D*ad,d,p,*x,u,*z;I an,at,j,t,n,wt;Z*az,e,q,*wz,
  }
  if((-postfn&((-b)|(1-(an^2))|((t&FL)-1)))<0)R jtupon2cell(jt,a,w,self);  // revert if ^@:p. but not powers (postfn not 0, and a boxed or degree not 1 or 2 or type not FL).  an is final here
  // if we are going to use the fast loop here, allocate space for it.  Inplace if possible
- b=b?3:b;
- if(likely(((j-1)&SGNIFDENSE(t)&((t&XNUM+RAT)-1))<0)){  // j==0 & not sparse and not XNUM or RAT
-  if(ASGNINPLACESGN(SGNIF((I)jtinplace,JTINPLACEWX),w))za=w;else{GA(za,t,AN(w),AR(w),AS(w));}
+ b=b?3:b;  // now b=3 means BOX i. e. mplr/roots form
+ if(likely(((j-1)&SGNIFDENSE(t)&-(t&FL+CMPX))<0)){  // j==0 (=no inf) & not sparse and FL/CMPX
+  if(ASGNINPLACESGN(SGNIF(jtinplace,JTINPLACEWX),w))za=w;else{GA(za,t,AN(w),AR(w),AS(w));}
   if(n==0){RETF(za);}  // don't run the copy loop if 0 atoms in result
   z=DAV(za); zz=ZAV(za);
   b+=(t>>FLX)&3; // must be FL/CMPX, add 1 or 2
  }else{if(postfn)R jtupon2cell(jt,a,w,self);  // revert if there is a postfn, and we are using the eval path.  type must be FL
  }
- switch(b){
+ switch(b){  // 1=FL, coeffs 2=CMPX, coeffs 0=other, coeffs 4=FL, mplr/roots  5=CMPX, mplr/roots 3=other, mplr/roots
  // coeffs: d/e are not set
  case 1: NAN0;  // FL
-#if (C_AVX&&SY_64) || EMU_AVX
+#if C_AVX2 || EMU_AVX2
 // loop for atomic parallel ops.  // fixed: n is #atoms, x->input, z->result, u=input atom4 and result
-  switch(an){
-   
+  switch(an){  // switch on degree of polynomial
+
+  case 0: ad=&zeroZ.re;  // fall through to propagate the 0
   case 1: mvc(n*sizeof(D),z,sizeof(D),ad); break;
   case 2:
 #if SLEEF
@@ -416,30 +419,32 @@ DF2(jtpoly2){F2PREFIP;A c,za;I b;D*ad,d,p,*x,u,*z;I an,at,j,t,n,wt;Z*az,e,q,*wz,
    {D c0=ad[0],c1=ad[1],c2=ad[2]; DQ(n, u=*x++; *z++=c0+u*(c1+u*c2););} break; 
   case 4:
    {D c0=ad[0],c1=ad[1],c2=ad[2],c3=ad[3]; DQ(n, u=*x++; *z++=c0+u*(c1+u*(c2+u*c3)););} break;
+  case 0: ad=&zeroZ.re;  // fall through to propagate the 0
+  case 1: mvc(n*sizeof(D),z,sizeof(D),ad); break;
   default:
    DO(n, p=ad[an-1]; u=*x++; DQ(an-1,p=ad[i]+u*p;); *z++=p;); break;
   }
 #endif
   NAN1; break;  // Horner's rule.  First multiply is never 0*_
- case 0: R df2(za,w,a,eval("(^/i.@#) +/ .* ]"));  // XNUM/RAT/SPARSE
- case 2: NAN0; DQ(n, q=zeroZ; y=*wz++; j=an; DQ(an,q=zplus(az[--j],ztymes(y,q));); *zz++=q;); NAN1; break;  // CMPX
+ case 0: R df2(za,w,a,eval("(^/i.@#) +/ .* ]"));  // XNUM/RAT/SPARSE/QP/INT2/INT4 coeffs
+ case 2: NAN0; DQ(n, q=zeroZ; y=*wz++; j=an; DQ(an,q=zplus(az[--j],ztymes(y,q));); *zz++=q;); NAN1; break;  // CMPX coeffs
  // mult/roots: d/e are set
- case 3: R tymes(c,df2(za,negate(a),w,eval("*/@(+/)")));
- case 4: NAN0; DO(n, p=d; u=*x++; DO(an,p*=u-ad[i];); *z++=p;); NAN1;                  break;
- case 5: NAN0; DO(n, q=e; y=*wz++; DO(an,q=ztymes(q,zminus(y,az[i]));); *zz++=q;); NAN1; break;
+ case 3: R tymes(c,df2(za,negate(a),w,eval("*/@(+/)")));  // XNUM/RAT/SPARSE/QP/INT2/INT4 mplr/roots
+ case 4: NAN0; DO(n, p=d; u=*x++; DO(an,p*=u-ad[i];); *z++=p;); NAN1; break;  // FL mplr/roots
+ case 5: NAN0; DO(n, q=e; y=*wz++; DO(an,q=ztymes(q,zminus(y,az[i]));); *zz++=q;); NAN1; break;   // CMPX mplr/roots
  }
  RETF(za);
 }    /* a p."r w */
 
 
-F1(jtpderiv1){
- F1RANK(1,jtpderiv1,DUMMYSELF);
+DF1(jtpderiv1){
+ F1RANK(1,jtpderiv1,self);
  if(AN(w)&&!(NUMERIC&AT(w)))RZ(w=poly1(w));
  R 1>=AN(w) ? apv(1L,0L,0L) : tymes(behead(w),apv(AN(w)-1,1L,1L));
 }    /* p.. w */
 
-F2(jtpderiv2){
- F2RANK(0,1,jtpderiv2,DUMMYSELF);
+DF2(jtpderiv2){
+ F2RANK(0,1,jtpderiv2,self);
  if(!(NUMERIC&AT(w)))RZ(w=poly1(w));
  ASSERT(NUMERIC&AT(a),EVDOMAIN);
  R over(a,divideW(w,apv(AN(w),1L,1L)));

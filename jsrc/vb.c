@@ -1,5 +1,5 @@
-/* Copyright 1990-2011, Jsoftware Inc.  All rights reserved. */
-/* License in license.txt.                                   */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
+/* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Verbs: Boolean-Valued                                                   */
 
@@ -27,7 +27,7 @@ static F2(jtebarmat){A ya,yw,z;B b,*zv;C*au,*av,*u,*v,*v0,*wu,*wv;I*as,c,i,k,m,n
  sj=as[1]; n=1+ws[1]-sj;
  t=AT(w); k=bpnoun(t); c=ws[1]; r=k*c; s=k*sj;
  GATVR(z,B01,AN(w),2,ws); zv=BAV(z); mvc(AN(z),zv,1,MEMSET00);
- if(t&B01+LIT+C2T+C4T+INT+SBT||1.0==jt->cct&&t&FL+CMPX)
+ if(t&B01+LIT+C2T+C4T+INT+INT2+INT4+SBT||1.0==jt->cct&&t&FL+CMPX+QP)
   for(i=0;i<m;++i){
    DO(n, u=av; b=1; DO(si,                         if(memcmpne(u,v,s)){b=0; break;} u+=s; v+=r;); v=v0+=k; zv[i]=b;);
    zv+=c; v=v0=wv+=r;
@@ -42,14 +42,14 @@ static F2(jtebarmat){A ya,yw,z;B b,*zv;C*au,*av,*u,*v,*v0,*wu,*wv;I*as,c,i,k,m,n
 }    /* E. on matrix arguments */
 
 static F2(jtebarvec){A y,z;B*zv;C*av,*wv,*yv;I an,k,n,s,t,wn;
- ARGCHK2(a,w);
+ ARGCHK2(a,w); a=C(a); w=C(w);
  an=AN(a); av=CAV(a); 
  wn=AN(w); wv=CAV(w); n=1+wn-an; 
  t=AT(w); k=bpnoun(t); s=k*an;
  GATV0(z,B01,wn,AR(w)?1:0); zv=BAV(z); 
  if((-an&(an-wn))<0)mvc(wn-n,zv+n,1,MEMSET00); else mvc(wn,zv,1,MEMSET00);
- if(t&B01+LIT+C2T+C4T+INT+SBT||1.0==jt->cct&&t&FL+CMPX)DO(n, zv[i]=!memcmpne(av,wv,s); wv+=k;)
- else{GA0(y,t,an,AR(a)); yv=CAV(y); DO(n, MC(yv,wv,s); zv[i]=equ(a,y); wv+=k;);}
+ if(t&B01+LIT+C2T+C4T+INT+INT2+INT4+SBT||1.0==jt->cct&&t&FL+CMPX+QP)DO(n, zv[i]=!memcmpne(av,wv,s); wv+=k;)
+ else{GA0(y,t,an,AR(a)); yv=CAV(y); DO(n, MC(yv,wv,s); zv[i]=equ(a,C(y)); wv+=k;);}
  RETF(z);
 }    /* E. on vector arguments */
 

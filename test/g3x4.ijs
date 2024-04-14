@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g3x4.ijs'
+prolog './g3x4.ijs'
 NB. 3!:4 ----------------------------------------------------------------
 
 ic =: 3!:4
@@ -44,10 +44,10 @@ g3 imin,0,imax
 
  '2&(3!:4)' -: _2&(3!:4) b. _1 
 '_2&(3!:4)' -:  2&(3!:4) b. _1 
- '01&(3!:4)' -: _1&(3!:4) b. _1 
+ '1&(3!:4)' -: _1&(3!:4) b. _1 
 '_1&(3!:4)' -:  1&(3!:4) b. _1 
 
-'domain error' -:     ic etx 3 4 5
+'valence error' -:     ic etx 3 4 5
 'domain error' -: '1' ic etx 3 4 5
 'domain error' -: (u:'1') ic etx 3 4 5
 'domain error' -: (10&u:'1') ic etx 3 4 5
@@ -123,4 +123,7 @@ g3 imin,0,imax
 
 4!:55 ;:'g1 g2 g3 ic x'
 
+
+
+epilog''
 

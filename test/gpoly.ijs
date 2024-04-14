@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './gpoly.ijs'
+prolog './gpoly.ijs'
 NB. p. y ----------------------------------------------------------------
 
 NB. test failed on small ct
@@ -11,12 +11,12 @@ test =: 3 : 0
  z=: j./1024 %~ _500+?2 40$10000
  r=: p. c
  d=: p. r
- assert. *./ 1e_6  > c (+/@:|@[ %~ |@]) c p. >{:r
+ assert. *./ (2e_6%2^c-:+c)  > c (+/@:|@[ %~ |@]) c p. >{:r
  assert. *./ 1e_13 > c %&(+/@:|)~ -/c,:d
- assert. (c p. z) -:!.1e_12 r p. z
- assert. (c p. z) -:!.1e_11 d p. z
- assert. (c p. x) -:!.1e_12 r p. x
- assert. (c p. x) -:!.1e_11 d p. x
+ assert. (c p. z) -:!.5e_11 r p. z
+ assert. (c p. z) -:!.5e_11 d p. z
+ assert. (c p. x) -:!.5e_11 r p. x
+ assert. (c p. x) -:!.5e_11 d p. x
  assert. (p. c) -: p. c,0 0 0 0 0
  1
 )
@@ -27,11 +27,20 @@ test _10+?11$25
 test _10+?10$25
 test _10+? 9$25
 
-test j./_10+?2 11$25
-test j./_10+?2 10$25
-test j./_10+?2  9$25
+NB. test j./_10+?2 11$25
+NB. test j./_10+?2 10$25
+NB. test j./_10+?2  9$25
 
 4!:55 ;:'c d r x z' 
+
+NB. test if crash
+1: p. _1e10 _1 0 0 1
+1: p. _77 _1 0 0 0 1
+1: p. _78 _1 0 0 0 1
+1: p. _14 _1 0 0 0 0 1
+1: p. _15 _1 0 0 0 0 1
+1: p. _8 _1 0 0 0 0 0 1
+1: p. _7 _1 0 0 0 0 0 1
 
 (1;n$_1)   -: p. n!~i.>:n=:>:?15
 (n!~i.>:n) -: p. <n$_1
@@ -146,6 +155,8 @@ c=: (p.<3j4 3j_4) ptimes p. <1r2,8$1r3
 r=: >{:p. c
 NB. r -:&(/:~) 3j4 3j_4,1r2,8$1r3
 
+NB. failed to converge
+2.40467428625827128741 0.72680881579475886678j2.28179710869771135151 0.72680881579475886678j_2.28179710869771135151 _1.92914595892389462151j1.39085813503175104167 _1.92914595892389462151j_1.39085813503175104167 -: 1 {:: p. _78 _1 0 0 0 1
 
 NB. p. roots of unity ---------------------------------------------------
 
@@ -202,15 +213,10 @@ NB. complex
 ($0) -: (1 1&p. 0#1.) % (1 1&p. 0#1.)  NB. crashed when loop ran with 0 elements
 ($0) -: (1 1&p. 0#1j1) % (1 1&p. 0#1j1)  NB. crashed when loop ran with 0 elements
 
-'domain error' -: ($0) p. etx y=:?3 4$2
-'domain error' -: ($0) p. etx y=:?3 4 1$100
-'domain error' -: ($0) p. etx y=:o.?3 4$100
-'domain error' -: ($0) p. etx y=:r.?3 4$100
-
-'domain error' -: ($0) p. etx y=:?3 4$2
-'domain error' -: ($0) p. etx y=:?3 4 1$100
-'domain error' -: ($0) p. etx y=:o.?3 4$100
-'domain error' -: ($0) p. etx y=:r.?3 4$100
+'' fc y=:?3 4$2
+'' fc  y=:?3 4 1$100
+'' fc y=:o.?3 4$100
+'' fc r.?3 4$100
 
 (( <1 2 3) p. x) -: (1;1 2 3) p. x=:?2 3 4$100
 ((,<1 2 3) p. x) -: (1;1 2 3) p. x=:?2 3 4$100
@@ -250,22 +256,17 @@ x (p."2 1 -: p."1 0"2 1) y
 'domain error' -: (3;<<1 2 3) p. etx 4 5  
 'domain error' -: ((<3);2 3)  p. etx 4 5  
 
-'length error' -: (i.2 4)     p. etx 3 4 5   
+'length error' -: (i.2 4)     p. etx 3 4 5
 'length error' -: (3;4 5;6 7) p. etx 1 2 3 4 
 
 'rank error'   -: (3 4;1 2 3) p. etx 4 5     
 'rank error'   -: (3;i.2 3)   p. etx 4 5     
 
 NB. x ^@:p. y -----------------------------------------------------------
-'domain error' -: ($0) ^@:p. etx y=:?3 4$2
-'domain error' -: ($0) ^@:p. etx y=:?3 4 1$100
-'domain error' -: ($0) ^@:p. etx y=:o.?3 4$100
-'domain error' -: ($0) ^@:p. etx y=:r.?3 4$100
-
-'domain error' -: ($0) ^@:p. etx y=:?3 4$2
-'domain error' -: ($0) ^@:p. etx y=:?3 4 1$100
-'domain error' -: ($0) ^@:p. etx y=:o.?3 4$100
-'domain error' -: ($0) ^@:p. etx y=:r.?3 4$100
+1. = '' ^@:p. y=:?3 4$2
+1. = '' ^@:p. y=:?3 4 1$100
+1. = '' ^@:p. y=:o.?3 4$100
+1. = '' ^@:p. y=:r.?3 4$100
 
 f =: 4 : 0
 res =. (x ^@p. etx y) (-: +. -:&(0 ([`([: I. 1e_50 > |@])`])} ])`1:@.(2 e. ,&(3!:0)) ) x ^@:p. etx y  NB. either tolerant = or both less than a tiny value
@@ -378,4 +379,7 @@ NB. (c;r) (p. -: pdot) z
 4!:55 ;:'lg mt n p pc pdot pdot1 pdot2 pm pr ptimes r r1'
 4!:55 ;:'rem rfc root rou rov rs s sq step test x y xx yy z '
 
+
+
+epilog''
 

@@ -1,4 +1,4 @@
-/* Copyright 1990-2005, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Xenos: file directory, attributes, & permission                         */
@@ -7,6 +7,8 @@
 #include <windows.h>
 #include <winbase.h>
 #else
+#define _LARGEFILE64_SOURCE 
+#include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 #endif
@@ -122,9 +124,11 @@ F1(jtfullname){C dirpath[_MAX_PATH];
 
 #if !SY_WINCE
 
-F1(jtjfperm1){A y,fn,z;C *s;F f;int x; US *p,*q;
- F1RANK(0,jtjfperm1,DUMMYSELF);
- RE(f=stdf(w)); if(f){RZ(y=fname(sc((I)f)))} else ASSERT(y=AAV(w)[0],EVFNUM)
+// 1!:7 permissions
+DF1(jtjfperm1){A y,fn,z;C *s;F f;int x; US *p,*q;
+ ASSERT(!JT(jt,seclev),EVSECURE)
+ F1RANK(0,jtjfperm1,self);
+ RE(f=stdf(w)); if(f){ASSERT((y=fname(sc((I)f)))!=0,EVFNUM) RZ(y=str0(y))} else ASSERT(y=str0(vslit(C(AAV(w)[0]))),EVFNUM)
  RZ(fn=toutf16x(y)); USAV(fn)[AN(fn)]=0;  // install termination
  p=USAV(fn); q=p+AN(fn)-3;
  GAT0(z,LIT,3,1); s=CAV(z);
@@ -135,13 +139,14 @@ F1(jtjfperm1){A y,fn,z;C *s;F f;int x; US *p,*q;
  R z;
 }
 
-F2(jtjfperm2){A y,fn;C*s;F f;int x=0;US *p;
- F2RANK(1,0,jtjfperm2,DUMMYSELF);
- RE(f=stdf(w)); if(f){RZ(y=fname(sc((I)f)))} else ASSERT(y=AAV(w)[0],EVFNUM)
+DF2(jtjfperm2){A y,fn;C*s;F f;int x=0;US *p;
+ ASSERT(!JT(jt,seclev),EVSECURE)
+ F2RANK(1,0,jtjfperm2,self);
+ RE(f=stdf(w)); if(f){RZ(y=fname(sc((I)f)))} else ASSERT(y=C(AAV(w)[0]),EVFNUM)
  RZ(a=vslit(a)); ASSERT(3==AN(a),EVLENGTH); 
  RZ(fn=toutf16x(y)); USAV(fn)[AN(fn)]=0;  // install termination
  s=CAV(y);
- p=USAV(fn);;
+ p=USAV(fn);
  s=CAV(a);
  if('r'==s[0]) x|=S_IREAD;  else ASSERT('-'==s[0],EVDOMAIN);
  if('w'==s[1]) x|=S_IWRITE; else ASSERT('-'==s[1],EVDOMAIN);
@@ -151,9 +156,10 @@ F2(jtjfperm2){A y,fn;C*s;F f;int x=0;US *p;
 
 #else /* SY_WINCE: */
 
-F1(jtjfperm1){A y,z;C*p,*q,*s;F f; DWORD attr;
- F1RANK(0,jtjfperm1,DUMMYSELF);
- RE(f=stdf(w)); if(f){RZ(y=fname(sc((I)f)))} else ASSERT(y=AAV(w)[0],EVFNUM)
+DF1(jtjfperm1){A y,z;C*p,*q,*s;F f; DWORD attr;
+ ASSERT(!JT(jt,seclev),EVSECURE)
+ F1RANK(0,jtjfperm1,self);
+ RE(f=stdf(w)); if(f){ASSERT((y=fname(sc((I)f)))!=0,EVFNUM) RZ(y=str0(y))} else ASSERT(y=str0(vslit(C(AAV(w)[0]))),EVFNUM)
  p=CAV(y); q=p+AN(y)-3;
  GAT0(z,LIT,3,1); s=CAV(z);
  if((attr=GetFileAttributes(tounibuf(p)))==0xFFFFFFFF)R jerrno();
@@ -209,8 +215,9 @@ static A jtdir1(J jt,LPWIN32_FIND_DATAW f,C* fn) {A z,*zv;C rwx[3],*s,*t;I n,ts[
  R z;
 }
 
+// 1!:0
 F1(jtjdir){PROLOG(0102);A z,fn,*zv;I j=0,n=32;HANDLE fh; WIN32_FIND_DATAW f; C fnbuffer[10000]; C* name;
- ARGCHK1(w);
+ ARGCHK1(w); ASSERT(!JT(jt,seclev),EVSECURE)
  RZ(w=vslit(!AR(w)&&BOX&AT(w)?ope(w):w));
  RZ(fn=jttoutf16x(jt,w)); USAV(fn)[AN(fn)]=0;
  fh=FindFirstFileW(USAV(fn),&f);
@@ -231,19 +238,21 @@ F1(jtjdir){PROLOG(0102);A z,fn,*zv;I j=0,n=32;HANDLE fh; WIN32_FIND_DATAW f; C f
  EPILOG(z);
 }
 
-F1(jtjfatt1){A y,fn;F f;U x;
- F1RANK(0,jtjfatt1,DUMMYSELF);
- RE(f=stdf(w)); if(f){RZ(y=fname(sc((I)f)))} else ASSERT(y=AAV(w)[0],EVFNUM)
+DF1(jtjfatt1){A y,fn;F f;U x;
+ ASSERT(!JT(jt,seclev),EVSECURE)
+ F1RANK(0,jtjfatt1,self);
+ RE(f=stdf(w)); if(f){RZ(y=fname(sc((I)f)))} else ASSERT(y=C(AAV(w)[0]),EVFNUM)
  RZ(fn=toutf16x(y)); USAV(fn)[AN(fn)]=0;  // install termination
  x=GetFileAttributesW(USAV(fn));
  if(INVALID_FILE_ATTRIBUTES!=x) R attv(x);
  jsignal(EVFNAME); R 0; 
 }
 
-F2(jtjfatt2){A y,fn;F f;U x;
- F2RANK(1,0,jtjfatt2,DUMMYSELF);
+DF2(jtjfatt2){A y,fn;F f;U x;
+ ASSERT(!JT(jt,seclev),EVSECURE)
+ F2RANK(1,0,jtjfatt2,self);
  RE(x=attu(a));
- RE(f=stdf(w)); if(f){RZ(y=fname(sc((I)f)))} else ASSERT(y=vslit(AAV(w)[0]),EVFNUM)
+ RE(f=stdf(w)); if(f){RZ(y=fname(sc((I)f)))} else ASSERT(y=vslit(C(AAV(w)[0])),EVFNUM)
  RZ(fn=toutf16x(y)); USAV(fn)[AN(fn)]=0;  // install termination
  if(SetFileAttributesW(USAV(fn), x)) R num(1);
  jsignal(EVFNAME); R 0;
@@ -295,24 +304,32 @@ static C*modebuf(mode_t m,C* b){C c;I t=m;
  R b;
 }
 
+#if defined(ANDROID) || defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
+typedef struct stat struct_stat64;
+#define stat64 stat
+#define readdir64 readdir
+#define dirent64 dirent
+#else
+typedef struct stat64 struct_stat64;
+#endif
 
-static int ismatch(J jt,C*pat,C*name,struct stat *dirstatbuf,C *diratts, C *dirmode,C *dirrwx,C *dirnamebuf,C *dirbase){ 
+static int ismatch(J jt,C*pat,C*name,struct_stat64 *dirstatbuf,C *diratts, C *dirmode,C *dirrwx,C *dirnamebuf,C *dirbase){ 
 #if !SY_64 && defined(ANDROID)
 // Android issue
 // Long Long (64 bit) fields are not 8 bytes aligned
  UC* raw_stat=(UC*)dirstatbuf;
- raw_stat[sizeof(struct stat)-1]=98;
- raw_stat[sizeof(struct stat)-2]=76;
- raw_stat[sizeof(struct stat)-3]=54;
+ raw_stat[sizeof(struct_stat64)-1]=98;
+ raw_stat[sizeof(struct_stat64)-2]=76;
+ raw_stat[sizeof(struct_stat64)-3]=54;
 #endif
- strcpy(dirbase,name); if(stat(dirnamebuf,dirstatbuf))R 0;
+ strcpy(diratts,"------");
+ strcpy(dirbase,name); if(stat64(dirnamebuf,dirstatbuf))R 0;
  if('.'!=*pat && ((!strcmp(name,"."))||(!strcmp(name,".."))))R 0;
  if(fnmatch(pat,name,0)) R 0;
 /* Set up dirrwx, diratts, and dirmode for this file */
  dirrwx[0]=access(dirnamebuf,R_OK)?'-':'r';
  dirrwx[1]=access(dirnamebuf,W_OK)?'-':'w';
  dirrwx[2]=access(dirnamebuf,X_OK)?'-':'x';
- strcpy(diratts,"------");
  diratts[0]=(dirrwx[0]=='r'&&dirrwx[1]=='-')?'r':'-';
  diratts[1]=('.'==name[0])?'h':'-';
  modebuf(dirstatbuf[0].st_mode,dirmode);
@@ -320,7 +337,7 @@ static int ismatch(J jt,C*pat,C*name,struct stat *dirstatbuf,C *diratts, C *dirm
  R 1;
 }
 
-static A jtdir1(J jt,struct dirent*f,struct stat *dirstatbuf,C *diratts, C *dirmode,C *dirrwx){A z,*zv;C*s,att[16];I n,ts[6],i,m,sz;S x;struct tm tmr,*tm=&tmr;
+static A jtdir1(J jt,struct dirent64*f,struct_stat64 *dirstatbuf,C *diratts, C *dirmode,C *dirrwx){A z,*zv;C*s,att[16];I n,ts[6],i,m,sz;S x;struct tm tmr,*tm=&tmr;
  tm=localtime_r(&dirstatbuf[0].st_mtime,tm);
  ts[0]=1900+tm->tm_year; ts[1]=1+tm->tm_mon; ts[2]=tm->tm_mday;
  ts[3]=tm->tm_hour; ts[4]=tm->tm_min; ts[5]=tm->tm_sec;
@@ -331,9 +348,9 @@ static A jtdir1(J jt,struct dirent*f,struct stat *dirstatbuf,C *diratts, C *dirm
  sz=dirstatbuf[0].st_size;
 #if !SY_64 && defined(ANDROID)
  UC* raw_stat=(UC*)dirstatbuf;
- if(raw_stat[sizeof(struct stat)-1]==98 &&
-    raw_stat[sizeof(struct stat)-2]==76 &&
-    raw_stat[sizeof(struct stat)-3]==54){
+ if(raw_stat[sizeof(struct_stat64)-1]==98 &&
+    raw_stat[sizeof(struct_stat64)-2]==76 &&
+    raw_stat[sizeof(struct_stat64)-3]==54){
     // Wrong stat size. Long Long (64bit) fields are not 8 bytes aligned.
      uint* raw_stat32 = (uint*)dirstatbuf;
      sz=(I)(size_t)raw_stat32[11]; // st_size from the packed (without alignment) structure
@@ -347,11 +364,12 @@ static A jtdir1(J jt,struct dirent*f,struct stat *dirstatbuf,C *diratts, C *dirm
  R z;
 }
 
-F1(jtjdir){PROLOG(0103);A*v,z,*zv;C*dir,*pat,*s,*x;I j=0,n=32;DIR*DP;struct dirent *f;
+// 1!:0
+F1(jtjdir){PROLOG(0103);A*v,z,*zv;C*dir,*pat,*s,*x;I j=0,n=32;DIR*DP;struct dirent64 *f;
  C diratts[7]; C dirmode[11];  C dirrwx[3];
- struct stat dirstatbuf[3];  // for some reason there were 2 dummy blocks reserved after the buffer for 32-bit Linux.  Preserve that
+ struct_stat64 dirstatbuf[3];  // for some reason there were 2 dummy blocks reserved after the buffer for 32-bit Linux.  Preserve that
  C dirnamebuf[NPATH];  // workarea
- ARGCHK1(w);
+ ARGCHK1(w); ASSERT(!JT(jt,seclev),EVSECURE)
  RZ(w=str0(vslit(!AR(w)&&BOX&AT(w)?ope(w):w)));
  s=CAV(w);
  if(x=strrchr(s,'/')){dir=s==x?(C*)"/":s; pat=x+1; *x=0;}else{dir="."; pat=s;}
@@ -360,14 +378,14 @@ F1(jtjdir){PROLOG(0103);A*v,z,*zv;C*dir,*pat,*s,*x;I j=0,n=32;DIR*DP;struct dire
   * SYSV and BSD have different return types for sprintf(),
   * so we use less efficient but portable code.
   */
- sprintf(dirnamebuf,"%s/",dir); C *dirbase=dirnamebuf+strlen(dirnamebuf); f=readdir(DP);
+ sprintf(dirnamebuf,"%s/",dir); C *dirbase=dirnamebuf+strlen(dirnamebuf); f=readdir64(DP);
  GATV0(z,BOX,n,1); zv=AAV(z);
  while(f){
   if(ismatch(jt,pat,f->d_name,dirstatbuf,diratts,dirmode,dirrwx,dirnamebuf,dirbase)){
    if(j==n){RZ(z=ext(0,z)); n=AN(z); zv=AAV(z);}
    RZ(zv[j++]=incorp(jtdir1(jt,f,dirstatbuf,diratts,dirmode,dirrwx)));
   }
-  f=readdir(DP);
+  f=readdir64(DP);
  }
  closedir(DP);
  z=j?ope(j<n?vec(BOX,j,zv):z):reshape(v2(0L,6L),ds(CACE));
@@ -376,15 +394,16 @@ F1(jtjdir){PROLOG(0103);A*v,z,*zv;C*dir,*pat,*s,*x;I j=0,n=32;DIR*DP;struct dire
 
 
 
-F1(jtjfatt1){ASSERT(0,EVNONCE);}
-F2(jtjfatt2){ASSERT(0,EVNONCE);}
+DF1(jtjfatt1){ASSERT(0,EVNONCE);}
+DF2(jtjfatt2){ASSERT(0,EVNONCE);}
 
 
-F1(jtjfperm1){A y;F f;C b[11];
- struct stat dirstatbuf[3];
- F1RANK(0,jtjfperm1,DUMMYSELF);
- RE(f=stdf(w)); if(f){RZ(y=fname(sc((I)f)));y=str0(y);} else ASSERT(y=str0(vslit(AAV(w)[0])),EVFNUM)
- if(0!=stat(CAV(y),dirstatbuf))R jerrno();
+DF1(jtjfperm1){A y;F f;C b[11];
+ ASSERT(!JT(jt,seclev),EVSECURE)
+ struct_stat64 dirstatbuf[3];
+ F1RANK(0,jtjfperm1,self);
+ RE(f=stdf(w)); if(f){ASSERT((y=fname(sc((I)f)))!=0,EVFNUM) RZ(y=str0(y))} else ASSERT(y=str0(vslit(C(AAV(w)[0]))),EVFNUM)
+ if(0!=stat64(CAV(y),dirstatbuf))R jerrno();
  R vec(LIT,9L,1+modebuf(dirstatbuf[0].st_mode,b));
 }
 
@@ -401,9 +420,10 @@ static const struct tperms {C*c;I p[4];} permtab[]=
        {"-xTt",{0,S_IXOTH,S_ISVTX,S_ISVTX+S_IXOTH}},
     };
 
-F2(jtjfperm2){A y;C*s;F f;int x=0,i;C*m;
- F2RANK(1,0,jtjfperm2,DUMMYSELF);
- RE(f=stdf(w)); if(f){RZ(y=fname(sc((I)f)));y=str0(y);} else ASSERT(y=str0(vslit(AAV(w)[0])),EVFNUM)
+DF2(jtjfperm2){A y;C*s;F f;int x=0,i;C*m;
+ ASSERT(!JT(jt,seclev),EVSECURE)
+ F2RANK(1,0,jtjfperm2,self);
+ RE(f=stdf(w)); if(f){RZ(y=fname(sc((I)f)));y=str0(y);} else ASSERT(y=str0(vslit(C(AAV(w)[0]))),EVFNUM)
  RZ(a=vslit(a)); ASSERT(9==AN(a),EVLENGTH); s=CAV(a);
  for(i=0;i<9;i++)
     {ASSERT(NULL!=(m=strchr(permtab[i].c,s[i])),EVDOMAIN);

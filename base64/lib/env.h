@@ -21,13 +21,13 @@
 #endif
 
 // MSVC++ needs intrin.h for _byteswap_uint64 (issue #68):
-#if BASE64_LITTLE_ENDIAN && defined(_MSC_VER)
+#if BASE64_LITTLE_ENDIAN && defined(_MSC_VER) && !defined(__clang__)
 #  include <intrin.h>
 #endif
 
 // Endian conversion functions:
 #if BASE64_LITTLE_ENDIAN
-#  ifdef _MSC_VER
+#  if defined( _MSC_VER) && !defined(__clang__)
 //   Microsoft Visual C++:
 #    define BASE64_HTOBE32(x)	_byteswap_ulong(x)
 #    define BASE64_HTOBE64(x)	_byteswap_uint64(x)
@@ -43,10 +43,17 @@
 #endif
 
 // Detect word size:
-#ifdef _INTEGRAL_MAX_BITS
+#if defined (__x86_64__)
+// This also works for the x32 ABI, which has a 64-bit word size.
+#  define BASE64_WORDSIZE 64
+#elif defined (_INTEGRAL_MAX_BITS)
 #  define BASE64_WORDSIZE _INTEGRAL_MAX_BITS
-#else
+#elif defined (__WORDSIZE)
 #  define BASE64_WORDSIZE __WORDSIZE
+#elif defined (__SIZE_WIDTH__)
+#  define BASE64_WORDSIZE __SIZE_WIDTH__
+#else
+#  error BASE64_WORDSIZE_NOT_DEFINED
 #endif
 
 // End-of-file definitions.

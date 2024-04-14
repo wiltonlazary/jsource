@@ -1,15 +1,16 @@
-/* Copyright 1990-2016, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Adverbs: Fix                                                            */
 
 #include "j.h"
 
-
-F1(jtunname){A x;V*v;
- ARGCHK1(w); 
+// if w is a reference, replace it with its value, recursively
+A jtunname(J jt,A w,I recurct){A x;V*v;
+ ARGCHK1(w);
+ if(recurct>100)RETF(w);  // avoid infinite recursion
  v=VAV(w);
- if(CTILDE==v->id&&!jt->glock&&!(VLOCK&v->flag)){x=v->fgh[0]; if(NAME&AT(x))R symbrd(x);}
+ if(CTILDE==v->id&&!jt->glock&&!(VLOCK&v->flag)){x=v->fgh[0]; if(NAME&AT(x))R jtunname(jt,symbrd(x),recurct+1);}
  RETF(w);
 }
 
@@ -37,13 +38,13 @@ B jthasimploc(J jt,A w){A hs,*u;V*v;
   case CUDOT: case CVDOT:
    R 1;  // these are always implicit locatives
   case CTILDE: ;
-   A thisname=v->fgh[0]; L *stabent;// the A block for the name of the function (holding an NM) - unless it's a pseudo-name
+   A thisname=v->fgh[0];  // the A block for the name of the function (holding an NM) - unless it's a pseudo-name
    if(!thisname)R 0;  // no name
    if(AT(thisname)&VERB)R hasimploc(thisname);  // if v~, go look at v
    if(AT(thisname)&NOUN)R 0;   // if noun~, leave as is
    NM* thisnameinfo=NAV(thisname);  // the NM block for the current name
    if(!(thisnameinfo->flag&NMIMPLOC))R 0; // not NMDOT
-   if(!(stabent = probelocal(thisname,jt->locsyms)))R 0;  // assigned value does not exist
+   if(!(probelocal(thisname,jt->locsyms)))R 0;  // assigned value does not exist
    R 1;
   case CATDOT:
   case CGRCO:
@@ -78,24 +79,32 @@ static A jtfixa(J jt,A a,A w){A f,g,h,wf,x,y,z=w;V*v;fauxblock(fauxself); A aa; 
  if(aif&FIXALOCSONLY&&!hasimploc(w))R w;  // nothing to fix
  if(NAME&AT(w)){R sfn(0,w);}  // only way a name gets here is by ".@noun which turns into ".@(name+noun) for execution.  Also in debug, but that's discarded
  if(NOUN&AT(w)||VFIX&VAV(w)->flag)R w;
- v=VAV(w); f=v->fgh[0]; g=v->fgh[1]; h=v->fgh[2]; wf=ds(v->id); I na=ai==0?3:ai;
+ v=VAV(w); f=v->fgh[0]; g=v->fgh[1]; h=v->fgh[2]; wf=ds(v->id); I na=ai==0?3:ai;  // for levels other than the top, use na to cuase replacement of $:
  if(v->id==CFORK&&h==0){h=g; g=f; f=ds(CCAP);}  // reconstitute capped fork
  if(!(((I)f|(I)g)||((v->id&-2)==CUDOT)))R w;  // combinations always have f or g; and u./v. must be replaced even though it doesn't
- switch(v->id){
+ switch(v->id){  // we know that modifiers have been executed to produce verb/nouns
  case CSLASH: 
   R df1(z,REFIXA(2,f),wf);
- case CSLDOT: case CBSLASH: case CBSDOT:
+ case CSLDOT: case CSLDOTDOT: case CBSLASH: case CBSDOT:
   R df1(z,REFIXA(1,f),wf);
- case CAT: case CATCO: case CCUT:
-  f=REFIXA(1,f); g=REFIXA(na,g); R df2(z,f,g,wf);
+ case CTDOT:
+  f=REFIXA(0,f); g=REFIXA(na,g); R df2(z,f,g,wf);  // recur and rebuild.  t. starts a new recursion, so don't replace $: in it
+ case CATCO:
+  if(FAV(g)->id==CTDOT)R REFIXA(na,g);   // t. is internally <@:t. .  Remove the <@: and continue.
+// otherwise fall through to...
+ case CAT: case CCUT:
+  f=REFIXA(1,f); g=REFIXA(na,g); R df2(z,f,g,wf);  // rerun the compound after fixing the args
  case CAMP: case CAMPCO: case CUNDER: case CUNDCO:
   f=REFIXA(na,f); g=REFIXA(1,g); R df2(z,f,g,wf);
+ case CFDOT: case CFDOTDOT: case CFDOTCO: case CFCO: case CFCOCO: case CFCODOT: 
+  // we emulate Fold in an explicit defn which has the parts of f and h: in that case we pull g from h
+  f=REFIXA(na,f); h=REFIXA(1,h); R df2(z,f,h,wf);
  case CCOLON:
   // n : n had VFIX set & never gets here
   if(v->flag&VXOPR){
    // operator: fix the operands and rebuild.  If the operator is a pseudo-name, we have to fish the actual operator block out of h
    if(!f){v=VAV(h); f=v->fgh[0]; g=v->fgh[1]; h=v->fgh[2]; wf=ds(v->id);}
-   f=REFIXA(0,f); h=REFIXA(0,h); R xop2(f,h,g);
+   f=REFIXA(0,f); h=REFIXA(0,h); R xop2(f,h?h:g,g);  // xop2 is bivalent 
   }
   else{f=REFIXA(1,f); g=REFIXA(2,g); R df2(z,f,g,wf);}  // v : v, similarly
  case CADVF:
@@ -104,17 +113,12 @@ static A jtfixa(J jt,A a,A w){A f,g,h,wf,x,y,z=w;V*v;fauxblock(fauxself); A aa; 
   f=REFIXA(2,f); g=REFIXA(1,g); R hook(f,g,mark);
  case CFORK:
   f=REFIXA(na,f); g=REFIXA(ID(f)==CCAP?1:2,g); h=REFIXA(na,h); R folk(f,g,h);  // f first in case it's [:
- case CATDOT:
- case CGRCO:
+ case CATDOT: case CGRCO:
   IAV(aa)[0]=(aif|na);
   RZ(f=every(every2(aa,h,(A)&arofixaself),(A)&arofixaself)); // full A block required for call
   RZ(g=REFIXA(na,g));
   R df2(z,f,g,wf);
- case CIBEAM:
-  if(f)RZ(f=REFIXA(na,f));
-  if(g)RZ(g=REFIXA(na,g));
-  R f&&g ? (VDDOP&v->flag?df2(z,f,g,df2(x,head(h),tail(h),wf)):df2(z,f,g,wf)) : 
-           (VDDOP&v->flag?df1(z,f,  df2(x,head(h),tail(h),wf)):df1(z,f,  wf)) ;
+ case CIBEAM: R w;  // m, n carried in localuse
  case CUDOT:
   R REFIXA(ai,JT(jt,implocref)[0]);  // u. is equivalent to 'u.'~ for fix purposes
  case CVDOT:
@@ -132,8 +136,8 @@ static A jtfixa(J jt,A a,A w){A f,g,h,wf,x,y,z=w;V*v;fauxblock(fauxself); A aa; 
     A thisname=v->fgh[0];// the A block for the name of the function (holding an NM) - unless it's a pseudo-name
     if(thisname){ // name given
      NM* thisnameinfo=NAV(thisname);  // the NM block for the current name
-     if(thisnameinfo->flag&NMIMPLOC){ L *stabent; //  implicit locative
-      if((stabent = probelocal(thisname,jt->locsyms))){  // name is defined
+     if(thisnameinfo->flag&NMIMPLOC){     //  implicit locative
+      if((probelocal(thisname,jt->locsyms))){  // name is defined
        // If our ONLY mission is to replace implicit locatives, we are finished after replacing this locative IF
        // (1) we want to replace only first-level locatives; (2) there are no more locatives in this branch after the replacement
        if(aif&FIXALOCSONLYLOWEST)R x;  // return looked-up value once we hit one
@@ -173,11 +177,12 @@ static A jtfixa(J jt,A a,A w){A f,g,h,wf,x,y,z=w;V*v;fauxblock(fauxself); A aa; 
 }   /* 0=a if fix names; 1=a if fix names only if does not contain $: */
 
 // On internal calls, self is an integer whose value contains flags.  Otherwise zeroionei is used
-DF1(jtfix){PROLOG(0005);A z;
+DF1(jtfix){F1PREFIP;PROLOG(0005);A z;
  ARGCHK1(w);
  if(LIT&AT(w)){ASSERT(1>=AR(w),EVRANK); RZ(w=nfs(AN(w),CAV(w)));}
  // only verbs/noun can get in through the parser, but internally we also vet adv/conj
  ASSERT(AT(w)&NAME+VERB+ADV+CONJ,EVDOMAIN);
+ STACKCHKOFL  // make sure we can't recur to a name by removing the name
  self=AT(self)&NOUN?self:zeroionei(0);  // default to 0 if noun not given
  // To avoid infinite recursion we keep an array of names that we have looked up.  We create that array here, initialized to empty.  To pass it into fixa, we create
  // a faux INT block to hold the value, and use AM in that block to point to the list of names.  The fauxblock has rank 0 but 2 items
@@ -185,8 +190,7 @@ DF1(jtfix){PROLOG(0005);A z;
  fauxblock(fauxself); A augself; fauxINT(augself,fauxself,2,0); IAV0(augself)[0]=IAV(self)[0]; IAV0(augself)[1]=(I)namelist;  // transfer value to writable block; install empty name array
  RZ(z=fixa(augself,AT(w)&VERB+ADV+CONJ?w:symbrdlock(w)));  // name comes from string a
  // Once a node has been fixed, it doesn't need to be looked at ever again.  This applies even if the node itself carries a name.  To indicate this
- // we set VFIX.  We only do so if the node has descendants (or a name).  We also turn off VNAMED, which is set in named explicit definitions (I don't
-  // understand why).  We can do this only if we are sure the entire tree was traversed, i. e. we were not just looking for implicit locatives or inverses.
- if(!(IAV(self)[0]&(FIXALOCSONLY|FIXALOCSONLYLOWEST|FIXASTOPATINV))&&AT(z)&VERB+ADV+CONJ){V*v=FAV(z); if(v->fgh[0]){v->flag|=VFIX+VNAMED; v->flag^=VNAMED;}}  // f is clear for anything in the pst
+ // we set VFIX.  We only do so if the node has descendants (or a name). We can do this only if we are sure the entire tree was traversed, i. e. we were not just looking for implicit locatives or inverses.
+ if(!(IAV(self)[0]&(FIXALOCSONLY|FIXALOCSONLYLOWEST|FIXASTOPATINV))&&AT(z)&VERB+ADV+CONJ){V*v=FAV(z); if(v->fgh[0]){v->flag|=VFIX;}}  // f is clear for anything in the pst
  EPILOG(z);
 }

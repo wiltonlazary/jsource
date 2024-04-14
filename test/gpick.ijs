@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './gpick.ijs'
+prolog './gpick.ijs'
 NB. {:: -----------------------------------------------------------------
 
 boxed=: (32&=)@(3!:0)
@@ -60,6 +60,11 @@ t -: 3;4   NB. Verify the value fetched from t was non-inplaceable
 'a' -: (0;0) {:: <"0 'abc'
 'a' -: (0;0) {:: <@,"0 'abc'
 
+     'spelling error' -: ". etx'}::'
+
 4!:55 ;:'boxed cat map mapp pick S sc spread_temp si sz t'
 
+
+
+epilog''
 

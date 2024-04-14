@@ -10,6 +10,9 @@
 #ifdef sun
 #include <inet/tcp.h>
 #endif
+#if defined(__OpenBSD__) || defined(__FreeBSD__)
+#include <sys/select.h>
+#endif
 #include <netdb.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -164,7 +167,7 @@ int main(){
 	printf ("msg_iov_sz=: " FMTI "\n",sizeof(((struct msghdr*)0)->msg_iov));
 	printf ("msg_iovlen_off=: " FMTI "\n",offset(struct msghdr,msg_iovlen));
 	printf ("msg_iovlen_sz=: " FMTI "\n",sizeof(((struct msghdr*)0)->msg_iovlen));
-#if defined(linux) || defined(__APPLE__)
+#if defined(__linux__) || defined(__APPLE__) || defined(__FreeBSD__) || defined(__OpenBSD__)
 	printf ("msg_control_off=: " FMTI "\n",offset(struct msghdr,msg_control));
 	printf ("msg_control_sz=: " FMTI "\n",sizeof(((struct msghdr*)0)->msg_control));
 	printf ("msg_controllen_off=: " FMTI "\n",offset(struct msghdr,msg_controllen));

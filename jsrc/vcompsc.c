@@ -1,4 +1,4 @@
-/* Copyright 1990-2006, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Verbs: Comparatives                                                     */
@@ -72,7 +72,6 @@ A name(J jt,A a,A w){ \
  __m256i acc0=_mm256_setzero_si256(), acc1=acc0, acc2=acc0, acc3=acc0, acc4=acc0, acc5=acc0, acc6=acc0, acc7=acc0; \
  I natend, maskatend; \
  UI backoff; UI n2; I orign2; /* orign2 goes -1 during rev search */ \
- _mm256_zeroupperx(VOIDARG) \
    /* will be removed except for divide */ \
  CVTEPI64DECLS pref \
  I n0=AN(w); \
@@ -104,7 +103,7 @@ A name(J jt,A a,A w){ \
  outs0: orign2-=n2; orign2<<=LGNPAR; orign2+=(((fz)&0x1000?inv?0x4322111100000000:0x0000000011112234:inv?0x4010201030102010:0x0102010301020104)>>(maskatend<<2))&7; if((fz)&0x1000){orign2=n0-1-orign2; orign2=orign2<0?n0:orign2;} R sc(orign2); \
  /* add accums, which give negative result.  Convert to positive; if inv, that's the result, otherwise subtract from i0 */ \
  outs1: acc0=_mm256_add_epi64(acc0,acc1); acc2=_mm256_add_epi64(acc2,acc3); acc4=_mm256_add_epi64(acc4,acc5); acc6=_mm256_add_epi64(acc6,acc7); acc0=_mm256_add_epi64(acc0,acc2); acc4=_mm256_add_epi64(acc4,acc6); acc0=_mm256_add_epi64(acc0,acc4); \
-  acc0=_mm256_add_epi64(acc0,_mm256_permute2f128_si256(acc0,acc0,0x01)); acc0=_mm256_add_epi64(acc0,_mm256_castpd_si256(_mm256_permute_pd(_mm256_castsi256_pd(acc0),0x0f))); \
+  acc0=_mm256_add_epi64(acc0,_mm256_permute4x64_epi64(acc0,0b11111110)); acc0=_mm256_add_epi64(acc0,_mm256_castpd_si256(_mm256_permute_pd(_mm256_castsi256_pd(acc0),0x0f))); \
   orign2 = _mm256_extract_epi64(acc0,0); R sc(inv?-orign2:n0+orign2); \
 }
 
@@ -173,7 +172,7 @@ A name(J jt,A a,A w){ \
 
 #define ASSIGNX(v)     {x=*(C*)v; x|=x<<8; x|=x<<16; x|=x<<(32&(BW-1)); }
 #define INDB3          {n=(UI)n>i*(UI)SZI+(CTTZI(y)>>LGBB)?i*SZI+(CTTZI(y)>>LGBB):n; break;}
-#define JNDB3          {UI4 bitno; CTLZI(y,bitno); n=(i*SZI+(bitno>>LGBB)); break;}
+#define JNDB3          {UI4 bitno=CTLZI(y); n=(i*SZI+(bitno>>LGBB)); break;}
 
 #define INDB(f,T0,T1,F)  \
  static F2(f){I an,*av,n,q,wn,*wv,x,y;                                 \
@@ -220,7 +219,7 @@ A name(J jt,A a,A w){ \
  }
 
 
-#if (C_AVX&&SY_64) || EMU_AVX
+#if C_AVX2 || EMU_AVX2
 #define XCTL0(nm0) if(jt->cct==1.0)R nm0(jt,a,w); __m256d cct=_mm256_broadcast_sd(&jt->cct);  // xfer to intolerant if called for
 #define ZZTEQ zz=_mm256_xor_pd(_mm256_cmp_pd(xx,_mm256_mul_pd(yy,cct),_CMP_GT_OQ),_mm256_cmp_pd(yy,_mm256_mul_pd(xx,cct),_CMP_LE_OQ));  // tolerant =
 #define NOTZZ  zz=_mm256_xor_pd(zz,ones)
@@ -526,6 +525,19 @@ SUMF0(sumgeDB,D,B,TGEDX,GEDX0)  SUMF0(sumgeDI,D,I,TGEDX,GEDX0)  SUMF0(sumgeDD,D,
 SUMF(sumgtIB,I,B,AGT  )  SUMF(sumgtII,I,I,AGT  )  SUMF0(sumgtID,I,D,TGTXD,GTXD0)
 SUMF0(sumgtDB,D,B,TGTDX,GTDX0)  SUMF0(sumgtDI,D,I,TGTDX,GTDX0)  SUMF0(sumgtDD,D,D,TGT,GT0  )
 #endif
+INDF( i0eqI2,I2,I2,ANE  ) JNDF( j0eqI2,I2,I2,ANE  ) INDF( i0neI2,I2,I2,AEQ  )JNDF( j0neI2,I2,I2,AEQ  ) 
+INDF( i0ltI2,I2,I2,AGE  ) JNDF( j0ltI2,I2,I2,AGE  ) INDF( i0leI2,I2,I2,AGT  ) JNDF( j0leI2,I2,I2,AGT  ) 
+INDF( i0geI2,I2,I2,ALT  ) JNDF( j0geI2,I2,I2,ALT  ) INDF( i0gtI2,I2,I2,ALE  )JNDF( j0gtI2,I2,I2,ALE  )  
+SUMF(sumeqI2,I2,I2,AEQ  ) SUMF(sumneI2,I2,I2,ANE  ) SUMF(sumltI2,I2,I2,ALT  ) SUMF(sumleI2,I2,I2,ALE  )
+SUMF(sumgeI2,I2,I2,AGE  ) SUMF(sumgtI2,I2,I2,AGT  ) 
+INDF( i0eqI4,I4,I4,ANE  ) JNDF( j0eqI4,I4,I4,ANE  ) INDF( i0neI4,I4,I4,AEQ  )JNDF( j0neI4,I4,I4,AEQ  ) 
+INDF( i0ltI4,I4,I4,AGE  ) JNDF( j0ltI4,I4,I4,AGE  ) INDF( i0leI4,I4,I4,AGT  ) JNDF( j0leI4,I4,I4,AGT  ) 
+INDF( i0geI4,I4,I4,ALT  ) JNDF( j0geI4,I4,I4,ALT  ) INDF( i0gtI4,I4,I4,ALE  )JNDF( j0gtI4,I4,I4,ALE  )  
+SUMF(sumeqI4,I4,I4,AEQ  ) SUMF(sumneI4,I4,I4,ANE  ) SUMF(sumltI4,I4,I4,ALT  ) SUMF(sumleI4,I4,I4,ALE  )
+SUMF(sumgeI4,I4,I4,AGE  ) SUMF(sumgtI4,I4,I4,AGT  ) 
+
+
+
 
 INDB( i0eqBB,B,B,NE   )  
 
@@ -579,35 +591,10 @@ static AF atcompxy[]={  /* table for (B01,INT,FL) vs. (B01,INT,FL) */
  sumgtBB,sumgtBI,sumgtBD,  sumgtIB,sumgtII,sumgtID,  sumgtDB,sumgtDI,sumgtDD,
 };
 
+// parallel byte comparisons
 INDB( i0eqC,C,C,ACNE)  INDB( i0neC,C,C,ACEQ)
 JNDB( j0eqC,C,C,ACNE)  JNDB( j0neC,C,C,ACEQ)
 SUMB(sumeqC,C,C,ACEQB)  SUMB(sumneC,C,C,ACNEB)
-
-static AF atcompC[]={   /* table for LIT vs. LIT */
-  i0eqC,  i0neC, 0L,0L,0L,0L,
-  j0eqC,  j0neC, 0L,0L,0L,0L,
- sumeqC, sumneC, 0L,0L,0L,0L,
-};
-
-INDF( i0eqUS,US,US,ANE)  INDF( i0neUS,US,US,AEQ)
-JNDF( j0eqUS,US,US,ANE)  JNDF( j0neUS,US,US,AEQ)
-SUMF(sumeqUS,US,US,AEQ)  SUMF(sumneUS,US,US,ANE)
-
-static AF atcompUS[]={   /* table for C2T vs. C2T */
-  i0eqUS,  i0neUS, 0L,0L,0L,0L,
-  j0eqUS,  j0neUS, 0L,0L,0L,0L,
- sumeqUS, sumneUS, 0L,0L,0L,0L,
-};
-
-INDF( i0eqC4,C4,C4,ANE)  INDF( i0neC4,C4,C4,AEQ)
-JNDF( j0eqC4,C4,C4,ANE)  JNDF( j0neC4,C4,C4,AEQ)
-SUMF(sumeqC4,C4,C4,AEQ)  SUMF(sumneC4,C4,C4,ANE)
-
-static AF atcompC4[]={   /* table for C4T vs. C4T */
-  i0eqC4,  i0neC4, 0L,0L,0L,0L,
-  j0eqC4,  j0neC4, 0L,0L,0L,0L,
- sumeqC4, sumneC4, 0L,0L,0L,0L,
-};
 
 INDF( i0eqS,SB,SB,ANE) INDF( i0neS,SB,SB,AEQ) 
 JNDF( j0eqS,SB,SB,ANE) JNDF( j0neS,SB,SB,AEQ) 
@@ -617,14 +604,31 @@ INDF( i0ltS,SB,SB,SBGE) INDF( i0leS,SB,SB,SBGT) INDF( i0geS,SB,SB,SBLT) INDF( i0
 JNDF( j0ltS,SB,SB,SBGE) JNDF( j0leS,SB,SB,SBGT) JNDF( j0geS,SB,SB,SBLT) JNDF( j0gtS,SB,SB,SBLE)
 SUMF(sumltS,SB,SB,SBLT) SUMF(sumleS,SB,SB,SBLE) SUMF(sumgeS,SB,SB,SBGE) SUMF(sumgtS,SB,SB,SBGT)
 
-
-static AF atcompSB[]={  /* table for SBT vs. SBT */
-  i0eqS, i0neS, i0ltS, i0leS, i0geS, i0gtS,
-  j0eqS, j0neS, j0ltS, j0leS, j0geS, j0gtS,
- sumeqS,sumneS,sumltS,sumleS,sumgeS,sumgtS,
+static AF atcomp124S[][3][6]={   // tables for different byte lengths.  Character are allowed only = ~:
+{  // parallel character comparisons
+ {i0eqC,  i0neC, 0L,0L,0L,0L},
+ {j0eqC,  j0neC, 0L,0L,0L,0L},
+ {sumeqC, sumneC, 0L,0L,0L,0L},
+},
+{  // 2-byte
+ {i0eqI2, i0neI2, i0ltI2, i0leI2, i0geI2, i0gtI2},
+ {j0eqI2, j0neI2, j0ltI2, j0leI2, j0geI2, j0gtI2},
+ {sumeqI2, sumneI2, sumltI2, sumleI2, sumgeI2, sumgtI2},
+},
+{  // 4-byte
+ {i0eqI4, i0neI4, i0ltI4, i0leI4, i0geI4, i0gtI4},
+ {j0eqI4, j0neI4, j0ltI4, j0leI4, j0geI4, j0gtI4},
+ {sumeqI4, sumneI4, sumltI4, sumleI4, sumgeI4, sumgtI4},
+},
+{  // symbol
+ {i0eqS, i0neS, i0ltS, i0leS, i0geS, i0gtS},
+ {j0eqS, j0neS, j0ltS, j0leS, j0geS, j0gtS},
+ {sumeqS, sumneS, sumltS, sumleS, sumgeS, sumgtS},
+},
 };
 
-// This table is indexed by m[5 4 3] but only a few combinations are generated
+
+// This table is indexed by m bits 5-3 but only a few combinations are generated
 static AF atcompX[]={0L, jti1ebar, 0L, 0L, jtsumebar, jtanyebar};
 
 
@@ -649,9 +653,13 @@ AF jtatcompf(J jt,A a,A w,A self){I m;
  m=FAV(self)->flag&255;
  if((m&6)!=6){   // normal comparison
   // verify rank is OK, based on operation
+#if !defined(__wasm__)
   if((AR(a)|AR(w))>1){R (m>=(4<<3))?(AF)jtfslashatg:0;}   // If an operand has rank>1, reject it unless it can be turned to f/@g special. postflags are 0
+#else
+  if((AR(a)|AR(w))>1){R (m>=(4<<3))?(AF)(((UI)jtfslashatg)<<2):0;}   // If an operand has rank>1, reject it unless it can be turned to f/@g special. postflags are 0
+#endif
   ASSERT(AN(a)==AN(w)||((AR(a)&AR(w))==0),EVLENGTH)   // agreement is same length or one an atom - we know ranks<=1
-  if(unlikely((-AN(a)&-AN(w)>=0)))R0;  // if either arg empty, skip our loop
+  if(unlikely((-AN(a)&-AN(w))>=0))R0;  // if either arg empty, skip our loop
   // split m into search and comparison
   I search=m>>3; I comp=m&7;
   // Change +./ to i.&1, *./ to i.&0; save flag bits to include in return address
@@ -660,17 +668,40 @@ AF jtatcompf(J jt,A a,A w,A self){I m;
   comp^=(0x606010>>(((search&1)+(comp&6))<<2))&7; search>>=1;  // complement comp if search is i&1; then the only search values are 0, 2, 4 so map them to 012.  Could reorder compares to = ~: < >: > <: to save code here
   if(!((AT(a)|AT(w))&((NOUN|SPARSE)&~(B01+INT+FL)))){
    // numeric types that we can handle here, for sure
+#if !defined(__wasm__)
    R (AF)((I)atcompxy[6*9*search+9*comp+3*(AT(a)>>INTX)+(AT(w)>>INTX)]+postflags);
+#else
+// function pointer is sequential index
+   R (AF)((((UI)atcompxy[6*9*search+9*comp+3*(AT(a)>>INTX)+(AT(w)>>INTX)])<<2)+postflags);
+#endif
   }
   // Other types have a chance only if they are equal types; fetch from the appropriate table then
-  if(ISDENSETYPE(AT(a)&AT(w)|((AT(a)|AT(w))&SPARSE),LIT+C2T+C4T+SBT)){R (AF)((I)(AT(a)&LIT?atcompC:AT(a)&C2T?atcompUS:AT(a)&C4T?atcompC4:atcompSB)[6*search+comp]+postflags);}
+  if(ISDENSETYPE(AT(a)&AT(w)|((AT(a)|AT(w))&SPARSE),LIT+C2T+C4T+INT2+INT4+SBT)){
+   I tableno=(AT(a)&C2T+INT2+SBT?1:0)+(AT(a)&C4T+INT4+SBT?2:0);    // select table based on length: 1, 2, 4, symbol
+   tableno=(UI)(AT(a)&C2T+C4T)>(UI)(comp-2)?0:tableno;   // if comparison is ordered (comp>1) and operands are character, it's illegal: we move multibyte chars to first line to return no function so that we fail eventually
+   AF actrtn=atcomp124S[tableno][search][comp];  //  processing routine
+#if !defined(__wasm__)
+  R (AF)((I)actrtn+postflags);  // insert flags for return
+#else
+  R (AF)(((UI)actrtn<<2)+postflags);
+#endif
+
+  }
   R 0;
  }else{  // E. (6) or e. (7)
   if(unlikely((AR(a)|AR(w))>1)){if(!(m&1)||AR(a)>(AR(w)?AR(w):1))R0;}  // some rank > 1, fail if E. or (e. returns rank>1)
   if(unlikely(((m&1)|(AN(a)-1))==0))R 0;  // E. when a is a singleton - no need for the full E. treatment
-  if(likely(m&1))R jtcombineeps;  // e. types: direct i.-family types, go to routine to vector there; postflags are 0
+#if !defined(__wasm__)
+  if(likely(m&1))R (AF)jtcombineeps;  // e. types: direct i.-family types, go to routine to vector there; postflags are 0
+#else
+  if(likely(m&1))R (AF)(((UI)jtcombineeps)<<2);  // e. types: direct i.-family types, go to routine to vector there; postflags are 0
+#endif
   // all that's left is E.
+#if !defined(__wasm__)
   R atcompX[m>>3];  // choose i.-family routine; postflags are 0
+#else
+  R (AF)((UI)(atcompX[m>>3])<<2);  // choose i.-family routine; postflags are 0
+#endif
  }
 }    /* function table look-up for  comp i. 1:  and  i.&1@:comp  etc. */
 

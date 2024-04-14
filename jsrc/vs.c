@@ -1,4 +1,4 @@
-/* Copyright 1990-2008, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Verbs: $. Sparse Arrays                                                 */
@@ -55,7 +55,7 @@ static A jtvaxis(J jt,I r,A a){A y;B*b;I j,n,*v;
  ASSERT(1>=AR(a),EVRANK);
  GATV0(y,B01,r,1); b=BAV(y); mvc(r,b,1,MEMSET00);
  DO(n, j=v[i]; if(0>j)j+=r; ASSERT(0<=j&&j<r&&!b[j],EVINDEX); b[j]=1;);
- R caro(ifb(r,b));   // avoid readonly
+ R mkwris(ifb(r,b));   // ensure result writable
 }    /* standardize axes to be non-negative, sorted */
 
 A jtdaxis(J jt,I r,A a){R less(IX(r),a);}
@@ -124,9 +124,9 @@ static A jtsparse1a(J jt,A s,A a,A e,A y,A x){A z;B*b;I an,*av,et,r,*sv,t,*v;P*p
 }
 
 // convert w to sparse, with sparse element e (which must be a dense atom)
-A jtsparseit(J jt,A w,A a,A e){PROLOG(0091);A ax,c,x,y,z;B b,*cv;I cm,cn,m,n,r,*s,t,*u,*v,wn;P*p;
+A jtsparseit(J jt,A w,A a,A e){PROLOG(0091);A ax,c,x,y,z;B b,*cv;I cm,cn,m,n,r,*s,t,*u,*v;P*p;
  RZ(w&&a&&e);
- r=AR(w); t=AT(w); wn=AN(w); n=AN(a);
+ r=AR(w); t=AT(w); n=AN(a);
  ASSERT(!(t&LIT+BOX),EVNONCE);  // must not be LIT or BOX
  ASSERT(ISDENSETYPE(t,SPARSABLE),EVDOMAIN);  // w must be dense
  if(!r){ASSERT(!AN(a),EVINDEX); R ca(w);}
@@ -253,9 +253,9 @@ static F2(jtaxbytes){A a1,e,p,q,x;B*b;I c,d,j,m,n=0,r,*u,*v,*ws,wt;P*wp;
  R axbytes(a1,reaxis(over(a,less(a1,a)),w));
 }    /* bytes required for (2;a)$.w */
 
-static F2(jtaxtally){A a1,e,p,q,x;B*b;I c,d,j,m,n=0,r,*u,*v,*ws,wt;P*wp;
+static F2(jtaxtally){A a1,e,p,q,x;B*b;I c,d,j,m,n=0,r,*u,*v,wt;P*wp;
  ARGCHK2(a,w);
- r=AR(w); ws=AS(w); wt=AT(w); 
+ r=AR(w); wt=AT(w); 
  GATV0(q,INT,r,1); u=AV(q); j=0;
  RZ(a1=vaxis(r,a)); d=AN(a1);  
  if(ISSPARSE(wt)){wp=PAV(w); a=SPA(wp,a); e=SPA(wp,e);    x=SPA(wp,x); c=1;}
@@ -307,7 +307,7 @@ static F1(jtsparsep1){A*wv;I n=0;
  ARGCHK1(w);
  ASSERT(1>=AR(w),EVRANK); 
  if(BOX&AT(w)){n=AN(w); wv=AAV(w); ASSERT(1<=n&&n<=3||5==n,EVLENGTH);}
- R sparse1a(0<n?wv[0]:w,1<n?wv[1]:mark,2<n?wv[2]:mark,3<n?wv[3]:mark,4<n?wv[4]:mark);
+ R sparse1a(0<n?C(wv[0]):w,1<n?C(wv[1]):mark,2<n?C(wv[2]):mark,3<n?C(wv[3]):mark,4<n?C(wv[4]):mark);
 }
 
 static F1(jtsparsen1){A*u,z;P*p;
@@ -329,7 +329,7 @@ F2(jtsparse2){A*av,q=0;B b;I j,k,t,*v;P*p;
  if(ISDENSETYPE(AT(a),BOX)){
   ASSERT(1==AR(a),EVRANK);
   ASSERT(2==AN(a),EVLENGTH);
-  av=AAV(a);  a=av[0]; q=av[1];
+  av=AAV(a);  a=C(av[0]); q=C(av[1]);
  }
  RZ(a=cvt(INT,a));
  ASSERT(1>=AR(a),EVRANK);
@@ -339,16 +339,17 @@ F2(jtsparse2){A*av,q=0;B b;I j,k,t,*v;P*p;
  p=PAV(w); t=AT(w); b=ISSPARSE(t);
  ASSERT(b||0<=k&&k<=2,EVDOMAIN);
  switch(k){
-  case 0:  ASSERT(!q,EVDOMAIN); R ISSPARSE(t)?denseit(w):sparse1(w);
-  case 1:  ASSERT(!q,EVDOMAIN); q=sparsep1(w); PRISTCLRF(w); R q;
-  case -1: ASSERT(!q,EVDOMAIN); R sparsen1(w);
-  case 2:
-   if(AR(a)){j=v[1]; ASSERT(q&&(1==j||2==j),EVDOMAIN); R 1==j?axbytes(q,w):axtally(q,w);}
-   if(q)R reaxis(q,w); else if(b)R rat(SPA(p,a)); else{ASSERT(ISDENSETYPE(t,SPARSABLE),EVDOMAIN); R IX(AR(w));}
-  case 3:  R q?rezero(q,w):rat(SPA(p,e));  // ? these rat()s don't protect anything?  SPA is as permanent as w
-  case 4:  ASSERT(!q,EVDOMAIN); R rat(SPA(p,i)); 
-  case 5:  ASSERT(!q,EVDOMAIN); R rat(SPA(p,x));
-  case 7:  ASSERT(!q,EVDOMAIN); R sc(SETIC(SPA(p,i),j));
-  case 8:  ASSERT(!q,EVDOMAIN); R unzero(w);
-  default: ASSERT(0,EVDOMAIN);
-}}   /* x $. y */
+ case 0:  ASSERT(!q,EVDOMAIN); R ISSPARSE(t)?denseit(w):sparse1(w);
+ case 1:  ASSERT(!q,EVDOMAIN); q=sparsep1(w); PRISTCLRF(w); R q;
+ case -1: ASSERT(!q,EVDOMAIN); R sparsen1(w);
+ case 2:
+  if(AR(a)){j=v[1]; ASSERT(q&&(1==j||2==j),EVDOMAIN); R 1==j?axbytes(q,w):axtally(q,w);}
+  if(q)R reaxis(q,w); else if(b)R rat(SPA(p,a)); else{ASSERT(ISDENSETYPE(t,SPARSABLE),EVDOMAIN); R IX(AR(w));}
+ case 3:  R q?rezero(q,w):rat(SPA(p,e));  // ? these rat()s don't protect anything?  SPA is as permanent as w
+ case 4:  ASSERT(!q,EVDOMAIN); R rat(SPA(p,i)); 
+ case 5:  ASSERT(!q,EVDOMAIN); R rat(SPA(p,x));
+ case 7:  ASSERT(!q,EVDOMAIN); R sc(SETIC(SPA(p,i),j));
+ case 8:  ASSERT(!q,EVDOMAIN); R unzero(w);
+ default: ASSERT(0,EVDOMAIN);
+ }
+}   /* x $. y */

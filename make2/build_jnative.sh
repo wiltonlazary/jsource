@@ -1,70 +1,71 @@
 #!/bin/sh
+set -e
 
-realpath()
-{
- oldpath=`pwd`
- if ! cd $1 > /dev/null 2>&1; then
-  cd ${1##*/} > /dev/null 2>&1
-  echo $( pwd -P )/${1%/*}
- else
-  pwd -P
- fi
- cd $oldpath > /dev/null 2>&1
-}
-
-cd "$(realpath "$0")"
+cd "$(dirname "$0")"
 echo "entering `pwd`"
 
-if [ "`uname -m`" = "armv6l" ] || [ "`uname -m`" = "aarch64" ] || [ "$RASPI" = 1 ]; then
-jplatform="${jplatform:=raspberry}"
-elif [ "`uname`" = "Darwin" ]; then
-jplatform="${jplatform:=darwin}"
-else
-jplatform="${jplatform:=linux}"
+jplatform64=$(./jplatform64.sh)
+
+if [ "" = "$CFLAGS" ]; then
+ # OPTLEVEL will be merged back into CFLAGS, further down
+	# OPTLEVEL is probably overly elaborate, but it works
+ case "$_DEBUG" in
+  3) OPTLEVEL=" -O2 -g "
+   NASM_FLAGS="-g";;
+  2) OPTLEVEL=" -O0 -ggdb "
+   NASM_FLAGS="-g";;
+  1) OPTLEVEL=" -O2 -g "
+   NASM_FLAGS="-g"
+   jplatform64=$(./jplatform64.sh)-debug;;
+  *) OPTLEVEL=" -O2 ";;
+ esac
+
 fi
-if [ "`uname -m`" = "x86_64" ]; then
-j64x="${j64x:=j64avx}"
-elif [ "`uname -m`" = "aarch64" ]; then
-j64x="${j64x:=j64}"
-elif [ "`uname -m`" = "arm64" ] && [ -z "${jplatform##*darwin*}" ]; then
-j64x="${j64x:=j64arm}"
-else
-j64x="${j64x:=j32}"
-fi
+echo "jplatform64=$jplatform64"
 
 # gcc 5 vs 4 - killing off linux asm routines (overflow detection)
 # new fast code uses builtins not available in gcc 4
 # use -DC_NOMULTINTRINSIC to continue to use more standard c in version 4
 # too early to move main linux release package to gcc 5
 
-if [ -z "${jplatform##*darwin*}" ]; then
-if [ -z "${j64x##*j64arm*}" ]; then
-macmin="-target arm64-apple-macos11 -mmacosx-version-min=11"
-else
-macmin="-target x86_64-apple-macos10.6 -mmacosx-version-min=10.6"
-fi
-fi
+case "$jplatform64" in
+	darwin/j64iphoneos)
+	 USE_OPENMP=0
+	 LDTHREAD=" -pthread "
+	 CC="$(xcrun --sdk iphoneos --find clang)"
+	 AR="$(xcrun --sdk iphoneos --find libtool)"
+	 macmin="-isysroot $(xcrun --sdk iphoneos --show-sdk-path) -arch arm64";;
+	darwin/j64iphonesimulator)
+	 USE_OPENMP=0
+	 LDTHREAD=" -pthread "
+	 CC="$(xcrun --sdk iphonesimulator --find clang)"
+	 AR="$(xcrun --sdk iphonesimulator --find libtool)"
+	 macmin="-isysroot $(xcrun --sdk iphonesimulator --show-sdk-path) -arch x86_64";;
+	darwin/j64arm)
+	 CC="$(xcrun --sdk macosx --find clang)"
+	 AR="$(xcrun --sdk macosx --find libtool)"
+	 macmin="-isysroot $(xcrun --sdk macosx --show-sdk-path) -arch arm64 -mmacosx-version-min=11";;
+	darwin/*)
+	 CC="$(xcrun --sdk macosx --find clang)"
+	 AR="$(xcrun --sdk macosx --find libtool)"
+	 macmin="-isysroot $(xcrun --sdk macosx --show-sdk-path) -arch x86_64 -mmacosx-version-min=10.6";;
+	openbsd/*) make=gmake;;
+	freebsd/*) make=gmake;;
+ wasm*)
+	 USE_OPENMP=0
+	 LDTHREAD=" -pthread "
+	 NO_SHA_ASM=1;USE_OPENMP=0;USE_PYXES=0;;
+esac
+make="${make:=make}"
 
-if [ "x$CC" = x'' ] ; then
-if [ -f "/usr/bin/cc" ]; then
-CC=cc
-else
-if [ -f "/usr/bin/clang" ]; then
-CC=clang
-else
-CC=gcc
-fi
-fi
-export CC
-fi
-# compiler=`$CC --version | head -n 1`
-compiler=$(readlink -f $(command -v $CC) 2> /dev/null || echo $CC)
+CC=${CC-$(which cc clang gcc 2>/dev/null | head -n1 | xargs basename)}
+compiler=$(readlink -f $(which $CC) || which $CC)
 echo "CC=$CC"
 echo "compiler=$compiler"
 
 if [ -z "${compiler##*gcc*}" ] || [ -z "${CC##*gcc*}" ]; then
 # gcc
-common="$OPENMP -fPIC -O2 -fvisibility=hidden -fno-strict-aliasing  \
+common="$OPENMP -fPIC $OPTLEVEL -fvisibility=hidden -fno-strict-aliasing  \
  -Werror -Wextra -Wno-unknown-warning-option \
  -Wno-cast-function-type \
  -Wno-clobbered \
@@ -80,11 +81,12 @@ common="$OPENMP -fPIC -O2 -fvisibility=hidden -fno-strict-aliasing  \
  -Wno-type-limits \
  -Wno-uninitialized \
  -Wno-unused-parameter \
- -Wno-unused-value "
+ -Wno-unused-value \
+ $CFLAGS"
 
 else
 # clang
-common="$OPENMP -fPIC -O2 -fvisibility=hidden -fno-strict-aliasing \
+common="$OPENMP -fPIC $OPTLEVEL -fvisibility=hidden -fno-strict-aliasing \
  -Werror -Wextra -Wno-unknown-warning-option \
  -Wsign-compare \
  -Wtautological-constant-out-of-range-compare \
@@ -106,66 +108,108 @@ common="$OPENMP -fPIC -O2 -fvisibility=hidden -fno-strict-aliasing \
  -Wno-unused-function \
  -Wno-unused-parameter \
  -Wno-unused-value \
- -Wno-unused-variable "
+ -Wno-unused-variable \
+ $CFLAGS"
 
 fi
 
-case $jplatform\_$j64x in
+USE_PYXES="${USE_PYXES:=1}"
+if [ $USE_PYXES -eq 1 ] ; then
+common="$common -DPYXES=1"
+LDTHREAD=" -pthread "
+else
+common="$common -DPYXES=0"
+fi
 
-linux_j32)
+if [ -z "${j64x##*32*}" ]; then
+USE_EMU_AVX=0
+else
+USE_EMU_AVX="${USE_EMU_AVX:=1}"
+fi
+if [ $USE_EMU_AVX -eq 1 ] ; then
+common="$common -DEMU_AVX2=1"
+fi
+
+if [ "${USE_GMP_H:=1}" -eq 1 ] ; then
+ common="$common -I../../../../mpir/include"
+fi
+
+case $jplatform64 in
+
+linux/j32)
 TARGET=libjnative.so
 CFLAGS="$common -m32 -msse2 -mfpmath=sse -I$JAVA_HOME/include -I$JAVA_HOME/include/linux "
 LDFLAGS=" -shared -Wl,-soname,libjnative.so  -m32 "
 ;;
-linux_j64)
+linux/j64*)
 TARGET=libjnative.so
 CFLAGS="$common -I$JAVA_HOME/include -I$JAVA_HOME/include/linux "
 LDFLAGS=" -shared -Wl,-soname,libjnative.so "
 ;;
-linux_j64avx)
-TARGET=libjnative.so
-CFLAGS="$common -I$JAVA_HOME/include -I$JAVA_HOME/include/linux "
-LDFLAGS=" -shared -Wl,-soname,libjnative.so "
-;;
-linux_j64avx2)
-TARGET=libjnative.so
-CFLAGS="$common -I$JAVA_HOME/include -I$JAVA_HOME/include/linux "
-LDFLAGS=" -shared -Wl,-soname,libjnative.so "
-;;
-raspberry_j32)
+raspberry/j32)
 TARGET=libjnative.so
 CFLAGS="$common -marm -march=armv6 -mfloat-abi=hard -mfpu=vfp -I$JAVA_HOME/include -I$JAVA_HOME/include/linux "
 LDFLAGS=" -shared -Wl,-soname,libjnative.so "
 ;;
-raspberry_j64)
+raspberry/j64)
 TARGET=libjnative.so
 CFLAGS="$common -march=armv8-a+crc -I$JAVA_HOME/include -I$JAVA_HOME/include/linux "
 LDFLAGS=" -shared -Wl,-soname,libjnative.so "
 ;;
-darwin_j32)
+openbsd/j32)
+TARGET=libjnative.so
+CFLAGS="$common -m32 -msse2 -mfpmath=sse -I$JAVA_HOME/include -I$JAVA_HOME/include/openbsd "
+LDFLAGS=" -shared -Wl,-soname,libjnative.so  -m32 "
+;;
+openbsd/j64arm)
+TARGET=libjnative.so
+CFLAGS="$common -march=armv8-a+crc -I$JAVA_HOME/include -I$JAVA_HOME/include/openbsd "
+LDFLAGS=" -shared -Wl,-soname,libjnative.so "
+;;
+openbsd/j64*)
+TARGET=libjnative.so
+CFLAGS="$common -I$JAVA_HOME/include -I$JAVA_HOME/include/openbsd "
+LDFLAGS=" -shared -Wl,-soname,libjnative.so "
+;;
+freebsd/j32)
+TARGET=libjnative.so
+CFLAGS="$common -m32 -msse2 -mfpmath=sse -I$JAVA_HOME/include -I$JAVA_HOME/include/freebsd "
+LDFLAGS=" -shared -Wl,-soname,libjnative.so  -m32 "
+;;
+freebsd/j64arm)
+TARGET=libjnative.so
+CFLAGS="$common -march=armv8-a+crc -I$JAVA_HOME/include -I$JAVA_HOME/include/freebsd "
+LDFLAGS=" -shared -Wl,-soname,libjnative.so "
+;;
+freebsd/j64*)
+TARGET=libjnative.so
+CFLAGS="$common -I$JAVA_HOME/include -I$JAVA_HOME/include/freebsd "
+LDFLAGS=" -shared -Wl,-soname,libjnative.so "
+;;
+darwin/j32)
 TARGET=libjnative.dylib
 CFLAGS="$common -m32 -msse2 -mfpmath=sse $macmin -I$JAVA_HOME/include -I$JAVA_HOME/include/darwin "
-LDFLAGS=" -m32 $macmin -dynamiclib "
+LDFLAGS=" -m32 $macmin -dynamiclib -install_name libjnative.dylib "
 ;;
-darwin_j64)
-TARGET=libjnative.dylib
-CFLAGS="$common $macmin -I$JAVA_HOME/include -I$JAVA_HOME/include/darwin "
-LDFLAGS=" $macmin -dynamiclib "
-;;
-darwin_j64avx)
-TARGET=libjnative.dylib
-CFLAGS="$common $macmin -I$JAVA_HOME/include -I$JAVA_HOME/include/darwin "
-LDFLAGS=" $macmin -dynamiclib "
-;;
-darwin_j64avx2)
-TARGET=libjnative.dylib
-CFLAGS="$common $macmin -I$JAVA_HOME/include -I$JAVA_HOME/include/darwin "
-LDFLAGS=" $macmin -dynamiclib "
-;;
-darwin_j64arm) # darwin arm
+darwin/j64arm) # darwin arm
 TARGET=libjnative.dylib
 CFLAGS="$common $macmin -march=armv8-a+crc -I$JAVA_HOME/include -I$JAVA_HOME/include/darwin "
-LDFLAGS=" $macmin -dynamiclib "
+LDFLAGS=" $macmin -dynamiclib -install_name libjnative.dylib "
+;;
+darwin/j64iphoneos) # iphone
+TARGET=libjnative.dylib
+CFLAGS="$common $macmin -march=armv8-a+crc -I$JAVA_HOME/include -I$JAVA_HOME/include/darwin "
+LDFLAGS=" $macmin -dynamiclib -install_name libjnative.dylib "
+;;
+darwin/j64iphonesimulator) # iphone simulator
+TARGET=libjnative.dylib
+CFLAGS="$common $macmin -I$JAVA_HOME/include -I$JAVA_HOME/include/darwin "
+LDFLAGS=" $macmin -dynamiclib -install_name libjnative.dylib "
+;;
+darwin/j64*)
+TARGET=libjnative.dylib
+CFLAGS="$common $macmin -I$JAVA_HOME/include -I$JAVA_HOME/include/darwin "
+LDFLAGS=" $macmin -dynamiclib -install_name libjnative.dylib "
 ;;
 *)
 echo no case for those parameters
@@ -174,10 +218,17 @@ esac
 
 echo "CFLAGS=$CFLAGS"
 
-mkdir -p ../bin/$jplatform/$j64x
-mkdir -p obj/$jplatform/$j64x/
-cp makefile-jnative obj/$jplatform/$j64x/.
-export CFLAGS LDFLAGS TARGET jplatform j64x
-cd obj/$jplatform/$j64x/
-make -f makefile-jnative
+mkdir -p ../bin/$jplatform64
+mkdir -p obj/$jplatform64/
+cp makefile-jnative obj/$jplatform64/.
+export CC AR CFLAGS LDFLAGS LDFLAGS_a LDFLAGS_b TARGET TARGET_a jplatform64
+cd obj/$jplatform64/
+if [ "x$MAKEFLAGS" = x'' ] ; then
+ if [ `uname` = Linux ]; then par=`nproc`; else par=`sysctl -n hw.ncpu`; fi
+ $make -j$par -f makefile-jnative all
+else
+ $make -f makefile-jnative
+fi
+retval=$?
 cd -
+exit $retval

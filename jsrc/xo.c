@@ -1,4 +1,4 @@
-/* Copyright 1990-2008, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Xenos: File Open/Close                                                  */
@@ -15,47 +15,68 @@
 #include "j.h"
 #include "x.h"
 
-
-B jtxoinit(JS jjt, I nthreads){A x;JJ jt=MTHREAD(jjt);
+B jtxoinit(JS jjt){A x;JJ jt=MTHREAD(jjt);
 #if SY_WIN32 && !SY_WINCE
  _setmode(_fileno(stdin),_O_BINARY);
  _setmode(_fileno(stdout),_O_BINARY);
  _setmode(_fileno(stderr),_O_BINARY);
 #endif
- GAT0(x,BOX,8,1);  ACINITZAP(x); INITJT(jjt,fopa)=x;  // called during init - this is NOT a recursive block but it becomes one if extended
- GAT0(x,INT,8,1);  ACINITZAP(x); INITJT(jjt,fopf)=x; AM(INITJT(jjt,fopf))=0;  // AM is # valid files
+ GAT0(x,INT,8,0);  ACINITZAP(x); INITJT(jjt,fopafl)=x; AM(INITJT(jjt,fopafl))=0;   // AM is # valid files.  Table has rank 0.  We allo as INT but the values are As - we never need to clear to 0
  R 1;
 }
 
-F jtvfn(J jt,F x){I*v=AV(JT(jt,fopf)); DQ(AM(JT(jt,fopf)),if(x==(F)*v++)R x;); ASSERT(0,EVFNUM);}
-     /* check that x is in table of file#s */
+// check that x is in table of file#s.  Return x if so, otherwise 0 for error
+// if the file is found, mark it as busy in fopafl.  This establishes a lock on that file to prevent it from being deleted while I/O is in process
+// Every non-failing call to vfn must be matched by a call to unvfn to unlock the file
+F jtvfn(J jt,F x){F z=0; READLOCK(JT(jt,flock)) A*v=AAV0(JT(jt,fopafl)); DQ(AM(JT(jt,fopafl)),if((F)AM(v[i])==x){z=x; READLOCK(v[i]->lock) break;}) READUNLOCK(JT(jt,flock)) ASSERT(z!=0,EVFNUM); R z;}
 
-I jtfnum(J jt,A w){A y;I h,j;
- if(AT(w)&B01+INT){ASSERT(h=i0(w),EVFNUM); R h;}
+// remove internal file lock set by vfn().  Required exactly when vfn has returned non0.  The file is known to be in the file table, but its index may have changed.
+// for syntactic ease we return the dummy argument
+A jtunvfn(J jt,F x,A dummy){READLOCK(JT(jt,flock)) A*v=AAV0(JT(jt,fopafl)); DQ(AM(JT(jt,fopafl)),if((F)AM(v[i])==x){READUNLOCK(v[i]->lock) break;}) READUNLOCK(JT(jt,flock)) R dummy;}
+
+// w is a user argument, either a number or a filename string.  If a number, return it (with error if it is 0); if a string return the file# if found, or 0 if not found
+// return of 0 is not ipso facto an error
+I jtfnum(J jt,A w){A y;I h,j,z=0;
+ if(AT(w)&B01+INT){ASSERT(h=i0(w),EVFNUM); R h;}  // return numeric arg forthwith
  ASSERT(AT(w)&BOX,EVDOMAIN);
- y=AAV(w)[0];
+ y=C(AAV(w)[0]);
  ASSERT(AN(y),EVLENGTH);
  if(AT(y)&B01+INT){ASSERT(h=i0(y),EVFNUM); R h;}
- RE(j=i0(indexof(vec(BOX,AM(JT(jt,fopf)),AAV(JT(jt,fopa))),boxW(fullname(vslit(y)))))); 
- R j<AM(JT(jt,fopf))?AV(JT(jt,fopf))[j]:0;
+ RZ(y=fullname(vslit(y)));  // get name to match
+ READLOCK(JT(jt,flock)) A*v=AAV0(JT(jt,fopafl)); 
+ DO(AM(JT(jt,fopafl)), if(equ(v[i],y)){z=AM(v[i]); break;} )  // if filename found, return its file#
+ READUNLOCK(JT(jt,flock))
+ R z;
 }    /* file# corresp. to standard argument w */
 
-F1(jtfname){I j; 
- RE(j=i0(indexof(JT(jt,fopf),w)));
- ASSERT(j<AM(JT(jt,fopf)),EVFNUM);
- R ca(AAV(JT(jt,fopa))[j]);
+// returns 0 if given file# is not open, otherwise the string name of the file
+F1(jtfname){I j; A z=0;
+ I h; ASSERT(h=i0(w),EVFNUM);
+ READLOCK(JT(jt,flock))  A*v=AAV0(JT(jt,fopafl));
+ DO(AM(JT(jt,fopafl)), if(h==AM(v[i])){z=ca(v[i]); break;} )  // if filename found, return its file#.  Clone the string because we need the AM field in the table; also we don't do EPILOG
+ READUNLOCK(JT(jt,flock))
+ R z;
 }    /* string name corresp. to file# w */
 
-F1(jtjfiles){A y,z;
+// 1!:20
+F1(jtjfiles){A y,z=0; ASSERT(!JT(jt,seclev),EVSECURE)
  ASSERTMTV(w);
- RZ(y=vec(INT,AM(JT(jt,fopf)),AV(JT(jt,fopf))));
- R grade2(stitch(IRS1(y,0,0,jtbox,z),vec(BOX,AM(JT(jt,fopf)),AV(JT(jt,fopa)))),y);
-}    /* file (number,name) table */
+ READLOCK(JT(jt,flock))  A*v=AAV0(JT(jt,fopafl)); I nrows=AM(JT(jt,fopafl));
+ // We are doing an uncomfortable amount of memory allocating here under lock.
+ // We have to clone the string to protect the AM field in the original, and the lock
+ GAE0(y,BOX,2*nrows,2,goto errorexit;) AFLAGINIT(y,BOX) A (*zv)[2]=(A (*)[2])AAV2(y); AS(y)[0]=nrows; AS(y)[1]=2;  // get addr of result data, fill in the shape.  Make contents incorped
+ DO(AS(y)[0], RZGOTO(zv[i][1]=ca(v[i]),errorexit); ACINITZAP(zv[i][1]) GAT0E(zv[i][0],INT,1,0,goto errorexit;) ACINITZAP(zv[i][0])  IAV0(zv[i][0])[0]=AM(v[i]);)  // fill in the boxed file# and a clone of the string
+ z=y;  // success
+errorexit: READUNLOCK(JT(jt,flock))
+ z=grade2(z,z);  //
+ R z;
+}    /* file (number,name) table in order */
 
+// open named file in the OS.  Result is file handle, or 0 if error
 F jtjope(J jt,A w,C*mode){A t;F f;I n;static I nf=25; A z;
  ARGCHK1(w);
  ASSERT(BOX&AT(w),EVDOMAIN);
- RZ(t=str0(vslit(AAV(w)[0])));
+ RZ(t=str0(vslit(C(AAV(w)[0]))));
  n=AN(t)-1;
  ASSERT(n!=0,EVLENGTH);
 #if (SYS&SYS_UNIX)
@@ -88,46 +109,50 @@ F jtjope(J jt,A w,C*mode){A t;F f;I n;static I nf=25; A z;
  R f?f:(F)jerrno();
 }
 
+// 1!:21
 F1(jtjopen){A z;I h;
- ARGCHK1(w);
+ ARGCHK1(w); ASSERT(!JT(jt,seclev),EVSECURE)
  if(!AN(w))R w;
  if(AR(w))R rank1ex0(w,DUMMYSELF,jtjopen);
- RE(h=fnum(w));
- if(h){RZ(z=sc(h)); RZ(fname(z)); R z;}  // if already open, return #
- else{A ww;I ct=AM(JT(jt,fopf));
-  if(AM(JT(jt,fopf))==AN(JT(jt,fopf))){RZ(JT(jt,fopa)=ext(1,JT(jt,fopa))); RZ(JT(jt,fopf)=ext(1,JT(jt,fopf))); AM(JT(jt,fopf))=ct;}
-  RZ(IAV(JT(jt,fopf))[ct]=h=(I)jope(w,FUPDATE_O));
-  RZ(ww=fullname(vslit(AAV(w)[0]))); RZ(ras(ww));  // ras because ww might be the actual original w
-  RZ(AAV(JT(jt,fopa))[ct]=ww);
- 
-  AM(JT(jt,fopf))=ct+1;
+ RE(h=fnum(w));  // return non0 if the string is the # of an already-open file
+ if(h){RZ(z=sc(h)); ASSERT(fname(z)!=0,EVFNUM); R z;}  // if already open, return # provided the file is open (it wouldn't be if the arg was an invalid file#)
+  // opening a file by number seems weird - the only # you can use is for an open file, so what's the point?
+ else{A ww;
+  // opening a file by name.  We open the file and then add it to the table.  If the same name is opened more than once, they get
+  // separate table entries
+  RZ(h=(I)jope(w,FUPDATE_O));
+  RZ(ww=mkwris(fullname(vslit(C(AAV(w)[0])))));
+  WRITELOCK(JT(jt,flock))
+  while(AM(JT(jt,fopafl))==AN(JT(jt,fopafl)))RZ(jtextendunderlock(jt,&JT(jt,fopafl),&JT(jt,flock),0))
+  AAV0(JT(jt,fopafl))[AM(JT(jt,fopafl))]=ww; ACINITZAP(ww) AM(ww)=h;  // install new string, with file handle in AM
+  ++AM(JT(jt,fopafl));
+  WRITEUNLOCK(JT(jt,flock))
   R sc(h);
 }}   /* open the file named w if necessary; return file# */
 
-#if 0  // doesn't work
-B jtadd2(J jt,F f1,F f2,C*cmd){A c,x;I ct=AM(JT(jt,fopf));
- if(f1==NULL) {AM(JT(jt,fopf))=ct+2;R 1;};
- GATV0(c,LIT,1+strlen(cmd),1);MC(CAV(c)+1,cmd,AN(c)-1);cmd=CAV(c);
- if(ct+2>AN(JT(jt,fopf))){RZ(JT(jt,fopa)=ext(1,JT(jt,fopa))); RZ(JT(jt,fopf)=ext(1,JT(jt,fopf))); AM(JT(jt,fopf))=ct;}
- *cmd='<';x=cstr(cmd); ACINITZAP(x) RZ(AAV(JT(jt,fopa))[ct]=x); RZ(IAV(JT(jt,fopf))[ct]=(I)f1);
- *cmd='>';x=cstr(cmd); ACINITZAP(x) RZ(AAV(JT(jt,fopa))[ct+1]=x); RZ(IAV(JT(jt,fopf))[ct+1]=(I)f2);
- R 1;
-}   /* add 2 entries to AM(JT(jt,fopf)) table (for hostio); null arg commits entries */
-#endif
-
-F1(jtjclose){A*av;I*iv,j;
- ARGCHK1(w);
+// 1!:22
+F1(jtjclose){A*av;I*iv,j,h;
+ ARGCHK1(w); ASSERT(!JT(jt,seclev),EVSECURE)
  if(!AN(w))R w;
  if(AR(w))R rank1ex0(w,DUMMYSELF,jtjclose);
- RE(j=i0(indexof(JT(jt,fopf),sc(fnum(w))))); ASSERT(j<AM(JT(jt,fopf)),EVFNUM);
- av=AAV(JT(jt,fopa)); iv=IAV(JT(jt,fopf)); 
-// #if (SYS & SYS_DOS+SYS_MACINTOSH+SYS_UNIX)
+ RZ(h=fnum(w));  // get the file # of the file referred to.  If nonexistent, fail
+ // There is nothing to prevent two threads from closing the same file.  The results would be unpredictable: another thread could
+ // reallocate the same file# as one of the closing threads, with the result that the wrong file gets closed.  This is a user sync error.
+ // Release any locks held on the file being freed
 #if (SYS & SYS_DOS+SYS_MACINTOSH)
- RZ(unlk(iv[j]));
+ RZ(unlk(h));
 #endif
- if(fclose((F)iv[j]))R jerrno();
- --AM(JT(jt,fopf)); fa(av[j]); if(j<AM(JT(jt,fopf))){av[j]=av[AM(JT(jt,fopf))]; iv[j]=iv[AM(JT(jt,fopf))];}
- R num(1);
+ // first, remove the table entry so no other threads can write to the file
+ A dela=0;  // the string we deleted
+ WRITELOCK(JT(jt,flock)) A*v=AAV0(JT(jt,fopafl));
+ DO(AM(JT(jt,fopafl)), if(h==AM(v[i])){dela=v[i]; v[i]=v[--AM(JT(jt,fopafl))]; break;} )  // if file# is open, remove it from the open list
+ WRITEUNLOCK(JT(jt,flock))
+ // we have detached the string for the closing file.  It is possible that there wasn't one, if another thread got in and deleted it first.
+ ASSERT(dela,EVFNUM)
+ // Wait for any outstanding I/O to complete
+ WRITELOCK(dela->lock) WRITEUNLOCK(dela->lock) fa(dela);  // active I/O sets a readlock on dela.  Wait for all to finish.  It can't start again because the string is gone.  Free dela finally
+ if(fclose((F)h))R jerrno();   // try to close the file, fail if error
+ R num(1);  // always return success
 }    /* close file# w */
 
 F jtstdf(J jt,A w){A y;F f;I n,r,t;
@@ -135,7 +160,7 @@ F jtstdf(J jt,A w){A y;F f;I n,r,t;
  ASSERT(AN(w),EVLENGTH);
  ASSERT(!AR(w),EVRANK);
  if(BOX&AT(w)){
-  y=AAV(w)[0]; t=AT(y); n=AN(y); r=AR(y);
+  y=C(AAV(w)[0]); t=AT(y); n=AN(y); r=AR(y);
   if(t&(LIT+C2T+C4T)){ASSERT(1>=r,EVRANK); ASSERT(n!=0,EVLENGTH); R 0;}
 /*!
   if(t&C2T){ASSERT(1>=r,EVRANK); ASSERT(n!=0,EVLENGTH); ASSERT(vc1(n,USAV(y)),EVDOMAIN); R 0;}

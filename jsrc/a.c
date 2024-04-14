@@ -1,4 +1,4 @@
-/* Copyright 1990-2006, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Adverbs                                                                 */
@@ -16,7 +16,7 @@ static DF2(swap2){DECLF; F2PREFIP; jtinplace = (J)(intptr_t)((I)jtinplace^((JTIN
 }
 
 // w~, which is either reflexive/passive or evoke
-F1(jtswap){A y;C*s;I n;
+F1(jtswap){F1PREFIP;A y;C*s;I n;
  ARGCHK1(w); 
  if(VERB&AT(w)){
   // reflexive/passive.  Create verb that swaps.  Most flags do not apply to the derived verb
@@ -29,10 +29,10 @@ F1(jtswap){A y;C*s;I n;
   ASSERT(1>=AR(w),EVRANK);  // list or atom only
   n=AN(w); s=CAV(w); 
   ASSERT(vnm(n,s),EVILNAME);   // valid name
-  RZ(y=nfs(AN(w),CAV(w)));  // create a NAME block for the string
+  RZ(y=nfs(AN(w),CAV(w)));  // create a NAME block for the string - not cacheable
   RZ(y=nameref(y,jt->locsyms));  // Create a name-reference pointing to the name
-  // Make sure this reference is non-cachable.  'name'~ is a way to get a non-cachable reference
-  if(AT(y)&VERB+CONJ+ADV)FAV(y)->localuse.lu1.cachedref=0;  // turn off cachability if it's a reference (not if a noun)
+  // Make sure this reference is non-cached.  'name'~ is a way to get a non-cachable reference
+  if(AT(y)&VERB+CONJ+ADV)FAV(y)->flag2&=~VF2CACHEABLE;  // turn off cachability if it's a reference (not if a noun, which doesn't have this flag)
   R y;
  }
 }
@@ -48,7 +48,7 @@ static DF2(jtbdot2){R from(plusA(duble(cvt(B01,a)),cvt(B01,w)),FAV(self)->fgh[2]
 static DF1(jtbdot1){R bdot2(num(0),w,self);}
 
 static DF1(jtbasis1){DECLF;A z;D*x;I j;V*v;
- PREF1(jtbasis1);
+ F1RANK(0,jtbasis1,self);
  RZ(w=vi(w));
  switch(AV(w)[0]){
   case 0:
@@ -62,9 +62,10 @@ static DF1(jtbasis1){DECLF;A z;D*x;I j;V*v;
   default: ASSERT(0,EVDOMAIN);
 }}
 
-F1(jtbdot){A b,h=0;I j=0,n,*v;
+F1(jtbdot){F1PREFIP;A b,h=0;I j=0,n,*v;
  ARGCHK1(w);
- if(VERB&AT(w))R ADERIV(CBDOT, jtbasis1,0L, 0L,0,0,0);
+ A z; fdefallo(z)
+ if(VERB&AT(w)){fdeffill(z,0,CBDOT,VERB,(AF)(jtbasis1),jtvalenceerr,w,0L,0L,VFLAGNONE,0,0,0) RETF(z);}
  RZ(w=vi(w));
  n=AN(w); v=AV(w);
  if(1==n){j=*v; ASSERT(BETWEENC(j,-16,34),EVINDEX);}
@@ -72,84 +73,96 @@ F1(jtbdot){A b,h=0;I j=0,n,*v;
  if(j<16){
   GAT0(b,B01,64,2); AS(b)[0]=16; AS(b)[1]=4; MC(AV(b),booltab,64L);
   RZ(h=rifvs(cant2(IX(AR(w)),from(w,b))));  // h is an array representing b.  One cell for each atom of b; cell is 4 values
-  R fdef(0,CBDOT,VERB, jtbdot1,jtbdot2, 0L,w,h, VFLAGNONE, RMAX,0L,0L);
+  fdeffill(z,0,CBDOT,VERB, jtbdot1,jtbdot2, 0L,w,h, VFLAGNONE, RMAX,0L,0L); RETF(z);
  }else{
   if(BETWEENC(j,32,34)){
    AF rtn=jtbitwiserotate; rtn=j==33?jtbitwiseshift:rtn;  rtn=j==34?jtbitwiseshifta:rtn; 
-   R fdef(0,CBDOT,VERB, jtbitwise1,rtn, 0L,w,0L, VASGSAFE|VJTFLGOK2, 0L,0L,0L);
+   fdeffill(z,0,CBDOT,VERB, jtbitwise1,rtn, 0L,w,0L, VASGSAFE|VJTFLGOK2, 0L,0L,0L); RETF(z);
   }
-  A z=ca(ds(j-16+CBW0000)); RZ(z); RZ(FAV(z)->fgh[1]=rifvs(w)); FAV(z)->id=CBDOT; RETF(z);  // use g field not f to avoid interfering with atomic2
+  z=ca(ds(j-16+CBW0000)); RZ(z); RZ(FAV(z)->fgh[1]=rifvs(w)); FAV(z)->id=CBDOT; RETF(z);  // use g field not f to avoid interfering with atomic2
  }
 }
-
 
 /* The h parameter in self for u M.                 */
 /* 3 element boxed list                             */
 /* 0 - integer atom of # of entries in hash table   */
 /* 1 - 2-column integer table of arguments          */
 /*     arguments are machine word integers          */
-/*     column 1 is right arg; column 1 is left arg  */
+/*     column 1 is right arg; column 0 is left arg  */
 /*     column 0 is IMIN for monad                   */
 /* 2 - box list of results corresp. to arguments    */
 /*     unused entries are set to 0                  */
 
 #if SY_64
-#define HIC(x,y)  ((UI)x+10495464745870458733U*(UI)y)
+#define INITHASH(tbl,x,y) ((((UI4)(7*(UI)x+10495464745870458733U*(UI)y))*(UI)AN(tbl))>>32)  // starting hash index for a given x,y
+#define LOCKLOC ht3->lock
 #else
-#define HIC(x,y)  ((UI)x+2838338383U*(UI)y)
+#define INITHASH(tbl,x,y) (((UI4)(7*(UI)x+10495464745870458733U*(UI)y))*(UIL)AN(tbl))>>32;  // starting hash index for a given x,y
+#define LOCKLOC jt->etxn1  // any address will do, since locks are NOPs in 32-bit
 #endif
 
-static A jtmemoget(J jt,I x,I y,A self){A h,*hv,q;I*jv,k,m,*v;
- h=FAV(self)->fgh[2]; hv=AAV(h); 
- q=hv[1]; jv=AV(q); m=AS(q)[0];
- k=HIC(x,y)%m; v=jv+2*k; while(IMIN!=*v&&!(y==*v&&x==v[1])){v+=2; if(v==jv+2*m)v=jv;}  // search hash table, stop on match or end
- R AAV(hv[2])[((v-jv)>>1)];  // return match if found, 0 if not
-}
-
-// add new arg(s)/result pair which missed during lookup.  Args are I, result is A
-static A jtmemoput(J jt,I x,I y,A self,A z){A*cv,h,*hv,q;I *jv,k,m,*mv,*v;
- RZ(z);
- h=FAV(self)->fgh[2]; hv=AAV(h);  // c = # fa()s needed to deallocate self, not counting the ones that just protect the name
- q=hv[0]; mv= AV(q);
- q=hv[1]; jv= AV(q);
- q=hv[2]; cv=AAV(q); m=AN(q);
- // If the buffer must be extended, allocate a new one
- if(m<=2**mv){A cc,*cu=cv,jj;I i,*ju=jv,n=m,*u;
-  FULLHASHSIZE(2**mv,BOXSIZE,1,0,m);  // # boxes to allocate to get at least 2**mv slots
-  RZ(jj=mkwris(reshape(v2(m,2L),sc(IMIN)))); ACINITZAP(jj) jv= AV(jj);  // init arg table to IMIN
-  GATV0(cc,BOX,m,1); ACINITZAPRECUR(cc,BOX) cv=AAV(cc);  // the old table is recursive - the new one must be too
-  for(i=0,u=ju;i<n;++i,u+=2){
-   if(IMIN!=*u){  // copy the hash - does this lose the buffer for an arg of IMIN?
-    // the current slot in the memo table is filled.  Rehash it, and move the args into *jv and the values into *cv
-    k=HIC(x,y)%m; v=jv+2*k; while(IMIN!=*v){v+=2; if(v==jv+2*m)v=jv;}
-    cv[(v-jv)>>1]=cu[i]; v[0]=u[0]; v[1]=u[1];
-   }
-   cu[i]=0;  // always clear the pointer to the value so that we don't free the value when we free the old table
-  }
-  // Free the old buffers, ras() the new to make them recursive usect, then clear the tpops to bring the usecount down to 1
-  // h has recursive usecount
-  mf(hv[1]); hv[1]=jj;   // expunge old table, new one raised above, install.   h is not virtual
-  mf(hv[2]); hv[2]=cc;   // not INSTALLBOX(h,hv,2,cc); because we DO NOT want to increment the counts in the values already in the table.  cc itself raised above
+// self->h is the hash block, a 3-element box that never moves, allocated at rank 0.  We lock on the h block
+// AAV(h)[0] is the hashtable, holding indexes into the other tables.  AM has the active count, -1 for empty slots.  Allocated rank 0
+// AAV(h)[1] is the key, an INT table holding y [and x, IMIN if no x].  AM has the active count.  Allocated rank 2
+// AAV(h)[2] is the value, a BOX list corresponding to the key.  AM has the active count.  Allocated rank 0
+// insert the result z for the key x,y.  The key probably doesn't exist in the hash
+static A jtmemoput(J jt,I x,I y,A self,A z){
+ RZ(z); rifvs(z);  // realize any virtual z
+ // We need a write lock since we are modifying the table.  Then look to see if the tables need to be extended
+ A ht3=FAV(self)->fgh[2];  // the 3-column hash table
+ WRITELOCK(LOCKLOC);
+ while(1){  // until all the tables are OK.  If a line fails, it has released the lock
+  if(AM(AAV0(ht3)[1])==AS(AAV0(ht3)[1])[0]){RZ(jtextendunderlock(jt,&AAV0(ht3)[1],&LOCKLOC,0)) continue;}  // extend the key table
+  if(AM(AAV0(ht3)[2])==AN(AAV0(ht3)[2])){RZ(jtextendunderlock(jt,&AAV0(ht3)[2],&LOCKLOC,0)) continue;}  // extend the result table
+  if(AM(AAV0(ht3)[0])*2>AN(AAV0(ht3)[0])){RZ(jtextendunderlock(jt,&AAV0(ht3)[0],&LOCKLOC,1)) continue;}  // extend the hash table, noting that it is a hash
+  break;
  }
- ++*mv;
- k=HIC(x,y)%m; v=jv+2*k; while(IMIN!=*v){v+=2; if(v==jv+2*m)v=jv;}
- // bump the usecount of the result to account for new ref from table
- RZ(ras(z)); cv[(v-jv)>>1]=z; v[0]=y; v[1]=x; 
+ // when we get here we have the write lock and all the tables have the needed space.  Insert the result
+ A hasht=AAV0(ht3)[0], keys=AAV0(ht3)[1], results=AAV0(ht3)[2];
+ I (*v)[2]=(I (*)[2])IAV2(keys); I *hv=IAV0(hasht);   // point to keys and ht3able
+ if(AM(hasht)==0){  // rehash the table if it was resized.  Table was initialized to -1
+  DO(AM(results), I j=INITHASH(hasht,v[i][1],v[i][0]); while(0<=hv[j]){if(unlikely(--j<0))j+=AN(hasht);} hv[j]=i;)  // for each key, insert hash
+  AM(hasht)=AM(results); // set # entries in hash
+ }
+ // install args and result in the next slot.  It is possible that two threads might store the same value; that's OK
+ ra(z); AAV0(results)[AM(results)]=z;  // ra because ht3 is recursive
+ v[AM(keys)][0]=y; v[AM(keys)][1]=x;   // install arg values
+
+ I hi=INITHASH(hasht,x,y); while(0<=hv[hi]){if(unlikely(--hi<0))hi+=AN(hasht);}           // init and find the insertion point
+ // hi is an empty slot.  Install the index of the keys/results we just added
+ hv[hi]=AM(results)++;                      // have the hash point to new result, incr the # results
+ ++AM(keys);                           // incr # keys, in lockstep with results
+ ++AM(hasht);   // incr # hash entries
+ WRITEUNLOCK(LOCKLOC); 
  R z;
 }
 
+// look up a given (x,y) combination.  x is IMIN for monadic references (IMIN is not a cacheable argument)
+// Result is the stored result if any, or 0 if none found
+static A jtmemoget(J jt,I x,I y,A self){A z=0;  // init to not found
+ // Take a read lock on the table
+ A ht3=FAV(self)->fgh[2];  // the 3-column hash table
+ READLOCK(LOCKLOC);
+ A hasht=AAV0(ht3)[0], keys=AAV0(ht3)[1], results=AAV0(ht3)[2];
+ I (*v)[2]=(I (*)[2])IAV2(keys); I *hv=IAV0(hasht);   // point to keys and hashtable
+ I hi=INITHASH(hasht,x,y); while(hv[hi]>=0){if(((v[hv[hi]][0]^y)|(v[hv[hi]][1]^x))==0){z=AAV0(results)[hv[hi]]; break;} if(unlikely(--hi<0))hi+=AN(hasht);}           // init search, exiting when key found
+ READUNLOCK(LOCKLOC);
+ R z;  // return match if found, 0 if not
+}
+
+
 // w is an arg; result is IMIN if not memoable
-// memoable is: atomic int/bool or float with int value
+// memoable is: atomic int/bool or other with int value
 static I jtint0(J jt,A w){A x;
  if(unlikely(AR(w)))R IMIN;
  if(unlikely(!(ISDENSETYPE(AT(w),B01+INT))))w=pcvt(INT,w);
- R w&&INT&AT(w)?BIV0(w):IMIN;
+ R w&&INT+B01&AT(w)?BIV0(w):IMIN;
 }
 
 static DF1(jtmemo1){DECLF;A z;I x,y;
  ARGCHK1(w);
  x=IMIN; y=int0(w);
- if(y==IMIN)R CALL1(f1,w,fs);
+ if(y==IMIN)R CALL1(f1,w,fs);  // if unmemoable, just run the function off-hash
  R (z=memoget(x,y,self))?z:memoput(x,y,self,CALL1(f1,w,fs));
 }
 
@@ -160,19 +173,19 @@ static DF2(jtmemo2){DECLF;A z;I x,y;
  R (z=memoget(x,y,self))?z:memoput(x,y,self,CALL2(f2,a,w,fs));  // if memo lookup returns empty, run the function and remember the result
 }
 
-// Create the memoed verb.  We create an h argument that is a list of 3 boxes, containing:
-// 0 number of memoed results m
-// 1 mx2 INT table of input value; index of result
-// 2 boxed list containing results
-// All these start life on the tpush stack
-F1(jtmemo){PROLOG(300);A h,*hv,q;I m;V*v;
+// Create the memoed verb.  We create an h argument of hashtable;key;value, as described above
+F1(jtmemo){F1PREFIP;PROLOG(300);A h,*hv;I m;
  ARGCHK1(w);
  ASSERT(VERB&AT(w),EVDOMAIN);
- v=FAV(w); FULLHASHSIZE(30,BOXSIZE,1,0,m);  // m = # items to allocate
- GAT0(h,BOX,3,1); hv=AAV(h);
- GAT0(q,INT,1,0); AV(q)[0]=0;        hv[0]=incorp(q);  // is modified; musn't use sc()
- RZ(q=reshape(v2(m,2L),sc(IMIN)));  RZ(hv[1]=incorp(mkwris(q)));
- GATV0(q,BOX,m,1);                 hv[2]=incorp(q);
- EPILOG(fdef(0,CMCAP,VERB,jtmemo1,jtmemo2,w,0L,h,0L,v->mr,lrv(v),rrv(v)));
+ V *v=FAV(w); FULLHASHSIZE(30,BOXSIZE,1,0,m);  // m = # items to allocate
+ GAT0(h,BOX,3,0); hv=AAV0(h); AFLAGINIT(h,BOX)  // the components of fdef must be recursive if recursible
+ // the tables are standard extendible, with # items in AM, thus must be zapped
+ // So, we defer initializing them until they have been made recursive inside fdef
+ GAT0(hv[0],INT,m,0) ACINITZAP(hv[0]) GAT0(hv[1],INT,2*(m>>1),2) ACINITZAP(hv[1]) GAT0(hv[2],BOX,m>>1,0) ACINITZAP(hv[2])  // allo hash/keys/results
+ A z=fdef(0,CMCAP,VERB,jtmemo1,jtmemo2,w,0L,h,0L,v->mr,lrv(v),rrv(v));
+ AM(hv[0])=0; mvc(m*SZI,AAV0(hv[0]),1,MEMSETFF);  // clear hash table
+ AM(hv[1])=0; AS(hv[1])[0]=m>>1;  // init empty key table, 2 INTs each row
+ AM(hv[2])=0;   // init empty result table, recursive
+ R z;
  // Now we have converted the verb result to recursive usecount, and gotten rid of the pending tpops for the components of h
 }

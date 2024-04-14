@@ -118,6 +118,7 @@
 #define _mm_insert_epi32 _mm_insert_epi32_REF
 #define _mm_insert_epi64 _mm_insert_epi64_REF
 #define _mm_insert_epi8 _mm_insert_epi8_REF
+#define _mm_max_epu32 _mm_max_epu32_REF
 #define _mm_testc_si128 _mm_testc_si128_REF
 #define _mm_testnzc_si128 _mm_testnzc_si128_REF
 #define _mm_testz_si128 _mm_testz_si128_REF
@@ -388,7 +389,7 @@ static __emu_inline __m128 _mm_blend_ps_SSE2( __m128 a, __m128 b, const int mask
 /** \SSE4_1{SSE2,_mm_blendv_epi8} */
 static __emu_inline __m128 _mm_blendv_ps_SSE2( __m128 a, __m128 b, __m128 mask )
 {
-    __m128 A, B, Mask;
+    __m128i A, B, Mask;
     A = _mm_castps_si128(a);
     B = _mm_castps_si128(b);
     Mask = _mm_castps_si128(mask);
@@ -407,8 +408,7 @@ static __emu_inline int _mm_testc_si128_REF( __m128i a, __m128i b)
     A = a;
     B = b;
 
-    return ( (A[0] & B[0]) == A[0] ) &&
-           ( (A[1] & B[1]) == A[1] ) ;
+    return (((~A[0]) & B[0]) | ((~A[1]) & B[1])) == 0;
 }
 
 /** \SSE45{Reference,_mm_testz_si128,ptest} */
@@ -418,8 +418,7 @@ static __emu_inline int _mm_testz_si128_REF( __m128i a, __m128i b)
     A = a;
     B = b;
 
-    return ( (A[0] & B[0]) == 0 ) &&
-           ( (A[1] & B[1]) == 0 ) ;
+    return ( (A[0] & B[0]) | (A[1] & B[1])) == 0;
 }
 
 /** \SSE45{Reference,_mm_testnzc_si128,ptest} */
@@ -430,10 +429,8 @@ static __emu_inline int _mm_testnzc_si128_REF( __m128i a, __m128i b)
     A = a;
     B = b;
 
-    zf = _mm_testz_si128_REF( A, B);
-
-    cf = ( (~A[0] & B[0]) == 0 ) &&
-         ( (~A[1] & B[1]) == 0 ) ;
+    zf = _mm_testz_si128_REF(A, B);
+    cf = _mm_testc_si128_REF(A, B);
     return ((int)!zf & (int)!cf);
 }
 
@@ -488,12 +485,28 @@ static __emu_inline __m128i _mm_cmpeq_epi64_REF( __m128i a, __m128i b )
     return A;
 }
 
+#define SSP_SET_MIN( sd, s) sd=((sd)<(s))?(sd):(s);
+#define SSP_SET_MAX( sd, s) sd=((sd)>(s))?(sd):(s);
+
+/** \SSE4_1{Reference,_mm_max_epu32} */
+static __emu_inline __m128i _mm_max_epu32_REF ( __m128i a, __m128i b )
+{
+    __m128i A,B;
+    A = a;
+    B = b;
+
+    SSP_SET_MAX( ((unsigned int*)(&A))[0] , ((unsigned int*)(&B))[0] );
+    SSP_SET_MAX( ((unsigned int*)(&A))[1] , ((unsigned int*)(&B))[1] );
+    SSP_SET_MAX( ((unsigned int*)(&A))[2] , ((unsigned int*)(&B))[2] );
+    SSP_SET_MAX( ((unsigned int*)(&A))[3] , ((unsigned int*)(&B))[3] );
+    return A;
+}
+
 /** \SSE3{SSE2,_mm_movehdup_ps} */
 static __emu_inline __m128 _mm_movehdup_ps_SSE2(__m128 a)
 {
     __m128 A;
-    A = a;
-    A = _mm_shuffle_epi32( _mm_castps_si128(A), _MM_SHUFFLE( 3, 3, 1, 1) );
+    A = _mm_castsi128_ps(_mm_shuffle_epi32( _mm_castps_si128(a), _MM_SHUFFLE( 3, 3, 1, 1) ));
     return A;
 }
 
@@ -501,8 +514,7 @@ static __emu_inline __m128 _mm_movehdup_ps_SSE2(__m128 a)
 static __emu_inline __m128 _mm_moveldup_ps_SSE2(__m128 a)
 {
     __m128 A;
-    A = a;
-    A = _mm_shuffle_epi32( _mm_castps_si128(A), _MM_SHUFFLE( 2, 2, 0, 0) );
+    A = _mm_castsi128_ps(_mm_shuffle_epi32( _mm_castps_si128(a), _MM_SHUFFLE( 2, 2, 0, 0) ));
     return A;
 }
 
@@ -748,6 +760,20 @@ static __emu_inline __emu__m256i __emu_mm256_broadcastsi128_si256       ( __m128
     return A;
 }
 
+static __emu_inline __m128i __emu_mm_blendv_epi8(__m128i a, __m128i b, __m128i m)
+{
+ m=_mm_cmpgt_epi8(_mm_setzero_si128(), m);
+ return ssp_logical_bitwise_select_SSE2(b, a, m);
+}
+
+static __emu_inline __emu__m256i __emu_mm256_blendv_epi8(__emu__m256i a, __emu__m256i b, __emu__m256i m)
+{
+ __emu__m256i A;
+ A.__emu_m128[0] = __emu_mm_blendv_epi8(a.__emu_m128[0], b.__emu_m128[0], m.__emu_m128[0]);
+ A.__emu_m128[1] = __emu_mm_blendv_epi8(a.__emu_m128[1], b.__emu_m128[1], m.__emu_m128[1]);
+ return A;
+}
+
 static __emu_inline __emu__m256i __emu_mm256_slli_epi64 ( __emu__m256i a, int imm )
 {
     __emu__m256i A;
@@ -798,6 +824,7 @@ static __emu_inline __emu__m256i __emu_mm256_srli_si256 ( __emu__m256i a, int im
 }
 #endif
 // avx2
+__EMU_M256_IMPL_M2( __m256i, cmpgt_epi16 );
 __EMU_M256_IMPL_M2( __m256i, cmpgt_epi32 );
 __EMU_M256_IMPL_M2( __m256i, cmpgt_epi64 );
 __EMU_M256_IMPL_M2( __m256i, cmpgt_epi8 );
@@ -1022,7 +1049,7 @@ __emu_mm256_test_impl( __emu_mm, nzc, ps, ps, __emu__m256 );
 
 #endif
 
-#if defined(_WIN32) || ( !defined(__clang__) && defined( __GNUC__ ) && ( __GNUC__ == 4 ) && (__GNUC_MINOR__ < 4 ) )
+#if defined(_WIN32) || ( !defined(__clang__) && defined( __GNUC__ ) && ( __GNUC__ == 4 ) && (__GNUC_MINOR__ < 4 ) ) || defined(OPTMO0)
 /* use macro implementation instead of inline functions to allow -O0 for GCC pre 4.4 */
 
 // #pragma message ("Using macro for GCC <4.4" )
@@ -1031,15 +1058,15 @@ __emu_mm256_test_impl( __emu_mm, nzc, ps, ps, __emu__m256 );
 ({ \
     __m128 res_ = (m1), m2_ = (m2); \
     if ( 7 < (unsigned)predicate ) __asm__ __volatile__ ( "ud2" : : : "memory" ); \
-    __asm__ ( "cmpps %[pred_], %[m2_], %[res_]" : [res_] "+x" (res_) : [m2_] "xm" (m2_), [pred_] "i" (predicate) ); \
+    __asm__ ( "cmpps %[pred_], %[m2_], %[res_]" : [res_] "+x" (res_) : [m2_] "x" (m2_), [pred_] "i" (predicate) ); \
     res_; })
 
 #define __emu_mm256_cmp_ps(m1, m2, predicate) \
 ({ \
     __emu__m256 res_ = (m1), m2_ = (m2); \
     if ( 7 < (unsigned)predicate ) __asm__ __volatile__ ( "ud2" : : : "memory" ); /* not supported yet */ \
-    __asm__ ( "cmpps %[pred_], %[m2_], %[res_]" : [res_] "+x" (res_.__emu_m128[0]) : [m2_] "xm" (m2_.__emu_m128[0]), [pred_] "i" (predicate) ); \
-    __asm__ ( "cmpps %[pred_], %[m2_], %[res_]" : [res_] "+x" (res_.__emu_m128[1]) : [m2_] "xm" (m2_.__emu_m128[1]), [pred_] "i" (predicate) ); \
+    __asm__ ( "cmpps %[pred_], %[m2_], %[res_]" : [res_] "+x" (res_.__emu_m128[0]) : [m2_] "x" (m2_.__emu_m128[0]), [pred_] "i" (predicate) ); \
+    __asm__ ( "cmpps %[pred_], %[m2_], %[res_]" : [res_] "+x" (res_.__emu_m128[1]) : [m2_] "x" (m2_.__emu_m128[1]), [pred_] "i" (predicate) ); \
     res_; })
 
 
@@ -1047,15 +1074,15 @@ __emu_mm256_test_impl( __emu_mm, nzc, ps, ps, __emu__m256 );
 ({ \
     __m128d res_ = (m1), m2_ = (m2); \
     if ( 7 < (unsigned)predicate ) __asm__ __volatile__ ( "ud2" : : : "memory" ); /* not supported yet */ \
-    __asm__ ( "cmppd %[pred_], %[m2_], %[res_]" : [res_] "+x" (res_) : [m2_] "xm" (m2_), [pred_] "i" (predicate) ); \
+    __asm__ ( "cmppd %[pred_], %[m2_], %[res_]" : [res_] "+x" (res_) : [m2_] "x" (m2_), [pred_] "i" (predicate) ); \
     res_; })
 
 #define __emu_mm256_cmp_pd(m1, m2, predicate) \
 ({ \
     __emu__m256d res_ = (m1), m2_ = (m2); \
     if ( 7 < (unsigned)predicate ) __asm__ __volatile__ ( "ud2" : : : "memory" ); /* not supported yet */ \
-    __asm__ ( "cmppd %[pred_], %[m2_], %[res_]" : [res_] "+x" (res_.__emu_m128[0]) : [m2_] "xm" (m2_.__emu_m128[0]), [pred_] "i" (predicate) ); \
-    __asm__ ( "cmppd %[pred_], %[m2_], %[res_]" : [res_] "+x" (res_.__emu_m128[1]) : [m2_] "xm" (m2_.__emu_m128[1]), [pred_] "i" (predicate) ); \
+    __asm__ ( "cmppd %[pred_], %[m2_], %[res_]" : [res_] "+x" (res_.__emu_m128[0]) : [m2_] "x" (m2_.__emu_m128[0]), [pred_] "i" (predicate) ); \
+    __asm__ ( "cmppd %[pred_], %[m2_], %[res_]" : [res_] "+x" (res_.__emu_m128[1]) : [m2_] "x" (m2_.__emu_m128[1]), [pred_] "i" (predicate) ); \
     res_; })
 
 
@@ -1063,14 +1090,14 @@ __emu_mm256_test_impl( __emu_mm, nzc, ps, ps, __emu__m256 );
 ({ \
     __m128 res_ = (m1), m2_ = (m2); \
     if ( 7 < (unsigned)predicate ) __asm__ __volatile__ ( "ud2" : : : "memory" ); /* not supported yet */ \
-    __asm__ ( "cmpss %[pred_], %[m2_], %[res_]" : [res_] "+x" (res_) : [m2_] "xm" (m2_), [pred_] "i" (predicate) ); \
+    __asm__ ( "cmpss %[pred_], %[m2_], %[res_]" : [res_] "+x" (res_) : [m2_] "x" (m2_), [pred_] "i" (predicate) ); \
     res_; })
 
 #define __emu_mm_cmp_sd(m1, m2, predicate) \
 ({ \
     __m128 res_ = (m1), m2_ = (m2); \
     if ( 7 < (unsigned)predicate ) __asm__ __volatile__ ( "ud2" : : : "memory" ); /* not supported yet */ \
-    __asm__ ( "cmpsd %[pred_], %[m2_], %[res_]" : [res_] "+x" (res_) : [m2_] "xm" (m2_), [pred_] "i" (predicate) ); \
+    __asm__ ( "cmpsd %[pred_], %[m2_], %[res_]" : [res_] "+x" (res_) : [m2_] "x" (m2_), [pred_] "i" (predicate) ); \
     res_; })
 
 
@@ -1084,7 +1111,7 @@ static __emu_inline __m128 __emu_mm_cmp_ps(__m128 m1, __m128 m2, const int predi
 
     if (__builtin_constant_p(predicate) && predicate >= 0 && predicate <= 7 ) {
         res = m1;
-        __asm__ ( "cmpps %[pred_], %[m2_], %[res_]" : [res_] "+x" (res) : [m2_] "xm" (m2), [pred_] "i" (predicate) );
+        __asm__ ( "cmpps %[pred_], %[m2_], %[res_]" : [res_] "+x" (res) : [m2_] "x" (m2), [pred_] "i" (predicate) );
     } else {
         res = _mm_setzero_ps();
         __asm__ __volatile__ ( "ud2" : : : "memory" ); /* not supported yet */
@@ -1096,11 +1123,11 @@ __EMU_M256_IMPL2_M2I_DUP( __m256, cmp_ps )
 
 static __emu_inline __m128d __emu_mm_cmp_pd(__m128d m1, __m128d m2, const int predicate)
 {
-    __m128d res;
+    __m128d res=res;
 
     if ( predicate >= 0 && predicate <= 7 ) {
         res = m1;
-        __asm__ ( "cmppd %[pred_], %[m2_], %[res_]" : [res_] "+x" (res) : [m2_] "xm" (m2), [pred_] "i" (predicate) );
+        __asm__ ( "cmppd %[pred_], %[m2_], %[res_]" : [res_] "+x" (res) : [m2_] "x" (m2), [pred_] "i" (predicate) );
     } else {
         __asm__ __volatile__ ( "ud2" : : : "memory" ); /* not supported yet */
     }
@@ -1112,11 +1139,11 @@ __EMU_M256_IMPL2_M2I_DUP( __m256d, cmp_pd )
 
 static __emu_inline __m128d __emu_mm_cmp_sd(__m128d m1, __m128d m2, const int predicate)
 {
-    __m128d res;
+    __m128d res=res;
 
     if ( predicate >= 0 && predicate <= 7 ) {
         res = m1;
-        __asm__ ( "cmpsd %[pred_], %[m2_], %[res_]" : [res_] "+x" (res) : [m2_] "xm" (m2), [pred_] "i" (predicate) );
+        __asm__ ( "cmpsd %[pred_], %[m2_], %[res_]" : [res_] "+x" (res) : [m2_] "x" (m2), [pred_] "i" (predicate) );
     } else {
         __asm__ __volatile__ ( "ud2" : : : "memory" ); /* not supported yet */
     }
@@ -1126,11 +1153,11 @@ static __emu_inline __m128d __emu_mm_cmp_sd(__m128d m1, __m128d m2, const int pr
 
 static __emu_inline __m128 __emu_mm_cmp_ss(__m128 m1, __m128 m2, const int predicate)
 {
-    __m128 res;
+    __m128 res=res;
 
     if ( predicate >= 0 && predicate <= 7 ) {
         res = m1;
-        __asm__ ( "cmpss %[pred_], %[m2_], %[res_]" : [res_] "+x" (res) : [m2_] "xm" (m2), [pred_] "i" (predicate) );
+        __asm__ ( "cmpss %[pred_], %[m2_], %[res_]" : [res_] "+x" (res) : [m2_] "x" (m2), [pred_] "i" (predicate) );
     } else {
         __asm__ __volatile__ ( "ud2" : : : "memory" ); /* not supported yet */
     }
@@ -1154,9 +1181,11 @@ __EMU_M256_IMPL_M1_RET( __m256i, __m256, cvttps_epi32 );
 __EMU_M256_IMPL_M2( __m256i, add_epi16 );
 __EMU_M256_IMPL_M2( __m256i, add_epi32 );
 __EMU_M256_IMPL_M2( __m256i, add_epi8 );
+__EMU_M256_IMPL_M2( __m256i, cmpeq_epi16 );
 __EMU_M256_IMPL_M2( __m256i, cmpeq_epi32 );
 __EMU_M256_IMPL_M2( __m256i, cmpeq_epi64 );
 __EMU_M256_IMPL_M2( __m256i, cmpeq_epi8 );
+__EMU_M256_IMPL_M2( __m256i, max_epu32 );
 __EMU_M256_IMPL_M2( __m256i, mul_epu32 );
 __EMU_M256_IMPL_M2( __m256i, sub_epi8 );
 __EMU_M256_128_IMPL_M2( __m256i, and_si  );
@@ -1648,6 +1677,11 @@ static __emu_inline __emu__m256i __emu_mm256_mask_i64gather_epi64( __emu__m256i 
 __emu_maskload_impl( __emu_mm256_maskload_epi64, __emu__m256i, __emu__m256i, __emu_int64_t, __emu_int64_t );
 __emu_maskstore_impl( __emu_mm256_maskstore_epi64, __emu__m256i, __emu__m256i, __emu_int64_t, __emu_int64_t );
 
+static __emu_inline double __emu_mm256_cvtsd_f64( __emu__m256d a )
+{
+    return _mm_cvtsd_f64(a.__emu_m128[0]);
+}
+
 /** \SSE4_1{SSE2,_mm_cvtepu8_epi64} */
 static __emu_inline __m128i _mm_cvtepu8_epi64_SSE2 ( __m128i a)
 {
@@ -1678,6 +1712,23 @@ static __emu_inline __emu__m256i __emu_mm256_sllv_epi64(__emu__m256i a, __emu__m
 #if defined __cplusplus
 }; /* End "C" */
 #endif /* __cplusplus */
+
+#undef __EMU_M256_128_IMPL_M2
+#undef __EMU_M256_IMPL_M3
+#undef __EMU_M256_IMPL_M2I_SHIFT
+#undef __EMU_M256_IMPL2_M2I_DUP
+#undef __EMU_M256_IMPL_M2I_DUP
+#undef __EMU_M256_IMPL2_M2T
+#undef __EMU_M256_IMPL_M2
+#undef __EMU_M256_IMPL2_M1I_SHIFT
+#undef __EMU_M256_IMPL2_M1I_DUP
+#undef __EMU_M256_IMPL_M1I_DUP
+#undef __EMU_M256_IMPL_M1P_DUP
+#undef __EMU_M256_IMPL_M1_HL
+#undef __EMU_M256_IMPL_M1_LH
+#undef __EMU_M256_IMPL_M1_RET_NAME
+#undef __EMU_M256_IMPL_M1_RET
+#undef __EMU_M256_IMPL_M1
 
 #ifndef __EMU_M256_NOMAP
 
@@ -1916,7 +1967,9 @@ static __emu_inline __emu__m256i __emu_mm256_sllv_epi64(__emu__m256i a, __emu__m
 #define _mm256_xor_si256 __emu_mm256_xor_si256
 #define _mm256_sub_epi8 __emu_mm256_sub_epi8
 
+#define _mm256_max_epu32 __emu_mm256_max_epu32
 #define _mm256_mul_epu32 __emu_mm256_mul_epu32
+#define _mm256_blendv_epi8 __emu_mm256_blendv_epi8
 #define _mm256_slli_epi64 __emu_mm256_slli_epi64
 #define _mm256_srli_epi16 __emu_mm256_srli_epi16
 #define _mm256_srli_epi32 __emu_mm256_srli_epi32
@@ -1928,9 +1981,11 @@ static __emu_inline __emu__m256i __emu_mm256_sllv_epi64(__emu__m256i a, __emu__m
 #define _mm256_broadcastq_epi64 __emu_mm256_broadcastq_epi64
 #define _mm256_broadcastsi128_si256 __emu_mm256_broadcastsi128_si256
 
+#define _mm256_cmpeq_epi16 __emu_mm256_cmpeq_epi16
 #define _mm256_cmpeq_epi32 __emu_mm256_cmpeq_epi32
 #define _mm256_cmpeq_epi64 __emu_mm256_cmpeq_epi64
 #define _mm256_cmpeq_epi8 __emu_mm256_cmpeq_epi8
+#define _mm256_cmpgt_epi16 __emu_mm256_cmpgt_epi16
 #define _mm256_cmpgt_epi32 __emu_mm256_cmpgt_epi32
 #define _mm256_cmpgt_epi64 __emu_mm256_cmpgt_epi64
 #define _mm256_cmpgt_epi8 __emu_mm256_cmpgt_epi8
@@ -1955,6 +2010,7 @@ static __emu_inline __emu__m256i __emu_mm256_sllv_epi64(__emu__m256i a, __emu__m
 #define _mm256_permute4x64_epi64 __emu_mm256_permute4x64_epi64
 #define _mm256_permute4x64_pd __emu_mm256_permute4x64_pd
 
+#define _mm256_cvtsd_f64 __emu_mm256_cvtsd_f64
 #define _mm256_cvtepu8_epi64 __emu_mm256_cvtepu8_epi64
 #define _mm256_sllv_epi64 __emu_mm256_sllv_epi64
 

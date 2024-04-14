@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g400.ijs'
+prolog './g400.ijs'
 NB. #y ------------------------------------------------------------------
 
 randuni''
@@ -135,6 +135,10 @@ NB. Verify long leading 1s are fast
 l1 =: (9999#1),0
 l0 =: 0 (0}) l1
 THRESHOLD +. ((1000) 6!:2 'l0 # i. 10000') (> 1.25&*)&(-&((1000) 6!:2 'i. 10000')) ((1000) 6!:2 'l1 # i. 10000')  NB. occasionally miscompares
+
+NB. verify that 7!:2 clears tpop stack
+f1 =: 1e6$0
+*./ 3000 > (7!:2 , 7!:2) 'f1 =: 1 (2 3 4)} f1'
 
 10000 > 7!:2 '1 # l0' [ l0 =: i. 100 100   NB. Verify 1 # y does not copy
 10000 > 7!:2 '01 # l0' [ l0 =: i. 100 100   NB. Verify 1 # y does not copy
@@ -585,7 +589,7 @@ c =: 4 250000 $ 4
 1000000 < 7!:2 'b (I.@[ ; (<;.1)) a'
 1000000 < 7!:2 'b (2 ; (<;.1)) a'
 
-NB. WILLOPEN passed through f@:][
+NB. WILLOPEN passed through <@:][
 16000 > 7!:2 '(2: 0:&.> b&(<@:];.1)) a'
 16000 > 7!:2 '(2 0:&.> b&(<@:];.1)) a'
 16000 > 7!:2 'b (I.@[ 0:&.> (<@:];.1)) a'
@@ -595,7 +599,7 @@ NB. WILLOPEN passed through f@:][
 1000000 < 7!:2 'b (I.@[ ; (<@:];.1)) a'
 1000000 < 7!:2 'b (2 ; (<@:];.1)) a'
 
-NB. WILLOPEN passed through f@][
+NB. WILLOPEN passed through <@][
 16000 > 7!:2 '(2: 0:&.> b&(<@];.1)) a'
 16000 > 7!:2 '(2 0:&.> b&(<@];.1)) a'
 16000 > 7!:2 'b (I.@[ 0:&.> (<@];.1)) a'
@@ -676,8 +680,13 @@ NB. zapped virtual block - used to corrupt memory
 3 : 'y=. [:^:0: y' y  NB. passes into verb, comes back, without freeing backer
 )
 
+a=: 3#.^:_1 ] 49401 10852 55070 6484 14621 8515
+0 1 1 1 1 0 0 1 0 0 -: ([: {. (#~ <&2))"1 |: a  NB. # overwrites & changes shape of virtual block; must use a clone
 
 
 4!:55 ;:'a a0 a1 abox adot1 adot2 sdot0 b c copy f f1 f2 f3 f4 g l0 l1 m n siz1200 siz12002 tally x xx y '
 randfini''
+
+
+epilog''
 

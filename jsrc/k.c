@@ -1,4 +1,4 @@
-/* Copyright 1990-2010, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Conversions Amongst Internal Types                                      */
@@ -9,13 +9,6 @@
 #define KF1(f)          B f(J jt,A w,void*yv)
 #define KF1F(f)         B f(J jt,A w,void*yv,D fuzz)  // calls that use optional fuzz
 #define KF2(f)          B f(J jt,A w,void*yv,I mode)
-#define CVCASE(a,b)     (6*((0x28c>>(a))&7)+((0x28c>>(b))&7))   // Must distinguish 0 2 3 4 6 7->4 3 1 0 2 5  01010001100
-#define CVCASECHAR(a,b) ((3*(0x40000>>(a))+(0x40000>>(b)))&07)  // distinguish character cases - note last case is impossible (equal types)
-
-// FEQ/FIEQ are used in bcvt, where FUZZ may be set to 0 to ensure only exact values are demoted to lower precision
-#define FEQ(u,v,fuzz)    (ABS((u)-(v))<=fuzz*MAX(ABS(u),ABS(v)))
-#define FIEQ(u,v,fuzz)   (ABS((u)-(v))<=fuzz*ABS(v))  // used when v is known to be exact integer.  It's close enough, maybe ULP too small on the high end
-
 static KF1(jtC1fromC2){UC*x;US c,*v;
  v=USAV(w); x=(C*)yv;
  DQ(AN(w), c=*v++; if(!(256>c))R 0; *x++=(UC)c;);
@@ -52,6 +45,10 @@ static KF1(jtC4fromC2){US*v;C4*x;
  R 1;
 }
 
+typedef struct {D a; D b; D c; D d;} dbl4;
+static __attribute__((aligned(CACHELINESIZE))) dbl4 Dfours[16] = {
+{0,0,0,0}, {1,0,0,0}, {0,1,0,0}, {1,1,0,0}, {0,0,1,0}, {1,0,1,0}, {0,1,1,0}, {1,1,1,0}, {0,0,0,1}, {1,0,0,1}, {0,1,0,1}, {1,1,0,1}, {0,0,1,1}, {1,0,1,1}, {0,1,1,1}, {1,1,1,1},
+};
 typedef struct {I a; I b; I c; I d;} int4;
 static __attribute__((aligned(CACHELINESIZE))) int4 Ifours[16] = {
 {0,0,0,0}, {1,0,0,0}, {0,1,0,0}, {1,1,0,0}, {0,0,1,0}, {1,0,1,0}, {0,1,1,0}, {1,1,1,0}, {0,0,0,1}, {1,0,0,1}, {0,1,0,1}, {1,1,0,1}, {0,0,1,1}, {1,0,1,1}, {0,1,1,1}, {1,1,1,1},
@@ -90,10 +87,378 @@ static KF1(jtIfromB){
  R 1;
 }
 
-typedef struct {D a; D b; D c; D d;} dbl4;
-static __attribute__((aligned(CACHELINESIZE))) dbl4 Dfours[16] = {
-{0,0,0,0}, {1,0,0,0}, {0,1,0,0}, {1,1,0,0}, {0,0,1,0}, {1,0,1,0}, {0,1,1,0}, {1,1,1,0}, {0,0,0,1}, {1,0,0,1}, {0,1,0,1}, {1,1,0,1}, {0,0,1,1}, {1,0,1,1}, {0,1,1,1}, {1,1,1,1},
-};
+static KF1(jtI2fromB){I2 *zv=yv; B *wv=BAV(w);
+ I n=AN(w); DO(n, zv[i]=wv[i];)
+ R 1;
+}
+
+static KF1(jtI4fromB){I4 *zv=yv; B *wv=BAV(w);
+ I n=AN(w); DO(n, zv[i]=wv[i];)
+ R 1;
+}
+
+
+
+static KF1(jtEfromB){E *zv=yv; B *wv=BAV(w);
+ I n=AN(w); DO(n, zv->hi=((D*)&zone)[1-wv[i]]; zv->lo=0.; ++zv;)
+ R 1;
+}
+
+static KF1(jtEfromD){E *zv=yv; D *wv=DAV(w);
+ I n=AN(w); DO(n, zv->hi=wv[i]; zv->lo=zv->hi*0.; ++zv;)  // frac 0 must have same sign as upper
+ R 1;
+}
+
+static KF1(jtEfromDS){E *zv=yv; DS *wv=DSAV(w);
+ I n=AN(w); DO(n, zv->hi=wv[i]; zv->lo=zv->hi*0.; ++zv;)
+ R 1;
+}
+
+static KF1F(jtEfromZ){D d;I n;Z*v; E*x;
+ n=AN(w); v=ZAV(w); x=(E*)yv;
+ if(fuzz)DQ(n, d=ABS(v->im); if(d!=inf&&d<=fuzz*ABS(v->re)){x->hi=v->re; x->lo=x->hi*0.; ++x; v++;} else R 0;)
+ else        DQ(n, d=    v->im ; if(!d                            ){x->hi=v->re; x->lo=x->hi*0.; ++x; v++;} else R 0;);
+ R 1;
+}
+
+KF1(jtEfromX){
+ E*y=yv; X*wv=XAV(w);
+ DO(AN(w), RZ(xquad(y+i,wv[i]));)
+ R 1;
+}
+
+KF1(jtEfromQ){
+ E*x= yv; Q*wv=QAV(w);
+ DO(AN(w), RZ(qquad(x+i,wv[i]));)
+ R 1;
+}
+
+static KF1(jtEfromI){
+ E*y=yv; I*wv=IAV(w);
+ DO(AN(w), I W=wv[i]; D h=W; D l=W-(I)h;  // high & low parts as D
+    TWOSUMBS1(h,l,y->hi,y->lo) *y=CANONE1(y->hi,y->lo);   // if jmpz_get_d rounds correctly, h and l will both overlap.  In case not, we make sure they do.  convert to canonical form
+    ++y; );  // convert to canonical
+ R 1;
+}
+
+static KF1F(jtBfromE){B*x;D p,*v;I n;
+ n=AN(w); v=DAV(w); x=(B*)yv;
+ DQ(n, p=*v++; if(p<-2||2<p)R 0;   // handle infinities
+  I val=2; val=(p==0)?0:val; val=FIEQ(p,1.0,fuzz)?1:val; if(val==2)R 0; *x++=(B)val; )
+ R 1;
+}
+
+static KF1F(jtIfromE){D p,q; E*v;I i,k=0,n,*x;
+ n=AN(w); v=EAV(w); x=(I*)yv;
+#if SY_64
+ for(i=0;i<n;++i){
+  p=v[i].hi; q=jround(p);
+  if(!ISFTOIOKFZ(p,q,fuzz))R 0;  // error if value not tolerably integral
+  p=v[i].lo; if(fuzz==0.&&p!=jround(p))R 0;  // error only if intolerant and nonintegral
+  *x++=(I)q+(I)p;  // if tolerantly integral, store it.  Overflow not possible
+ }
+#else  // treat like D
+ q=IMIN*(1+fuzz); D r=IMAX*(1+fuzz);
+ DO(n, p=v[i].hi; if(p<q||r<p)R 0;);
+ for(i=0;i<n;++i){
+  p=v[i].hi; q=jfloor(p);
+  if(FIEQ(p,q,fuzz))*x++=(I)q; else if(FIEQ(p,1+q,fuzz))*x++=(I)(1+q); else R 0;
+ }
+#endif
+ R 1;
+}
+
+static KF1F(jtI2fromE){D p,q; E*v;I i,k=0,n; I2 *x;
+ n=AN(w); v=EAV(w); x=(I2*)yv;
+ q=-0x8000*(1+fuzz); D r=0x7fff*(1+fuzz);
+ DO(n, p=v[i].hi; if(p<q||r<p)R 0;);
+ for(i=0;i<n;++i){
+  p=v[i].hi; q=jfloor(p);
+  if(FIEQ(p,q,fuzz))*x++=(I)q; else if(FIEQ(p,1+q,fuzz))*x++=(I2)(1+q); else R 0;
+ }
+ R 1;
+}
+
+static KF1F(jtI4fromE){D p,q; E*v;I i,k=0,n; I4 *x;
+ n=AN(w); v=EAV(w); x=(I4*)yv;
+ q=-0x80000000*(1+fuzz); D r=0x7fffffff*(1+fuzz);
+ DO(n, p=v[i].hi; if(p<q||r<p)R 0;);
+ for(i=0;i<n;++i){
+  p=v[i].hi; q=jfloor(p);
+  if(FIEQ(p,q,fuzz))*x++=(I)q; else if(FIEQ(p,1+q,fuzz))*x++=(I4)(1+q); else R 0;
+ }
+ R 1;
+}
+
+
+static KF1(jtZfromE){
+ E *wv=EAV(w); Z *zv=yv; DQ(AN(w), zv->im=0.0; zv++->re=wv++->hi;) R 1;
+}
+
+// we implement only EXACT conversion
+static KF1(jtQfromE){
+ Q *x= yv; E *wv=EAV(w);
+ DO(AN(w),
+   mpQ0(W); mpQ0(Wl); Q z; mpQ0(z); jmpq_set_d(mpW,wv[i].hi); jmpq_set_d(mpWl,wv[i].lo);  jmpq_add(mpz,mpW,mpWl);  // add high & low parts as Qs
+   *x++= Qmp(z);
+ ); 
+ R 1;
+}
+
+static KF1F(jtXfromE){
+ X *x= yv; E *wv=EAV(w);
+ DO(AN(w), 
+   mpQ0(W); mpQ0(Wl); Q z; mpQ0(z); jmpq_set_d(mpW,wv[i].hi); jmpq_set_d(mpWl,wv[i].lo);  jmpq_add(mpz,mpW,mpWl);  // add high & low parts as Qs
+   if(!ISQINT(z))R0; *x++= z.n;   // Verify that the denominator is 1; install the numerator into *x
+ ); 
+ R 1;
+}
+
+static KF1(jtDfromE){D *zv=yv; E *wv=EAV(w);
+ I n=AN(w); DO(n, zv[i]=wv->hi; ++wv;)
+ R 1;
+}
+
+
+
+static X jtxd1(J jt, D p, I mode) {PROLOG(0052);A t;D d,e=tfloor(p),q,r;I m,*u;
+ switch(mode){
+  case XMFLR:   p=e;                            break;
+  case XMCEIL:  p=jceil(p);                     break;
+  case XMEXACT: ASSERT(TEQ(p,e),EVDOMAIN); p=e; break;
+  case XMEXMT:  if(!TEQ(p,e))R vec(INT,0L,&iotavec[-IOTAVECBEGIN]);
+ }
+ ASSERT(p!= inf, EWRAT);
+ ASSERT(p!=-inf, EWRAT);
+ GEMP0; mpz_t mpz; jmpz_init_set_d(mpz, p); X z= Xmp(z);
+ EPILOG(z); 
+}
+
+
+static KF1(jtDSfromB){DS *zv=yv; B *wv=BAV(w);
+ I n=AN(w); DO(n, zv[i]=((D*)&zone)[1-wv[i]];)
+ R 1;
+}
+
+static KF1(jtDSfromD){DS *zv=yv; D *wv=DAV(w);
+ I n=AN(w); DO(n, zv[i]=wv[i];)
+ R 1;
+}
+
+static KF1(jtDSfromE){DS *zv=yv; E *wv=EAV(w);
+ I n=AN(w); DO(n, zv[i]=wv->hi; ++wv;)
+ R 1;
+}
+
+static KF1F(jtDSfromZ){D d;I n;Z*v; DS*x;
+ n=AN(w); v=ZAV(w); x=(DS*)yv;
+ if(fuzz)DQ(n, d=ABS(v->im); if(d!=inf&&d<=fuzz*ABS(v->re)){*x=v->re; ++x; v++;} else R 0;)
+ else        DQ(n, d=    v->im ; if(!d                            ){*x=v->re; ++x; v++;} else R 0;);
+ R 1;
+}
+
+static KF1(jtDSfromX){
+ DS*y=yv; X*wv=XAV(w);
+ DQ(AN(w), X W=*wv++; mpX(W); mpX0(z); D h=jmpz_get_d(mpW);   // fetch as D
+    *y=h; ++y; );  // convert to canonical
+ R 1;
+}
+
+static KF1(jtDSfromQ){
+ DS*x= yv; Q*wv=QAV(w);
+ DQ(AN(w), Q W= *wv++;
+  if (ISQinf(W)){ *x= 0<QSGN(W) ?inf :infm;
+  }else{
+   mpQ(W); mpQ0(z); D h=jmpq_get_d(mpW);
+   *x=h;  // convert to canonical
+  }
+  ++x;
+ ); 
+ R 1;
+}
+
+static KF1(jtDSfromI){
+ E*y=yv; I*wv=IAV(w);
+ DO(AN(w), I W=wv[i]; D h=W; D l=W-(I)h;  // high & low parts as D
+    y->hi=h+l; y->lo=h-y->hi; y->lo+=l; ++y; );  // convert to canonical
+ R 1;
+}
+
+
+static KF1F(jtBfromDS){B*x;DS p,*v;I n;
+ n=AN(w); v=DSAV(w); x=(B*)yv;
+ DQ(n, p=*v++; if(p<-2||2<p)R 0;   // handle infinities
+  I val=2; val=(p==0)?0:val; val=FIEQ(p,1.0,fuzz)?1:val; if(val==2)R 0; *x++=(B)val; )
+ R 1;
+}
+
+static KF1F(jtIfromDS){D p,q; DS*v;I i,k=0,n,*x;
+ n=AN(w); v=DSAV(w); x=(I*)yv;
+#if SY_64
+ for(i=0;i<n;++i){
+  p=v[i]; q=jround(p);
+  if(!ISFTOIOKFZ(p,q,fuzz))R 0;  // error if value not tolerably integral
+  *x++=(I)q;  // if tolerantly integral, store it.  Overflow not possible
+ }
+#else  // treat like D
+ q=IMIN*(1+fuzz); D r=IMAX*(1+fuzz);
+ DO(n, p=v[i]; if(p<q||r<p)R 0;);
+ for(i=0;i<n;++i){
+  p=v[i]; q=jfloor(p);
+  if(FIEQ(p,q,fuzz))*x++=(I)q; else if(FIEQ(p,1+q,fuzz))*x++=(I)(1+q); else R 0;
+ }
+#endif
+ R 1;
+}
+
+static KF1F(jtI2fromDS){D p,q; DS*v;I i,k=0,n; I2*x;
+ n=AN(w); v=DSAV(w); x=(I2*)yv;
+ q=-0x8000*(1+fuzz); D r=0x7fff*(1+fuzz);
+ DO(n, p=v[i]; if(p<q||r<p)R 0;);
+ for(i=0;i<n;++i){
+  p=v[i]; q=jfloor(p);
+  if(FIEQ(p,q,fuzz))*x++=(I)q; else if(FIEQ(p,1+q,fuzz))*x++=(I2)(1+q); else R 0;
+ }
+ R 1;
+}
+
+static KF1F(jtI4fromDS){D p,q; DS*v;I i,k=0,n; I4*x;
+ n=AN(w); v=DSAV(w); x=(I4*)yv;
+ q=-0x80000000*(1+fuzz); D r=0x7fffffff*(1+fuzz);
+ DO(n, p=v[i]; if(p<q||r<p)R 0;);
+ for(i=0;i<n;++i){
+  p=v[i]; q=jfloor(p);
+  if(FIEQ(p,q,fuzz))*x++=(I)q; else if(FIEQ(p,1+q,fuzz))*x++=(I4)(1+q); else R 0;
+ }
+ R 1;
+}
+
+
+
+static KF1(jtDfromDS){D *zv=yv; DS *wv=DSAV(w);
+ I n=AN(w); DO(n, zv[i]=wv[i];)
+ R 1;
+}
+
+static KF1(jtZfromDS){
+ DS *wv=DSAV(w); Z *zv=yv; DO(AN(w), zv++->re=wv[i];) R 1;
+}
+
+// we implement only EXACT conversion
+static KF1(jtQfromDS){
+ Q*x= yv; DS*wv=DSAV(w);
+ DO(AN(w), Q z; mpQ0(z); jmpq_set_d(mpz,wv[i]); ++x;); 
+ R 1;
+}
+
+static KF2(jtXfromDS){ // array content yv as X from array w of D
+ GMP; X*y= (X*)yv; I wn= AN(w); DS*wv= DSAV(w);
+ DO(wn, DS wvi= wv[i]; ASSERT(!(inf==wvi||infm==wvi),EWIRR); y[i]= xd1(wvi, mode););
+ R !jt->jerr;
+}
+
+static KF1(jtBfromI2){B*x;I2 p,*v;I n;
+ n=AN(w); v=I2AV(w); x=(B*)yv;
+ DQ(n, p=*v++; if(unlikely(p&~1))R 0;  *x++=(B)p; )  // err if non-boolean
+ R 1;
+}
+
+static KF1(jtIfromI2){I *zv=yv; I2 *wv=I2AV(w);
+ I n=AN(w); DO(n, zv[i]=wv[i];)
+ R 1;
+}
+
+static KF1(jtI4fromI2){I4 *zv=yv; I2 *wv=I2AV(w);
+ I n=AN(w); DO(n, zv[i]=wv[i];)
+ R 1;
+}
+
+static KF1(jtDfromI2){D *zv=yv; I2 *wv=I2AV(w);
+ I n=AN(w); DO(n, zv[i]=wv[i];)
+ R 1;
+}
+
+static KF1(jtQfromI2){
+ Q*x= yv; I2*wv=I2AV(w);
+ DO(AN(w), Q z; mpQ0(z); jmpq_set_d(mpz,(D)wv[i]); ++x;); 
+ R 1;
+}
+
+static KF1(jtXfromI2){ // array content yv as X from array w of I
+ GMP; X*y= (X*)yv; I2 wn= AN(w), *wv= I2AV(w);
+ DO(wn, I wi= wv[i];
+	 if (unlikely(!wi)) y[i]= X0;
+  else if (unlikely(1==wi)) y[i]= X1;
+  else if (unlikely(-1==wi)) y[i]= X_1;
+  else y[i]= XgetI(wi);
+ );
+ R !jt->jerr;
+}
+
+static KF1(jtDSfromI2){DS *zv=yv; I2 *wv=I2AV(w);
+ I n=AN(w); DO(n, zv[i]=wv[i];)
+ R 1;
+}
+
+
+static KF1(jtEfromI2){E *zv=yv; I2 *wv=I2AV(w);
+ I n=AN(w); DO(n, zv->hi=wv[i]; zv->lo=zv->hi*0.; ++zv;)
+ R 1;
+}
+
+
+
+static KF1(jtBfromI4){B*x;I4 p,*v;I n;
+ n=AN(w); v=I4AV(w); x=(B*)yv;
+ DQ(n, p=*v++; if(unlikely(p&~1))R 0;  *x++=(B)p; )  // err if non-boolean
+ R 1;
+}
+
+static KF1(jtIfromI4){I *zv=yv; I4 *wv=I4AV(w);
+ I n=AN(w); DO(n, zv[i]=wv[i];)
+ R 1;
+}
+
+static KF1(jtDfromI4){D *zv=yv; I4 *wv=I4AV(w);
+ I n=AN(w); DO(n, zv[i]=wv[i];)
+ R 1;
+}
+
+static KF1(jtXfromI4){ // array content yv as X from array w of I
+ GMP; X*y= (X*)yv; I4 wn= AN(w), *wv= I4AV(w);
+ DO(wn, I wi= wv[i];
+	 if (unlikely(!wi)) y[i]= X0;
+  else if (unlikely(1==wi)) y[i]= X1;
+  else if (unlikely(-1==wi)) y[i]= X_1;
+  else y[i]= XgetI(wi);
+ );
+ R !jt->jerr;
+}
+
+static KF1(jtQfromI4){
+ Q*x= yv; I4*wv=I4AV(w);
+ DO(AN(w), Q z; mpQ0(z); jmpq_set_d(mpz,(D)wv[i]); ++x;); 
+ R 1;
+}
+
+static KF1(jtI2fromI4){I2 *zv=yv; I4 *wv=I4AV(w);
+ I n=AN(w); DO(n, I2 v=wv[i]; if(unlikely(v!=wv[i]))R 0; zv[i]=v;)
+ R 1;
+}
+
+
+static KF1(jtDSfromI4){DS *zv=yv; I4 *wv=I4AV(w);
+ I n=AN(w); DO(n, zv[i]=wv[i];)
+ R 1;
+}
+
+
+static KF1(jtEfromI4){E *zv=yv; I4 *wv=I4AV(w);
+ I n=AN(w); DO(n, zv->hi=wv[i]; zv->lo=zv->hi*0.; ++zv;)
+ R 1;
+}
+
+
 
 // conversion of bytes, with overfetch
 static KF1(jtDfromB){
@@ -156,6 +521,20 @@ static KF1(jtBfromI){B*x;I n,p,*v;
  R 1;
 }
 
+
+static KF1(jtI2fromI){I2 *zv=yv; I *wv=IAV(w);
+ I n=AN(w); DO(n, I2 v=wv[i]; if(unlikely(v!=wv[i]))R 0; zv[i]=v;)
+ R 1;
+}
+
+
+static KF1(jtI4fromI){I4 *zv=yv; I *wv=IAV(w);
+ I n=AN(w); DO(n, I4 v=wv[i]; if(unlikely(v!=wv[i]))R 0; zv[i]=v;)
+ R 1;
+}
+
+
+
 static KF1F(jtBfromD){B*x;D p,*v;I n;
  n=AN(w); v=DAV(w); x=(B*)yv;
  DQ(n, p=*v++; if(p<-2||2<p)R 0;   // handle infinities
@@ -167,12 +546,9 @@ static KF1F(jtIfromD){D p,q,*v;I i,k=0,n,*x;
  n=AN(w); v=DAV(w); x=(I*)yv;
 #if SY_64
  for(i=0;i<n;++i){
-  p=v[i]; q=jround(p); I rq=(I)q;
-  if(!(p==q || FIEQ(p,q,fuzz)))R 0;  // must equal int, possibly out of range
-  // out-of-range values don't convert, handle separately
-  if(p<(D)IMIN){if(!(p>=IMIN*(1+fuzz)))R 0; rq=IMIN;}  // if tolerantly < IMIN, error; else take IMIN
-  else if(p>=FLIMAX){if(!(p<=-(D)IMIN*(1+fuzz)))R 0; rq=IMAX;}  // if tolerantly > IMAX, error; else take IMAX
-  *x++=rq;
+  p=v[i]; q=jround(p);
+  if(!ISFTOIOKFZ(p,q,fuzz))R 0;  // error if value not tolerably integral
+  *x++=(I)q;  // if tolerantly integral, store it
  }
 #else
  q=IMIN*(1+fuzz); D r=IMAX*(1+fuzz);
@@ -185,6 +561,30 @@ static KF1F(jtIfromD){D p,q,*v;I i,k=0,n,*x;
  R 1;
 }
 
+static KF1F(jtI2fromD){D p,q,*v;I i,n; I2 *x;
+ n=AN(w); v=DAV(w); x=(I2*)yv;
+ q=-0x8000*(1+fuzz); D r=0x7fff*(1+fuzz);
+ DO(n, p=v[i]; if(p<q||r<p)R 0;);
+ for(i=0;i<n;++i){
+  p=v[i]; q=jfloor(p);
+  if(FIEQ(p,q,fuzz))*x++=(I)q; else if(FIEQ(p,1+q,fuzz))*x++=(I)(1+q); else R 0;
+ }
+ R 1;
+}
+
+static KF1F(jtI4fromD){D p,q,*v;I i,n; I4 *x;
+ n=AN(w); v=DAV(w); x=(I4*)yv;
+ q=-0x80000000*(1+fuzz); D r=0x7fffffff*(1+fuzz);
+ DO(n, p=v[i]; if(p<q||r<p)R 0;);
+ for(i=0;i<n;++i){
+  p=v[i]; q=jfloor(p);
+  if(FIEQ(p,q,fuzz))*x++=(I)q; else if(FIEQ(p,1+q,fuzz))*x++=(I)(1+q); else R 0;
+ }
+ R 1;
+}
+
+
+
 static KF1F(jtDfromZ){D d,*x;I n;Z*v;
  n=AN(w); v=ZAV(w); x=(D*)yv;
  if(fuzz)DQ(n, d=ABS(v->im); if(d!=inf&&d<=fuzz*ABS(v->re)){*x++=v->re; v++;} else R 0;)
@@ -192,175 +592,207 @@ static KF1F(jtDfromZ){D d,*x;I n;Z*v;
  R 1;
 }
 
-static KF1(jtXfromB){B*v;I n,u[1];X*x;
- n=AN(w); v=BAV(w); x=(X*)yv;
- DO(n, *u=v[i]; x[i]=rifvsdebug(vec(INT,1L,u)););           
+static KF1(jtXfromB){ // array content yv as X from array w of B
+ GMP; X*y= (X*)yv; I wn= AN(w); B*wv= BAV(w);
+ DO(wn, y[i]= wv[i] ?X1 :X0;)
  R !jt->jerr;
 }
 
-static KF1(jtXfromI){B b;I c,d,i,j,n,r,u[XIDIG],*v;X*x;
- n=AN(w); v=AV(w); x=(X*)yv;
- for(i=0;i<n;++i){
-  c=v[i]; b=c==IMIN; d=b?-(1+c):ABS(c); j=0;
-  DO(XIDIG, u[i]=r=d%XBASE; d=d/XBASE; if(r)j=i;);
-  ++j; *u+=b;
-  if(0>c)DO(XIDIG, u[i]=-u[i];);
-  x[i]=rifvsdebug(vec(INT,j,u));
- }
+static KF1(jtXfromI){ // array content yv as X from array w of I
+ GMP; X*y= (X*)yv; I wn= AN(w), *wv= AV(w);
+ DO(wn, I wi= wv[i];
+	 if (unlikely(!wi)) y[i]= X0;
+  else if (unlikely(1==wi)) y[i]= X1;
+  else if (unlikely(-1==wi)) y[i]= X_1;
+  else y[i]= XgetI(wi);
+ );
  R !jt->jerr;
 }
 
-static X jtxd1(J jt,D p, I mode){PROLOG(0052);A t;D d,e=tfloor(p),q,r;I m,*u;
- switch(mode){
-  case XMFLR:   p=e;                            break;
-  case XMCEIL:  p=jceil(p);                      break;
-  case XMEXACT: ASSERT(TEQ(p,e),EVDOMAIN); p=e; break;
-  case XMEXMT:  if(!TEQ(p,e))R vec(INT,0L,&iotavec[-IOTAVECBEGIN]);
- }
- if(p== inf)R vci(XPINF);
- if(p==-inf)R vci(XNINF);
- GAT0(t,INT,30,1); u=AV(t); m=0; d=ABS(p); 
- NOUNROLL while(0<d){
-  q=jfloor(d/XBASE); r=d-q*XBASE; u[m++]=(I)r; d=q;
-  if(m==AN(t)){RZ(t=ext(0,t)); u=AV(t);}
- }
- if(!m){u[0]=0; ++m;}else if(0>p)DO(m, u[i]=-u[i];);
- A z=xstd(vec(INT,m,u));
- EPILOG(z);
+static KF2(jtXfromD){ // array content yv as X from array w of D
+ GMP; X*y= (X*)yv; I wn= AN(w); D*wv= DAV(w);
+ DO(wn, D wvi= wv[i]; ASSERT(!(inf==wvi||infm==wvi),EWIRR); y[i]= xd1(wvi, mode););
+ R !jt->jerr;
 }
 
-static KF2(jtXfromD){D*v=DAV(w);X*x=(X*)yv; DO(AN(w), x[i]=rifvsdebug(xd1(v[i],mode));); R !jt->jerr;}
-
-static KF1(jtBfromX){A q;B*x;I e;X*v;
- v=XAV(w); x=(B*)yv;
- DO(AN(w), q=v[i]; e=AV(q)[0]; if((AN(q)^1)|(e&-2))R 0; x[i]=(B)e;);
+static KF1(jtBfromX){ // array content yv as B from array w of X
+ B*y= yv; I wn= AN(w); X*wv= XAV(w); 
+ DO(wn, X W= wv[i];
+  if (0>XSGN(W)) R0;
+  if (1<XSGN(W)) R0;
+  if (0==XSGN(W)) *y++= 0;
+  else if (1==XLIMB0(W)) *y++= 1;
+  else R0;
+ );
  R 1;
 }
 
-static KF1(jtIfromX){I a,i,m,n,*u,*x;X c,p,q,*v;
- v=XAV(w); x=(I*)yv; n=AN(w);
- if(!(p=xc(IMAX)))R 0; if(!(q=xminus(negate(p),xc(1L))))R 0;
- for(i=0;i<n;++i){
-  c=v[i]; if(!(1!=xcompare(q,c)&&1!=xcompare(c,p)))R 0;
-  m=AN(c); u=AV(c)+m-1; a=0; DO(m, a=*u--+a*XBASE;); x[i]=a;
- }
- R 1;
-}
-
-static KF1(jtDfromX){D d,*x=(D*)yv/*,dm,dp*/;I c,i,n,*v,wn;X p,*wv;
-// dp=1.7976931348623157e308; dm=-dp;
- wn=AN(w); wv=XAV(w);
- for(i=0;i<wn;++i){
-  p=wv[i]; n=AN(p); v=AV(p)+n-1; c=*v;
-  if     (c==XPINF)d=inf; 
-  else if(c==XNINF)d=infm; 
+static KF1(jtIfromX){
+ I *y=yv; X*wv=XAV(w);
+ DO(AN(w), X W= wv[i]; UI val;
+  if(unlikely(0==XSGN(W)))val=0;  // 0 limbs = 0 value
   else{
-   d=0.0; DQ(n, d=*v--+d*XBASE;);
+   if(unlikely(((XSGN(W)-REPSGN(XSGN(W)))&~1)!=0))R 0;  // if limb count not 1 or -1, error
+   val=XLIMB0(W);  // fetch |value|, which may be > IMAX
+   if(unlikely(val>(UI)IMAX-REPSGN(XSGN(W))))R 0;  // if positive > IMAX, or negative > IMIN, error
+   val=(val^REPSGN(XSGN(W)))-REPSGN(XSGN(W));  // value in range.  take 2's comp if negative
   }
-  x[i]=d;
- } 
+  *y++=(I)val;  // store the values
+ )
  R 1;
 }
 
-static KF1(jtQfromX){X*v=XAV(w),*x=(X*)yv; DQ(AN(w), *x++=*v++; *x++=iv1;); R 1;}
+static KF1(jtI2fromX){
+ I2 *y=yv; X*wv=XAV(w);
+ DO(AN(w), X W= wv[i]; UI val;
+  if(unlikely(0==XSGN(W)))val=0;  // 0 limbs = 0 value
+  else{
+   if(unlikely(((XSGN(W)-REPSGN(XSGN(W)))&~1)!=0))R 0;  // if limb count not 1 or -1, error
+   val=XLIMB0(W);  // fetch |value|, which may be > IMAX
+   if(unlikely(val>(UI)0x7fff-REPSGN(XSGN(W))))R 0;  // if positive > IMAX, or negative > IMIN, error
+   val=(val^REPSGN(XSGN(W)))-REPSGN(XSGN(W));  // value in range.  take 2's comp if negative
+  }
+  *y++=(I2)val;  // store the values
+ )
+ R 1;
+}
 
-static KF2(jtQfromD){B neg,recip;D c,d,t,*wv;I e,i,n,*v;Q q,*x;S*tv;
- if(!(w))R 0;
- n=AN(w); wv=DAV(w); x=(Q*)yv; tv=3*C_LE+(S*)&t;
+static KF1(jtI4fromX){
+ I4 *y=yv; X*wv=XAV(w);
+ DO(AN(w), X W= wv[i]; UI val;
+  if(unlikely(0==XSGN(W)))val=0;  // 0 limbs = 0 value
+  else{
+   if(unlikely(((XSGN(W)-REPSGN(XSGN(W)))&~1)!=0))R 0;  // if limb count not 1 or -1, error
+   val=XLIMB0(W);  // fetch |value|, which may be > IMAX
+   if(unlikely(val>(UI)0x7fffffff-REPSGN(XSGN(W))))R 0;  // if positive > IMAX, or negative > IMIN, error
+   val=(val^REPSGN(XSGN(W)))-REPSGN(XSGN(W));  // value in range.  take 2's comp if negative
+  }
+  *y++=(I4)val;  // store the values
+ )
+ R 1;
+}
+
+
+
+static KF1(jtDfromX){
+ D*y=yv; X*wv=XAV(w);
+ DQ(AN(w), X W=*wv++; mpX(W); *y++= jmpz_get_d(mpW););
+ R 1;
+}
+
+static KF1(jtQfromX){X*v=XAV(w),*x=(X*)yv; DQ(AN(w), *x++=*v++; *x++=X1;); R 1;}
+
+static KF2(jtQfromD){
+ GMP; ARGCHK1(w)
+ I n=AN(w), i; D*wv=DAV(w), t; Q*x=(Q*)yv, q; S*tv=3*C_LE+(S*)&t;
  for(i=0;i<n;++i){
-  t=wv[i]; 
+  t=wv[i]; q.d= X1;
   ASSERT(!_isnan(t),EVNAN);
-  if(neg=0>t)t=-t; q.d=iv1;
-  if     (t==inf)q.n=vci(XPINF);
-  else if(t==0.0)q.n=iv0;
-  else if(1.1102230246251565e-16<t&&t<9.007199254740992e15){
-   d=jround(1/dgcd(1.0,t)); c=jround(d*t); 
+  B neg; if(neg=0>t)t=-t;
+  if     (t==inf) q= Q_;
+  else if(t==0.0) q= Q0;
+  else if(1.0==jt->cct && XMEXACT==mode){
+   // x:!.0 - cut no corners
+   I e=(I)(0xfff0&*tv); e>>=4; e-=1023;   // exponent, with bias removed
+   unsigned long long num=((*(unsigned long long *)&t)&0xfffffffffffffLL)+0x10000000000000;  // numerator with hidden bit restored
+#if SY_64
+   q.n=XgetI(num);
+#else /* SY_32 */
+   I qnlo= num&0xffffffff;
+   I qnhi= (num>>32)+(qnlo<0);
+   q.n= XaddXX(XgetI(qnlo), XmulXX(XgetD(4294967296.0), XgetI(qnhi)));
+#endif
+   if(e<=52)q.d=xpow(xc(2L),xc(52-e));  // for 1.0, num is 1 in bit 52, e is 0, thus denom=2^52
+   else{q.d=X1; q.n=xtymes(q.n,xpow(xc(2L),xc(e-52)));}  // large exponents need big numerators
+   q=qstd(q);
+  }else if(1.1102230246251565e-16<t&&t<9.007199254740992e15){
+   D d=jround(1/dgcd(1.0,t)), c=jround(d*t); 
    q.n=xd1(c,mode); q.d=xd1(d,mode); q=qstd(q);
   }else{
-   if(recip=1>t)t=1.0/t;
-   e=(I)(0xfff0&*tv); e>>=4; e-=1023;
-   if(recip){q.d=xtymes(xd1(t/pow(2.0,e-53.0),mode),xpow(xc(2L),xc(e-53))); q.n=ca(iv1);}
-   else     {q.n=xtymes(xd1(t/pow(2.0,e-53.0),mode),xpow(xc(2L),xc(e-53))); q.d=ca(iv1);}
+   B recip; if(recip=1>t)t=1.0/t;
+   I e=(I)(0xfff0&*tv); e>>=4; e-=1023;
+   if(recip){q.d=xtymes(xd1(t/pow(2.0,e-53.0),mode),xpow(xc(2L),xc(e-53))); q.n=X1;}
+   else     {q.n=xtymes(xd1(t/pow(2.0,e-53.0),mode),xpow(xc(2L),xc(e-53))); q.d=X1;}
   }
   q.n=rifvsdebug(q.n); q.d=rifvsdebug(q.d);
-  if(neg){v=AV(q.n); DQ(AN(q.n), *v=-*v; ++v;);}
+  if(neg) {
+   if (ACISPERM(AC(q.n))) {
+    if (ISX1(q.n)) q.n= X_1;
+    else if (ISX_1(q.n)) q.n= X1;
+    else if (ISX0(q.n)) q.n= X0;
+    else SEGFAULT; // this should never happen
+   } else QSGN(q)= -QSGN(q);
+  }
   *x++=q;
  }
  R !jt->jerr;
 }
 
-static KF1(jtDfromQ){D d,f,n,*x,xb=(D)XBASE;I cn,i,k,m,nn,pn,qn,r,*v,wn;Q*wv;X c,p,q,x2=0;
- wn=AN(w); wv=QAV(w); x=(D*)yv; nn=308/XBASEN;
- for(i=0;i<wn;++i){
-  p=wv[i].n; pn=AN(p); k=1==pn?AV(p)[0]:0;
-  q=wv[i].d; qn=AN(q);
-  if     (k==XPINF)x[i]=inf;
-  else if(k==XNINF)x[i]=infm;
-  else if(pn<=nn&&qn<=nn){
-   n=0.0; f=1.0; v=AV(p); DO(pn, n+=f*v[i]; f*=xb;);
-   d=0.0; f=1.0; v=AV(q); DO(qn, d+=f*v[i]; f*=xb;);
-   x[i]=n/d;
-  }else{
-   k=5+qn; if(!x2)if(!(x2=xc(2L)))R 0;
-   if(!(c=xdiv(take(sc(-(k+pn)),p),q,XMFLR)))R 0;
-   cn=AN(c); m=MIN(cn,5); r=cn-(m+k); v=AV(c)+cn-m; 
-   n=0.0; f=1.0; DO(m, n+=f*v[i]; f*=xb;);
-   d=1.0; DQ(ABS(r), d*=xb;);
-   x[i]=0>r?n/d:n*d;
+/*
+// not accurate enough for J's test suite:
+static KF1(jtDfromQ){
+ D*x= yv; Q*wv=QAV(w);
+ DQ(AN(w), Q W= *wv++;
+  if (ISQinf(W)) *x++= 0<QSGN(W) ?inf :infm;
+  else *x++= ({mpQ(W); jmpq_get_d(mpW);});
+ ); 
+ R 1;
+}
+*/
+
+static KF1(jtDfromQ){
+ Q*wv=QAV(w); D*x=(D*)yv; I wn=AN(w);
+ // mp_limb_t is too large for us to represent its "base" directly
+ // so: compromise: we represent the square root of that value, and take half steps.
+ const I hb= 4*sizeof (mp_limb_t), hba= 1LL<<hb, L= ~-hba;
+ for(I i=0;i<wn;++i){
+  Q r= wv[i];
+  if (ISQinf(r))x[i]= QSGN(r)>0 ?inf :infm;
+  else {
+ // J double (64 bit binary IEEE 754 floating point) can represent
+ // 2^1023 and 2^-1022, but 2^1024 is infinity and 2^-1023 is 0.
+ // So... if we convert the numerator and denominator to type double
+ // find their ratio, but our intermediate values are _ or 0 we fail.
+ // To work around this issue, if either are "too large" we'll first
+ // scale down to fit within range (then scaling the result).
+   I szn= IbitsX(r.n), szd= IbitsX(r.d), lim= 1023LL-(szd>szn);
+   I e= 0, pn= szn-lim, pd= szd-lim;
+   if (pn>0) {e+= pn; r.n= Xfdiv_qXX(r.n, XpowUU(2,pn));}
+   if (pd>0) {e-= pd; r.d= Xfdiv_qXX(r.d, XpowUU(2,pd));}
+   D n=0.0, f=1.0; UI*v=UIAV1(r.n); DO(XLIMBLEN(r.n), UI u= v[i]; n+=f*(L&u); f*=hba; n+=f*(u>>hb); f*=hba;)
+   D d=0.0; f=1.0;    v=UIAV1(r.d); DO(XLIMBLEN(r.d), UI u= v[i]; d+=f*(L&u); f*=hba; d+=f*(u>>hb); f*=hba;)
+   D xi= n/d;
+   if (e) {
+    D ex= 1.0; DQ(llabs(e), ex*=2;)
+    xi= e>0 ?xi*ex :xi/ex;
+   }
+   x[i]= (QSGN(r)>0 ?1 :-1)*xi;
  }}
  R 1;
 }
 
-static KF1(jtXfromQ){Q*v;X*x;
- v=QAV(w); x=(X*)yv;
- DQ(AN(w), if(!(equ(iv1,v->d)))R 0; *x++=v->n; ++v;);           
- R !jt->jerr;
+static KF1(jtXfromQ){
+ GMP; X*x=yv; Q*v= QAV(w);
+ DQ(AN(w), if (!ISQINT(*v)) R0;; *x++= v++->n;);
+ R 1;
 }
 
 static KF1(jtZfromD){
  D *wv=DAV(w); Z *zv=yv; DQ(AN(w), zv->im=0.0; zv++->re=*wv++;) R 1;
 }
 
-static B jtDXfI(J jt,I p,A w,DX*x){B b;I e,c,d,i,j,n,r,u[XIDIG],*v;
- n=AN(w); v=AV(w);
- for(i=0;i<n;++i){
-  c=v[i]; b=c==IMIN; d=b?-(1+c):ABS(c); j=0;
-  DO(XIDIG, u[i]=r=d%XBASE; d/=XBASE; if(r)j=i;);
-  ++j; *u+=b;
-  e=XBASEN*(j-1); d=u[j-1]; NOUNROLL while(d){++e; d/=10;} 
-  if(0>c)DO(j, u[i]=-u[i];);
-  x[i].e=e; x[i].p=p; x[i].x=vec(INT,j,u);;
- }
- R !jt->jerr;
-}
-
-/*
-static B jtDXfI(J jt,I p,A w,DX*x){A y;I b,c,d,dd,e,i,m,n,q,r,*wv,*yv;
- n=AN(w); wv=AV(w); m=(p+XBASEN-1)/XBASEN;
- for(i=0;i<n;++i){
-  c=wv[i]; d=dd=c==IMIN?-(1+c):ABS(c); 
-  if(d){e=0; NOUNROLL while(d){++e; r=d%10; d=d/10;}}else e=1;
-  GATV0(y,INT,m,1); yv=AV(y);
-  r=p%XBASEN; q=!!r+((e-r)+XBASEN-1)/XBASEN; 
-  if(d=(e-r)%XBASEN){b=1; DQ(XBASEN, b*=10; --d; if(!d)break;);}else b=XBASE;
-  DQ(m-q, *yv++=0;);
-  d=dd/b; r=dd%b; r+=c==IMIN; r*=XBASE/b; 
-  if(0>c){*yv++=-r; DQ(q-1, r=d%XBASE; d=d/XBASE; *yv++=-r;);}
-  else   {*yv++= r; DQ(q-1, r=d%XBASE; d=d/XBASE; *yv++= r;);}
-  x[i].e=e-1; x[i].p=p; x[i].x=y;
- }
- R !jt->jerr;
-} */    /* most significant digit last, decimal point before last digit */
-
 // Convert the data in w to the type t.  w and t must be noun types.  A new buffer is always created (with a
 // copy of the data if w is already of the right type), and returned in *y.  Result is
 // 0 if error, 1 if success.  If the conversion loses precision, error is returned
 // Calls through bcvt are tagged with a flag in jt, indicating to set fuzz=0
+// For sparse arguments, this function calls other J verbs and must clear the ranks in that case only
+// kludge this interface sucks - why not return the A block of the result?  We could expunge jtcvt() 
 B jtccvt(J jt,I tflagged,A w,A*y){F1PREFIP;A d;I n,r,*s,wt; void *wv,*yv;I t=tflagged&(NOUN|SPARSE);
  ARGCHK1(w);
  r=AR(w); s=AS(w); wt=AT(w); n=AN(w);
- if(unlikely(((t|wt)&SPARSE+BOX+SBT)!=0)){
-  // Unusual cases: box, ticker, sparse.
+ if(unlikely(((t|wt)&SPARSE+BOX+SBT+FUNC)!=0)){
+  // Unusual cases: box, ticker, sparse, func (should not occur).
+  ASSERTSYS(!((t|wt)&FUNC),"non-noun in cvt");
   // Handle sparse
   if(likely(ISSPARSE(t|wt))){
    RANK2T oqr=jt->ranks; RESETRANK; 
@@ -392,7 +824,10 @@ B jtccvt(J jt,I tflagged,A w,A*y){F1PREFIP;A d;I n,r,*s,wt; void *wv,*yv;I t=tfl
  // we use the input *y as as override on the # cells to convert.  We use it to replace n (for use here) and yv, and AK(w) and AN(w) for the subroutines.
  // If NOUNCVTVALIDCT is set, w is modified: the caller must restore AN(w) and AK(w) if it needs it
  // TODO: same-length conversion could be done in place
- GA(d,t,n,r,s); yv=voidAV(d);  // allocate the same # atoms, even if we will convert fewer
+ GA(d,t,n,r,s);  // allocate the same # atoms, even if we will convert fewer
+ if(unlikely(t&CMPX+QP))AK(d)=(AK(d)+SZD)&~SZD;  // move 16-byte values to 16-byte bdy
+ yv=voidAV(d);   // address of target area
+
  if(unlikely(tflagged&NOUNCVTVALIDCT)){
   I inputn=*(I*)y;  // fetch input, in case it is called for
   if(inputn>0){  // if converting the leading values, just update the counts
@@ -415,6 +850,7 @@ B jtccvt(J jt,I tflagged,A w,A*y){F1PREFIP;A d;I n,r,*s,wt; void *wv,*yv;I t=tfl
    // one of the types is literal.
    // we must account for all NOUN types.  If there is a non-char, that's an error
   ASSERT(!((t|wt)&(SBT+XD+XZ+NUMERIC+BOX)),EVDOMAIN);  // No conversions for these types
+#define CVCASECHAR(a,b) ((2*(C2T>>(a))+(C2T>>(b))))  // distinguish character cases - note last case is impossible (equal types)
   switch (CVCASECHAR(CTTZ(t),CTTZ(wt))){
    case CVCASECHAR(LITX, C2TX): R C1fromC2(w, yv);
    case CVCASECHAR(LITX, C4TX): R C1fromC4(w, yv);
@@ -425,46 +861,111 @@ B jtccvt(J jt,I tflagged,A w,A*y){F1PREFIP;A d;I n,r,*s,wt; void *wv,*yv;I t=tfl
    default:                ASSERT(0, EVDOMAIN);
   }
  }
- // types here must both be among B01 INT FL CMPX XNUM RAT
- switch (CVCASE(CTTZ(t),CTTZ(wt))){
-  case CVCASE(INTX, B01X): R jtIfromB(jt, w, yv);
-  case CVCASE(XNUMX, B01X): R XfromB(w, yv);
-  case CVCASE(RATX, B01X): GATV(d, XNUM, n, r, s); R XfromB(w, AV(d)) && QfromX(d, yv);
-  case CVCASE(FLX, B01X): R jtDfromB(jt, w, yv);
-  case CVCASE(CMPXX, B01X): {Z*x = (Z*)yv; B*v = (B*)wv; DQ(n, x->im=0.0; x++->re = *v++;); } R 1;
-  case CVCASE(B01X, INTX): R BfromI(w, yv);
-  case CVCASE(XNUMX, INTX): R XfromI(w, yv);
-  case CVCASE(RATX, INTX): GATV(d, XNUM, n, r, s); R XfromI(w, AV(d)) && QfromX(d, yv);
-  case CVCASE(FLX, INTX): R jtDfromI(jt, w, yv);
-  case CVCASE(CMPXX, INTX): {Z*x = (Z*)yv; I*v = wv; DQ(n, x->im=0.0; x++->re = (D)*v++;); } R 1;
-  case CVCASE(B01X, FLX): R BfromD(w, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZ);
-  case CVCASE(INTX, FLX): R IfromD(w, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZ);
-  case CVCASE(XNUMX, FLX): R XfromD(w, yv, (jt->xmode&REPSGN(SGNIFNOT(tflagged,XCVTXNUMORIDEX)))|(tflagged>>XCVTXNUMCVX));
-  case CVCASE(RATX, FLX): R QfromD(w, yv, (jt->xmode&REPSGN(SGNIFNOT(tflagged,XCVTXNUMORIDEX)))|(tflagged>>XCVTXNUMCVX));
-  case CVCASE(CMPXX, FLX): R ZfromD(w, yv);
-  case CVCASE(B01X, CMPXX): GATV(d, FL, n, r, s); if(!(DfromZ(w, AV(d), (I)jtinplace&JTNOFUZZ?0.0:FUZZ)))R 0; R BfromD(d, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZ);
-  case CVCASE(INTX, CMPXX): GATV(d, FL, n, r, s); if(!(DfromZ(w, AV(d), (I)jtinplace&JTNOFUZZ?0.0:FUZZ)))R 0; R IfromD(d, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZ);
-  case CVCASE(XNUMX, CMPXX): GATV(d, FL, n, r, s); if(!(DfromZ(w, AV(d), (I)jtinplace&JTNOFUZZ?0.0:FUZZ)))R 0; R XfromD(d, yv, (jt->xmode&REPSGN(SGNIFNOT(tflagged,XCVTXNUMORIDEX)))|(tflagged>>XCVTXNUMCVX));
-  case CVCASE(RATX, CMPXX): GATV(d, FL, n, r, s); if(!(DfromZ(w, AV(d), (I)jtinplace&JTNOFUZZ?0.0:FUZZ)))R 0; R QfromD(d, yv, (jt->xmode&REPSGN(SGNIFNOT(tflagged,XCVTXNUMORIDEX)))|(tflagged>>XCVTXNUMCVX));
-  case CVCASE(FLX, CMPXX): R DfromZ(w, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZ);
-  case CVCASE(B01X, XNUMX): R BfromX(w, yv);
-  case CVCASE(INTX, XNUMX): R IfromX(w, yv);
-  case CVCASE(RATX, XNUMX): R QfromX(w, yv);
-  case CVCASE(FLX, XNUMX): R DfromX(w, yv);
-  case CVCASE(CMPXX, XNUMX): GATV(d, FL, n, r, s); if(!(DfromX(w, AV(d))))R 0; R ZfromD(d, yv);
-  case CVCASE(B01X, RATX): GATV(d, XNUM, n, r, s); if(!(XfromQ(w, AV(d))))R 0; R BfromX(d, yv);
-  case CVCASE(INTX, RATX): GATV(d, XNUM, n, r, s); if(!(XfromQ(w, AV(d))))R 0; R IfromX(d, yv);
-  case CVCASE(XNUMX, RATX): R XfromQ(w, yv);
-  case CVCASE(FLX, RATX): R DfromQ(w, yv);
-  case CVCASE(CMPXX, RATX): GATV(d, FL, n, r, s); if(!(DfromQ(w, AV(d))))R 0; R ZfromD(d, yv);
-  default:                ASSERT(0, EVDOMAIN);
+ // types here must both be among B01 INT FL CMPX XNUM RAT INT2 INT4 SP QP  0 2 3 4 6 7 9 10 12 13
+#define CVNUMTYPE(a) ((0xff98f76f54f321f0LL>>(CTTZ(a)<<2))&0xf)
+ #define CVCASE(a,b)     (CVNUMTYPE(a)*10+CVNUMTYPE(b))
+ switch (CVCASE(t,wt)){  // to,from
+ case CVCASE(INT, B01): R jtIfromB(jt, w, yv);
+ case CVCASE(XNUM, B01): R XfromB(w, yv);
+ case CVCASE(RAT, B01): GATV(d, XNUM, n, r, s); R XfromB(w, AV(d)) && QfromX(d, yv);
+ case CVCASE(FL, B01): R jtDfromB(jt, w, yv);
+ case CVCASE(CMPX, B01): {Z*x = (Z*)yv; B*v = (B*)wv; DQ(n, x->im=0.0; x++->re = *v++;); } R 1;
+ case CVCASE(INT2,B01): R jtI2fromB(jt, w, yv);
+ case CVCASE(INT4,B01): R jtI4fromB(jt, w, yv);
+// case CVCASE(SP,B01): R jtDSfromB(jt, w, yv);
+ case CVCASE(QP,B01): R jtEfromB(jt, w, yv);
+ case CVCASE(B01, INT): R BfromI(w, yv);
+ case CVCASE(XNUM, INT): R XfromI(w, yv);
+ case CVCASE(RAT, INT): GATV(d, XNUM, n, r, s); R XfromI(w, AV(d)) && QfromX(d, yv);
+ case CVCASE(FL, INT): R jtDfromI(jt, w, yv);
+ case CVCASE(CMPX, INT): {Z*x = (Z*)yv; I*v = wv; DQ(n, x->im=0.0; x++->re = (D)*v++;); } R 1;
+ case CVCASE(INT2,INT): R jtI2fromI(jt, w, yv);
+ case CVCASE(INT4,INT): R jtI4fromI(jt, w, yv);
+// case CVCASE(SP,INT): R jtDSfromI(jt, w, yv);
+ case CVCASE(QP,INT): R jtEfromI(jt, w, yv);
+ case CVCASE(B01, FL): R BfromD(w, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZ);
+ case CVCASE(INT, FL): R IfromD(w, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZ);
+ case CVCASE(XNUM, FL): R XfromD(w, yv, (jt->xmode&REPSGN(SGNIFNOT(tflagged,XCVTXNUMORIDEX)))|CVTTOXMODE(tflagged));
+ case CVCASE(RAT, FL): R QfromD(w, yv, (jt->xmode&REPSGN(SGNIFNOT(tflagged,XCVTXNUMORIDEX)))|CVTTOXMODE(tflagged));
+ case CVCASE(CMPX, FL): R ZfromD(w, yv);
+ case CVCASE(INT2, FL): R jtI2fromD(jt, w, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZ);
+ case CVCASE(INT4, FL): R jtI4fromD(jt, w, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZ);
+// case CVCASE(SP,FL): R jtDSfromD(jt, w, yv);
+ case CVCASE(QP,FL): R jtEfromD(jt, w, yv);
+ case CVCASE(B01, CMPX): GATV(d, FL, n, r, s); if(!(DfromZ(w, AV(d), (I)jtinplace&JTNOFUZZ?0.0:FUZZ)))R 0; R BfromD(d, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZ);
+ case CVCASE(INT, CMPX): GATV(d, FL, n, r, s); if(!(DfromZ(w, AV(d), (I)jtinplace&JTNOFUZZ?0.0:FUZZ)))R 0; R IfromD(d, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZ);
+ case CVCASE(XNUM, CMPX): GATV(d, FL, n, r, s); if(!(DfromZ(w, AV(d), (I)jtinplace&JTNOFUZZ?0.0:FUZZ)))R 0; R XfromD(d, yv, (jt->xmode&REPSGN(SGNIFNOT(tflagged,XCVTXNUMORIDEX)))|CVTTOXMODE(tflagged));
+ case CVCASE(RAT, CMPX): GATV(d, FL, n, r, s); if(!(DfromZ(w, AV(d), (I)jtinplace&JTNOFUZZ?0.0:FUZZ)))R 0; R QfromD(d, yv, (jt->xmode&REPSGN(SGNIFNOT(tflagged,XCVTXNUMORIDEX)))|CVTTOXMODE(tflagged));
+ case CVCASE(FL, CMPX): R DfromZ(w, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZ);
+ case CVCASE(INT2, CMPX): GATV(d, FL, n, r, s); if(!(DfromZ(w, AV(d), (I)jtinplace&JTNOFUZZ?0.0:FUZZ)))R 0; R jtI2fromD(jt, d, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZ);
+ case CVCASE(INT4, CMPX): GATV(d, FL, n, r, s); if(!(DfromZ(w, AV(d), (I)jtinplace&JTNOFUZZ?0.0:FUZZ)))R 0; R jtI4fromD(jt, d, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZ);
+// case CVCASE(SP,CMPX): R jtDSfromZ(jt, w, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZDS);
+ case CVCASE(QP,CMPX): R jtEfromZ(jt, w, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZ);
+ case CVCASE(B01, XNUM): R BfromX(w, yv);
+ case CVCASE(INT, XNUM): R IfromX(w, yv);
+ case CVCASE(RAT, XNUM): R QfromX(w, yv);
+ case CVCASE(FL, XNUM): R DfromX(w, yv);
+ case CVCASE(CMPX, XNUM): GATV(d, FL, n, r, s); if(!(DfromX(w, AV(d))))R 0; R ZfromD(d, yv);
+ case CVCASE(INT2, XNUM): R jtI2fromX(jt, w, yv);
+ case CVCASE(INT4, XNUM): R jtI4fromX(jt, w, yv);
+// case CVCASE(SP,XNUM): R jtDSfromX(jt, w, yv);
+ case CVCASE(QP,XNUM): R jtEfromX(jt, w, yv);
+ case CVCASE(B01, RAT): GATV(d, XNUM, n, r, s); if(!(XfromQ(w, AV(d))))R 0; R BfromX(d, yv);
+ case CVCASE(INT, RAT): GATV(d, XNUM, n, r, s); if(!(XfromQ(w, AV(d))))R 0; R IfromX(d, yv);
+ case CVCASE(XNUM, RAT): R XfromQ(w, yv);
+ case CVCASE(FL, RAT): R DfromQ(w, yv);
+ case CVCASE(CMPX, RAT): GATV(d, FL, n, r, s); if(!(DfromQ(w, AV(d))))R 0; R ZfromD(d, yv);
+ case CVCASE(INT2, RAT): GATV(d, XNUM, n, r, s); if(!(XfromQ(w, AV(d))))R 0; R jtI2fromX(jt, d, yv);
+ case CVCASE(INT4, RAT): GATV(d, XNUM, n, r, s); if(!(XfromQ(w, AV(d))))R 0; R jtI4fromX(jt, d, yv);
+// case CVCASE(SP,RAT): R jtDSfromQ(jt, w, yv);
+ case CVCASE(QP,RAT): R jtEfromQ(jt, w, yv);
+ case CVCASE(B01, INT2): R jtBfromI2(jt, w, yv);
+ case CVCASE(INT,INT2): R jtIfromI2(jt, w, yv);
+ case CVCASE(FL, INT2): R jtDfromI2(jt, w, yv);
+ case CVCASE(XNUM, INT2): R jtXfromI2(jt, w, yv);
+ case CVCASE(RAT, INT2): GATV(d, XNUM, n, r, s); R jtXfromI2(jt, w, AV(d)) && QfromX(d, yv);
+ case CVCASE(CMPX, INT2): {Z*x = (Z*)yv; I2*v = wv; DQ(n, x->im=0.0; x++->re = (D)*v++;); } R 1;
+ case CVCASE(INT4,INT2): R jtI4fromI2(jt, w, yv);
+// case CVCASE(SP,INT2): R jtDSfromI2(jt, w, yv);
+ case CVCASE(QP,INT2): R jtEfromI2(jt, w, yv);
+ case CVCASE(B01, INT4): R jtBfromI4(jt, w, yv);
+ case CVCASE(INT,INT4): R jtIfromI4(jt, w, yv);
+ case CVCASE(FL, INT4): R jtDfromI4(jt, w, yv);
+ case CVCASE(XNUM, INT4): R jtXfromI4(jt, w, yv);
+ case CVCASE(RAT, INT4): GATV(d, XNUM, n, r, s); R jtXfromI4(jt, w, AV(d)) && QfromX(d, yv);
+ case CVCASE(CMPX, INT4): {Z*x = (Z*)yv; I4*v = wv; DQ(n, x->im=0.0; x++->re = (D)*v++;); } R 1;
+ case CVCASE(INT2,INT4): R jtI2fromI4(jt, w, yv);
+// case CVCASE(SP,INT4): R jtDSfromI4(jt, w, yv);
+ case CVCASE(QP,INT4): R jtEfromI4(jt, w, yv);
+ case CVCASE(B01,SP): R jtBfromDS(jt, w, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZDS);
+ case CVCASE(INT,SP): R jtIfromDS(jt, w, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZDS);
+ case CVCASE(FL,SP): R jtDfromDS(jt, w, yv);
+ case CVCASE(CMPX,SP): R jtZfromDS(jt, w, yv);
+ case CVCASE(XNUM, SP): R jtXfromDS(jt, w, yv, (jt->xmode&REPSGN(SGNIFNOT(tflagged,XCVTXNUMORIDEX)))|CVTTOXMODE(tflagged));
+ case CVCASE(RAT,SP): R jtQfromDS(jt, w, yv);
+ case CVCASE(INT2,SP): R jtI2fromDS(jt, w, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZDS);
+ case CVCASE(INT4,SP): R jtI4fromDS(jt, w, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZDS);
+ case CVCASE(QP,SP): R jtEfromDS(jt, w, yv);
+ case CVCASE(B01,QP): R jtBfromE(jt, w, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZ);
+ case CVCASE(INT,QP): R jtIfromE(jt, w, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZ);
+ case CVCASE(FL,QP): R jtDfromE(jt, w, yv);
+ case CVCASE(CMPX,QP): R jtZfromE(jt, w, yv);
+ case CVCASE(XNUM,QP): R jtXfromE(jt, w, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZ);
+ case CVCASE(RAT,QP): R jtQfromE(jt, w, yv);
+ case CVCASE(INT2,QP): R jtI2fromE(jt, w, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZ);
+ case CVCASE(INT4,QP): R jtI4fromE(jt, w, yv, (I)jtinplace&JTNOFUZZ?0.0:FUZZ);
+ case CVCASE(SP,QP): R jtDSfromE(jt, w, yv);
+ default:                ASSERT(0, EVDOMAIN);
  }
 }
 
 // clear rank before calling ccvt - needed for sparse arrays only but returns the block as the result
 A jtcvt(J jt,I t,A w){A y;B b; 
  b=ccvt(t,w,&y);
- ASSERT(b!=0,EVDOMAIN);
+ if(0==b) { // used to be x:_ could be NUMX, now must be RAT
+  if(jt->jerr==EWIRR) {RESETERR; b=ccvt(RAT,w,&y);}
+  ASSERT(b!=0,EVDOMAIN);
+ }
  R y;
 }
 
@@ -553,17 +1054,61 @@ F2(jtxco2){A z;B b;I j,n,r,*s,t,*wv,*zu,*zv;
    GATV0(z,XNUM,2*n,r+1); MCISH(AS(z),AS(w),r) AS(z)[r]=2;  // don't overfetch from AS(w)
    MC(AV(z),AV(w),2*n*SZI);
    R z;
-  case  3:
-   ASSERT(t&XD+XZ,EVDOMAIN);
-   b=(~t>>XDX)&1;   // b=NOT XD
-   GATV0(z,INT,n<<b,r+b); s=AS(z); if(b)*s++ =2; MCISH(s,AS(w),r);
-   zv=AV(z); zu=n+zv; wv=AV(w);
-   if(t&XD){DX*v=(DX*)wv;   DQ(n,         *zv++=v->p;);}
-   else    {ZX*v=(ZX*)wv,y; DQ(n, y=*v++; *zv++=y.re.p; *zu++=y.im.p;);}
-   R z;
   default:
    ASSERT(20<=j,EVDOMAIN);
-   GA(z,t&CMPX?XZ:XD,n,r,AS(w));
-   if(t&INT){RZ(DXfI(j,w,(DX*)AV(z))); R z;}
    ASSERT(0,EVNONCE);
 }}
+
+// 9!:23 audit indices
+// x is indexes (may be sparse)
+// y is type;parms
+// type is 0 (normal), 1 (treat complex as 2 separate reals), 2 allow _ as imin/imax
+// parms is list of 0-2 elements min,max allowed
+// result is rc;index: rc: 0=OK, 1=nonnumeric, 2=nonintegral value 3=out of bounds
+// index=index list of failing entry, or empty if rc=0 or 1
+F2(jtindaudit){PROLOG(365);
+ ARGCHK2(a,w)
+ ASSERT(AT(w)&BOX,EVDOMAIN) ASSERT(AR(w)==1,EVRANK) ASSERT(AN(w)==2,EVLENGTH)  // need 2 boxes
+ I type; RE(type=i0(C(AAV(w)[0]))); ASSERT(BETWEENC(type,0,1),EVDOMAIN)  // first box must hold integer type 0 or 1
+ I min=IMIN, max=IMAX; A mma=C(AAV(w)[1]); ASSERT(AR(mma)<=1,EVRANK) ASSERT(AN(mma)<=2,EVLENGTH) if(!(AT(mma)&INT))RZ(mma=cvt(INT,mma))  // second box must hold 0-2 int values
+ if(AN(mma)>=1)min=IAV(mma)[0]; if(AN(mma)>=2)max=IAV(mma)[1];  // extract min/max
+ A ind=a, origind=ind; if(ISSPARSE(AT(ind))){ind=SPA(PAV(ind),x);}  // point to the indexes; if sparse, to the unique indexes
+ I indt=AT(ind); I indn=AN(ind); if(indn==0)R jlink(zeroionei(0),mtv);  if(!(indt&NUMERIC))R jlink(zeroionei(1),mtv);  // get type & number of indexes; fast return if empty; failure if nonintegral
+ if((indt&CMPX)&&type==1){indt=FL|C2T; indn<<=1;}  // for x # y, allow treating a complex as two reals.  C2T is a flag that we did this
+ A vind; RZ(vind=jtvirtual(jt,ind,0,0)) AN(vind)=1; // in case conversions are needed, we will step through with a virtual block
+ I vstride=bpnoun(indt);  // size of an atom
+ I findex;  // failing index if any, total # atoms to check
+ A zwk, xwk; if(indt&CMPX)GAT0(zwk,FL,1,0) if(indt&RAT)GAT0(xwk,XNUM,1,0)  // intermediates for the 2-stwp conversions
+ I errtype=2;  // the type of audit failure: 2=noninteger, 3=out of bounds
+ for(findex=0;findex<indn;AK(vind)+=vstride,++findex){   // loop trying each index
+  I ival;   // the integer value of the index
+  // fetch to index and convert to integer if needed
+  if(indt&INT)ival=IAV(vind)[0];
+  else if(indt&B01)ival=BAV(vind)[0];
+  else if(indt&FL){I err; if(err=!jtIfromD(jt,vind,&ival,FUZZ)){if(type==2&&DAV(vind)[0]==inf)err=0,ival=IMAX; if(type==2&&DAV(vind)[0]==infm)err=0,ival=IMIN;}; if(err)break;}
+  else if(indt&CMPX){if(!jtDfromZ(jt,vind,&DAV(zwk)[0],FUZZ))break; if(!jtIfromD(jt,zwk,&ival,FUZZ))break;}
+  else if(indt&XNUM){if(!jtIfromX(jt,vind,&ival))break;}
+  else if(indt&RAT){if(!jtXfromQ(jt,vind,&XAV(xwk)[0]))break; if(!jtIfromX(jt,xwk,&ival))break;}
+  // value fetched, see if in range
+  if(!BETWEENC(ival,min,max)){errtype=3; break;}  // exit loop if index not in range, with appropriate error type
+ }
+ A z;  // result
+ if(findex==indn)z=jlink(zeroionei(0),mtv);  // normal return with no error
+ else{
+  // the search failed at findex.  Create the index list
+  if(indt&C2T)findex>>=1;  // if 2 reals per complex, convert failing index back to complex
+  if(!ISSPARSE(AT(origind))){
+   // non-sparse
+   RZ(z=abase2(shape(ind),sc(findex)))  // result is ($ind) #: findex
+  }else{
+   // sparse
+   RZ(z=shape(origind)); // z=$ind
+   P *p=PAV(origind); A sparseaxes=SPA(p,a); A denseaxes=box(box(box(sparseaxes)));  // the list of sparse axes
+   A id; RZ(id=abase2(over(zeroionei(0),from(denseaxes,z)),sc(findex)))     // id =.(0 , (<<<2$.ind) { $ind) #: findex  nonsparse indexes are in blocks of fixed size.  convert to block# , index list in block
+   A r; RZ(df2(r,from(head(id),SPA(p,i)),z,amend(sparseaxes)))  // r =. (({.id) { 4$.ind) (2$.ind)} z   convert block# to index list of sparse axes, save those axes in result
+   RZ(df2(z,behead(id),r,amend(denseaxes))) // z =. (}. id)  (<<<2$.ind)} r   insert index list in block into result
+  }
+  z=jlink(sc(errtype),z);  // return error type and location
+ }
+ EPILOG(z);
+}

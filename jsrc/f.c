@@ -1,4 +1,4 @@
-/* Copyright 1990-2008, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Format: ": Monad                                                        */
@@ -21,14 +21,16 @@ extern I stringdisplaywidth(J jt, I c2, void*src, I nsrc); // display width of a
 #if SY_64
 #define WI          21L
 #else
-#define WI          12L
+#define WI          12L // 10 digits+sign+space
 #endif
+#define WI2 7L
+#define WI4 12L
 
 typedef void ((*FMTFUN)());
 
 #define WD          (9L+NPP)
 #define WZ          (WD+WD)
-#define FMTF(f,T)   void f(J jt,C*s,T*v)
+#define FMTF(f,T)   void f(J jt,C*s,T*v)  // function template
 // Calculate the number of blank lines to leave before a 2-cell of output, depending on how many
 // cell boundaries are crossed moving to it
 // j = line number in input of the line about to be written
@@ -42,6 +44,16 @@ typedef void ((*FMTFUN)());
 static F1(jtthxqe);
 static A jtthorn1main(J,A,A);
 
+static FMTF(jtfmtI2,I2){I x=*v;
+ sprintf(s,FMTI,x);
+ if('-'==s[0])s[0]=CSIGN;
+}
+
+static FMTF(jtfmtI4,I4){I x=*v;
+ sprintf(s,FMTI,x);
+ if('-'==s[0])s[0]=CSIGN;
+}
+
 static FMTF(jtfmtI,I){I x=*v;
  sprintf(s,FMTI,x);
  if('-'==s[0])s[0]=CSIGN;
@@ -53,74 +65,168 @@ static FMTF(jtfmtD,D){B q;C buf[1+WD],c,*t;D x=*v;I k=0;
  if(_isnan(*v)          ){strcpy(s,"_."); R;}
 // x=*v; x=x==*(D*)minus0?0.0:x;  /* -0 to 0*/
  x=*v; x=x==(-1)*0.0?0.0:x;  /* -0 to 0*/
- sprintf(buf,jt->pp,x);
- c=*buf; if(q=c=='-')*s++=CSIGN; q=q|(c=='+');
- if('.'==buf[q])*s++='0';
+ sprintf(buf,"%0.*g",jt->ppn,x);
+ c=*buf; if(q=c=='-')*s++=CSIGN; q=q|(c=='+');  // set q if sign shown
+ if('.'==buf[q])*s++='0';  // add leading 0 to .ddd
  MC(s,buf+q,WD+1-q);
- if(t=strchr(s,'e')){
-  if('-'==*++t)*t++=CSIGN;
-  NOUNROLL while(c=t[k],c=='0'||c=='+')k++;
-  if(k)NOUNROLL while(t[0]=t[k])t++;
+ if(t=strchr(s,'e')){   // t=address of 'e' in exponent.  If there is an exponent...
+  if('-'==*++t)*t++=CSIGN;  // change sign character of exponent
+  NOUNROLL while(c=t[k],c=='0'||c=='+')k++;   // find index of first nonskipped char
+  if(k)NOUNROLL while(t[0]=t[k])t++;  // close up the skipped chars of exponent, ending with the NUL
 }}
 
 static FMTF(jtfmtZ,Z){fmtD(s,&v->re); if(v->im){I k=strlen(s); s[k]='j'; fmtD(&s[k+1],&v->im);}}
 
-static void thcase(I t,I*wd,FMTFUN *fmt){
- switch(CTTZ(t)){
-  case FLX:   *wd=WD; *fmt=jtfmtD; break;
-  case CMPXX: *wd=WZ; *fmt=jtfmtZ; break;
-  default:   *wd=WI; *fmt=jtfmtI;
+// Routine to convert qp values to base-10 characters.  Returns significant digits of absolute value
+// Input and result are a fmtbuf structure.  On input, ndig is the max # places to keep valid
+// On return, fbuf is garbage; buf may be different from the input; ndig is the # valid digits; dp is the # valid digits before the decimal point
+// (examples: buf="1234", dp=3 means 123.4; buf="1234", dp=_3 means 0.0001234) 
+struct fmtbuf fmtlong(struct fmtbuf fb, E v){
+ I bsz=fb.ndig;  // size of buffer
+ C *buf=fb.buf, *fbuf=fb.fbuf;  // pointer to MSD result loc, and frac workarea
+ mvc(bsz,buf,1,MEMSET00);  // clear field to 0.5
+ C ndig=0;  //  # valid digits
+ I dp=0;  // initial location of decimal point
+ I fbufdp=0, fbuflen=1; fbuf[0]=5;  // init fraction to 0.0
+ if(v.hi<0){v.hi=-v.hi; v.lo=-v.lo;}  // take absolute value
+ // our canonical form for qp values has the low part with its own sign bit.  For comp ease here we convert the low part to have the same sign as the high part,
+ // by transferring 1 ULP from high to low if the signs differ.  This loses 1 ULP of the low part.
+ // This is complicated by the fact that the transfer is done in floating-point it might reduce the exponent of the high
+ // part, leading to overlap between the high and low.  So, we transfer the ULP from the high in fixed point, after
+ // we have restored the hidden bit, below.  Because the canonical form is [-1/2,1/2) in low part, adding 1 ULP cannot
+ // move the binary point of the low by enough to overlap the high  WRONG! if the lower part is small enough, it may be rounded away,
+ // leaving the binary points with a fatal overlap.  If that happens, clear both the low and the ulp to 0
+ IL iulp=*(IL*)&v.hi&0xfff0000000000000&REPSGN(*(IL*)&v.hi^*(IL*)&v.lo); D ulp=*(D*)&iulp*2.22044604925031308e-16;  // 2^_52=1 ULP
+ D val[2]={v.hi,v.lo+ulp};  // decrement of v.hi deferred
+ if(unlikely(val[1]==ulp&&ulp!=0))val[1]=ulp=0.0;  // Handle case of exponent operlap
+ I i; I nextexp;   // loop counter, sequential exponent tracker
+ for(i=0;i<2;++i){  // scaf we could exit these loops when bits==0 rather than processing every bit
+  // fetch descriptor of the bits we will format from this D
+  UIL dbits=*(UIL*)&val[i];  // the bits of the float, high part first
+  IL exp=(dbits&0x7ff0000000000000)>>52;  // exponent, excess-3ff
+  IL bits=(dbits&0xfffffffffffff)+((IL)(exp!=0)<<52);  // bits to format including hidden bit
+  I currbit=52, currexp=exp-0x3ff;  // bit# we are working on, and its exponent
+  if(i==0){  // code for high value only
+   bits-=ulp!=0.;  // remove ulp from high part without changing exponent
+   nextexp=MAX(currexp,-1);  // the next exponent needed in sequence, never skipping a fraction.  If val[1] skips exponents, we must process the intermediates
+  }
+  while((currbit>=0||i==1)&&nextexp>=0){  // carry on till integer part finished.  Break at end of valid bits, but only if there are no more coming later
+   // The next bit is integer.  Double the incumbent value and add the bit.
+   I nadd=ndig;  // number of places to add: all valid digits
+   I cry=nextexp>currexp?0:(bits>>currbit)&1;  // carry-in to lowest position: the bit we are working on (0 if a skipped exp)
+   I ext=(buf[0]>=5)|((ndig==0)&cry);  // set if this doubling will overflow into the next digit.
+   if(nadd+ext>bsz){cry=buf[ndig-1]>=5; --nadd;}  // if we are trying to extend a full field, forget the new bit and round up the exiting digit
+   DQ(nadd, I dig=2*buf[i]+cry; cry=dig>9; dig-=10&-cry; buf[i+ext]=dig;)  // double the digit string
+   if(ext)buf[0]=1;  // extend with final carry out
+   dp+=ext; ndig=nadd+ext;  // if result was shifted down, move the decimal point; set the #valid digits in buf
+   if(nextexp==currexp){--currbit, --currexp;} --nextexp;  // move to next exponent, and to next bit if it wasn't a skipped exponent
+  }
+  // if the integer part is non0, the fraction will simply continue on, with no possibility of its overflowing into the integer part.
+  // If the integer is 0, we will skip over 0 digits but we are liable to find the first significance with a fraction >0.5, which
+  // might then overflow.  To allow for this we start a value<0 with an empty leading digit
+  if(unlikely(ndig==0)){++dp; buf[0]=0;}  // make an empty numeric have an overflow location - and clear it from 5 to 0
+  while(currbit>=0){
+   // The next bit is fractional.  If it is nonzero, add its fractional rep
+   if(nextexp==currexp&&((bits>>currbit)&1)){  // non-skipped 1 bit
+    I nadd=MIN(fbuflen,bsz-(dp-fbufdp));  // dp-fbufdp is MSD of where the significance of fbuf will be added in.  Truncate the add to buffer size
+    if(nadd<=0)goto finish;  //  if the significance of the fraction is too small, stop
+    I cry=0;  // init no carry in
+    DQ(nadd, I dig=fbuf[i]+buf[dp-fbufdp+i]+cry; cry=dig>9; dig-=10&-cry; buf[dp-fbufdp+i]=dig;)  // add the fraction to the result
+    C *prop=&buf[dp-fbufdp-1]; while(cry){I dig=*prop+cry; cry=dig>9; dig-=10&-cry; *prop--=dig;}  // propagate carry
+    ndig=dp-fbufdp+nadd;  // include all places in the # valid digits
+   }
+   // Advance to next exponent, halving the fraction
+   I ext=fbuf[0]>1;  // set if the fraction will grow by 1 place of significance
+   I nmul=MIN(fbuflen,bsz-dp+fbufdp-ext);  // number of places to compute: no overflow, and no needless precision
+   I cry=nmul<fbuflen?fbuf[nmul]>4:0; DQ(nmul, I dig=fbuf[i]*5+cry; cry=fbuf[i]>>1; dig-=10*cry; fbuf[i+ext]=dig;)   // halve fbuf
+   if(ext){fbuf[0]=cry; }else{--fbufdp; dp-=ndig==0;} fbuflen=MIN(nmul+ext,bsz);  // if frac gets longer, the dp doesn't move; otherwise it has a lead 0 and we move its dp.  If no sig in result, result dp moves too
+   if(nextexp==currexp){--currbit, --currexp;} --nextexp;  // move to next exponent, and to next bit if it wasn't a skipped exponent
+  }
+ }
+ finish:;
+ if(ndig!=0&&buf[0]==0){++buf; --dp; --ndig;}  // if we added a lead 0 and it is still there, remove it
+ DO(ndig, buf[i]+='0';)  // convert the digits to chars
+ R (struct fmtbuf){buf,fbuf,ndig,dp};
+}
+
+static FMTF(jtfmtE,E){UI i;
+ if(jt->ppn<17)R jtfmtD(jt,s,&v->hi);  // if only 1 float needed, display it
+ // for more digits we need more precision
+ if(!memcmpne(&v->hi,&inf, SZD)){strcpy(s,"_" ); R;}  // require exact bitmatch
+ if(!memcmpne(&v->hi,&infm,SZD)){strcpy(s,"__"); R;}
+ if(_isnan(v->hi)          ){strcpy(s,"_."); R;}
+ if(v->hi==0.){strcpy(s,"0" ); R;}
+ C buf0[1+WZ],buf1[1+WZ]; struct fmtbuf r=fmtlong((struct fmtbuf){buf0,buf1,jt->ppn,0},*v);
+ // copy result to output area
+ I endx0=MIN(r.ndig,jt->ppn);  // discard excess significance
+ I exp0=r.dp;  // number of digits of sig before decimal point.  Can be neg
+ s[0]='-'; I sgn0=v->hi<0;  // install - sign just in case; set sgn0 to be # chars of sign needed
+ if(BETWEENC(exp0,0,endx0)){
+  // decimal point within significance: report as decimal
+  if(exp0==0)s[sgn0++]='0';  // if no digits before decimal point, add one and add it to count of sign chars
+  MC(s+sgn0,r.buf,exp0); s[exp0+sgn0]='.'; MC(s+exp0+sgn0+1,r.buf+exp0,endx0-exp0);  // sign+int, . , decimal part
+  endx0+=sgn0; while(s[endx0]=='0')--endx0; if(s[endx0]=='.')--endx0; s[endx0+1]=0;  // remove trailing 0, and '.' if result is exact integer; append NUL
+ }else{
+  // report as scientific
+  exp0-=1;  // since we are reporting 1 digit above dp, we must adjust the exponent to match
+  s[sgn0]=r.buf[0]; s[1+sgn0]='.'; MC(s+1+sgn0+1,r.buf+1,endx0-1);  // sign+int, . , decimal part
+  endx0+=sgn0; while(s[endx0]=='0')--endx0; s[endx0++ +1]='e'; s[endx0+1]='_'; sprintf(&s[endx0+1+(exp0<0)],"%d",(int)ABS(exp0));  // install exponent and trailing NUL
  }
 }
 
-// copy numeric string to error line.  Values in w, n/s = len/addr of output buffer
-// negative n means 'decorate the result to show precision'
-I jtthv(J jt,A w,I n,C*s){A t;B ov=0;C buf[WZ],*x,*y=s;I k,n4=n-4,p,wd,wn,wt;FMTFUN fmt;
+
+// return default field size and function to use.  We know we have a numeric type
+static void thcase(I t,I*wd,FMTFUN *fmt){
+ I w=WI; FMTFUN f=jtfmtI; w=t&INT2?WI2:w; f=t&INT2?jtfmtI2:f; w=t&INT4?WI4:w; f=t&INT4?jtfmtI4:f; w=t&CMPX+QP?WZ:w; f=t&CMPX?jtfmtZ:f;
+      w=t&FL+SP?WD:w; f=t&FL+SP?jtfmtD:f; f=t&QP?jtfmtE:f;  *wd=w; *fmt=f;
+}
+
+// copy numeric string to error line or result buffer.  Values in w, n/s = len/addr of output buffer
+// If n is negative, we decorate the line to show precision, but we have to do it without GA() in case we are out of memory
+// Result  is # chars copied
+I jtthv(J jt,A w,I n,C*s){A t;B ov=0;C buf[WZ],*x,*y=s;I dec=REPSGN(n);n=n^dec;I k,n4=n-4,p,wd,wn,wt;FMTFUN fmt;
  RZ(w&&n);
  wn=AN(w); wt=AT(w); x=CAV(w); thcase(wt,&wd,&fmt);
+ I isiz=2;  // will be size of integer in bytes
  switch(CTTZNOFLAG(wt)){
  case INTX:
- 	{C*t;I i,*v,x;
-  	v=AV(w);
+#if SY_64
+ isiz<<=1;  // 8-byte int
+#endif
+ case INT4X: isiz<<=1;  // 4-byte int
+ case INT2X:
+  {C*t;I i,*v,orv=0,x;
+   v=IAV(w);
    for(i=0;i<wn;++i){
-    t=buf; x=*v++;
+    t=buf; x=*v; v=(I*)((I)v+isiz); x=(x<<((SZI-isiz)<<3))>>((SZI-isiz)<<3); orv|=x;
     sprintf(t,FMTI" ",x);
-	   if('-'==*t)*t=CSIGN;
+    if('-'==*t)*t=CSIGN;
     p=strlen(t); if(ov=n4<p+y-s)break; strcpy(y,t); y+=p;
-  	}
+   }
+   // if all the values were boolean, prepend a 0 to the last (if there is room and list not empty)
+   if(dec&&!ov&&i&&!(orv&~1)){if(!(ov=n4<y-s)){y[-1]=y[-2]; y[-2]='0';}}
   }
   break;
  case XNUMX: case RATX:
-  RZ(t=thxqe(w)); p=AN(t); if(ov=n<p)p=n4; MC(y,AV(t),p); y+=p; break;
+  RZ(t=thxqe(w)); p=AN(t); if(ov=n<p)p=n4; MC(y,AV(t),p); y+=p;
+  if(dec&&!ov&&p&&!memchr(s,'x',p)&&!memchr(s,'r',p))if(!(ov=n4<y+2-s)){if(wt&XNUM){*y++='x';}else{*y++='r'; *y++='1';}}
+  break;
  case B01X:
   if(ov=n<2*wn)p=n4>>1; else p=wn; DQ(p, *y++=*x++?'1':'0'; *y++=' ';); break;
- default:
+ default:  // FL/CMPX/QP
   k=bpnoun(wt);
   if(n>=wn*wd)DQ(wn, fmt(jt,y,x); y+=strlen(y); *y++=' '; x+=k;)
   else        DQ(wn, fmt(jt,buf,x); p=strlen(buf); if(ov=n4<1+p+y-s)break; strcpy(y,buf); y+=p; *y++=' '; x+=k;);
+  p=y-s;  // total length
+  if(dec&&!ov&&p&&!memchr(s,'.',p)&&!memchr(s,'e',p)&&!memchr(s,'j',p)){  // decoration called for, line not too long, not empty, and doesn't already have telltale ./e/j
+   DO(y-s-1, if(s[i]=='_'&&!BETWEENC(s[i+1],'0','9')){p=0; break;})   // _ not followed by numeric also doesn't need decorating
+   if(p)if(!(ov=n4<(y+2)-s)){if(wt&FL){y[-1]='.';}else{y[-1]='j'; *y++='0';}}  // append . to FL, j0 to CMPX
+  }
   break;
  }
- if(ov){if(' '!=y[-1])*y++=' '; mvc(3L,y,1,iotavec-IOTAVECBEGIN+'.'); y+=3;}
+ if(ov){if(' '!=y[-1])*y++=' '; mvc(3L,y,1,iotavec-IOTAVECBEGIN+'.'); y+=3;}  // if line too long, truncate with SP...
  else if(' '==y[-1])--y; 
  *y=0; R y-s;
-}
-
-static F1(jtthbit){
-ASSERTSYS(0,"thbit");
-#if 0
-A z;UC*x;C*y;I c,i,m,n,p,q,r,r1,*s; n=AN(w); r=AR(w); s=AS(w);
- c=r?s[r-1]:1; m=n/c; p=2*c-1;
- GATV(z,LIT,m*p,r+!r,s); AS(z)[AR(z)-1]=p; 
- x=UAV(w); y=CAV(z);
- q=c>>LGBB; r=c&(BB-1); r1=c&(BW-1)?(BW-(c&(BW-1)))>>LGBB:0;
- for(i=0;i<m;++i){
-  DQ(q-!r, MC(y,bitdisp+2*BB**x,2*BB  ); ++x; y+=2*BB  ;);
-  if(r)   {MC(y,bitdisp+2*BB**x,2*r -1); ++x; y+=2*r -1;}
-  else    {MC(y,bitdisp+2*BB**x,2*BB-1); ++x; y+=2*BB-1;}
-  x+=r1;
- }
- RETF(z);
-#endif
 }
 
 static F1(jtthb){A z;B*x;C*y;I c,m,n,p,r,*s;
@@ -132,19 +238,20 @@ static F1(jtthb){A z;B*x;C*y;I c,m,n,p,r,*s;
  RETF(z);
 }
 
+// default for for numerics
 static F1(jtthn){A d,t,z;C*tv,*x,*y,*zv;I c,*dv,k,m,n,p,r,*s,wd;FMTFUN fmt;
  n=AN(w); r=AR(w); s=AS(w);
- thcase(AT(w),&wd,&fmt);
+ thcase(AT(w),&wd,&fmt);  // get default field width and routine address
  GATV0(t,LIT,wd*(1+n),1); tv=CAV(t);
- if(1>=r){p=thv(w,AN(t),tv); ASSERTSYS(p,"thn"); AN(t)=AS(t)[0]=p; z=t;} 
+ if(1>=r){p=thv(w,AN(t),tv); ASSERTSYS(p,"thn"); AN(t)=AS(t)[0]=p; z=t;}   // rank<2, just format one string of characters, separated by 1 space
  else{ 
-  c=s[r-1]; m=n/c; k=bpnoun(AT(w));
+  c=s[r-1]; m=n/c; k=bpnoun(AT(w));  // c=length of row, m=#rows, k=size in bytes of atom
   y=tv-wd; x=CAV(w)-k; 
   RZ(d=apvwr(c,1L,0L)); dv=AV(d);
-  DO(m, DO(c, fmt(jt,y+=wd,x+=k); p=strlen(y); dv[i]=MAX(dv[i],p);););
+  DO(m, DO(c, fmt(jt,y+=wd,x+=k); p=strlen(y); dv[i]=MAX(dv[i],p);););  // convert each number, remember max len in each column
   --dv[c-1]; p=0; DO(c, p+=++dv[i];);
-  GATV(z,LIT,m*p,r+!r,s); AS(z)[AR(z)-1]=p; zv=CAV(z); mvc(AN(z),zv,1,iotavec-IOTAVECBEGIN+' ');
-  y=tv; DO(m, DO(c, zv+=dv[i]; p=strlen(y); MC(zv-p-(I )(c>1+i),y,p); y+=wd;););
+  GATV(z,LIT,m*p,r+!r,s); AS(z)[AR(z)-1]=p; zv=CAV(z); mvc(AN(z),zv,1,iotavec-IOTAVECBEGIN+' ');  // allocate final result, fill with blanks
+  y=tv; DO(m, DO(c, zv+=dv[i]; p=strlen(y); MC(zv-p-(I )(c>1+i),y,p); y+=wd;););  // copy each string after alignment
  }
  RETF(z);
 }
@@ -177,9 +284,9 @@ static void sbtou8(J jt,SBU*u,C*s){
   MC(s,SBSV(u->i),u->n);
 }
 
-static A jtthsb(J jt,A w,A prxthornuni){A d,z;C*zv;I c,*dv,m,n,p,q,r,*s;SB*x,*y;SBU*u;
+static A jtthsb(J jt,A w,A prxthornuni){A d,z;C*zv;I c,*dv,m,n,p,r,*s;SB*x,*y;SBU*u;
  PROLOG(0000);
- n=AN(w); r=AR(w); s=AS(w); x=y=SBAV(w); q=AM(JT(jt,sbu));
+ n=AN(w); r=AR(w); s=AS(w); x=y=SBAV(w);
  if(1>=r){
   c=n; 
   RZ(d=apvwr(c,0L,0L)); dv=AV(d);
@@ -200,19 +307,6 @@ static A jtthsb(J jt,A w,A prxthornuni){A d,z;C*zv;I c,*dv,m,n,p,q,r,*s;SB*x,*y;
    DO(m, DO(c, ddv[i]=MAX(ddv[i],ev[j]-ewv[j]);j++;););
          DO(c, dv[i]+=ddv[i];);         // add col padding space
    p=-1; DO(c, p+=dv[i]+=2;); --dv[c-1];
-#if 0
-   GATV(z,LIT,m*p,r+!r,s); zv=CAV(z); mvc(AN(z),zv,1,iotavec-IOTAVECBEGIN+' '); AS(z)[AR(z)-1]=p;
-   j=0;
-   DO(m, zv1=zv=CAV(z)+p*i;   // starting address of each row
-         DQ(c, u=SBUV(*y++); *zv='`'; sbtou8(jt,u,1+zv); 
-//                 `   utf8    col max - disp width  space
-               zv+=1 + ev[j] + (dwv[i]-ewv[j])       + 1;
-// sum of col padding space is over estimated
-// can be reduced by the minimum of p-((zv-zv1)-1) of all rows
-// change trailing padding space to NUL, all NUL will be removed in jtprx
-               if(i==c-1)mvc(p-((zv-zv1)-1),zv,1,MEMSET00);
-               j++;););
-#else
 // first pass to reduce padding space
    I q=IMAX,p0;
    j=0;
@@ -233,7 +327,6 @@ static A jtthsb(J jt,A w,A prxthornuni){A d,z;C*zv;I c,*dv,m,n,p,q,r,*s;SB*x,*y;
 // change trailing padding space to NUL, all NUL will be removed in jtprx
                if(i==c-1)mvc(p-((zv-zv1)-1),zv,1,MEMSET00);
                j++;););
-#endif
   }else{
    c=s[r-1]; m=n/c; RZ(d=apvwr(c,0L,0L)); dv=AV(d);
    DO(m, DO(c, p =sbtou8size(jt,SBUV(*x++),0); dv[i]=MAX(dv[i],p);););
@@ -245,61 +338,41 @@ static A jtthsb(J jt,A w,A prxthornuni){A d,z;C*zv;I c,*dv,m,n,p,q,r,*s;SB*x,*y;
  EPILOG(z);
 }
 
-static F1(jtthx1){A z;B b;C*s,s1[2+XBASEN];I n,p,p1,*v;
- n=AN(w); v=AV(w)+n-1; b=0>*v; 
- p=*v; if(p==XPINF)R cstr("_"); else if(p==XNINF)R cstr("__");
- sprintf(s1,FMTI,*v); p1=strlen(s1);
- p=p1+XBASEN*(n-1);
- GATV0(z,LIT,p,1); s=CAV(z); 
- MC(s,s1,p1); if(b)s[0]=CSIGN; s+=p1; 
- DQ(n-1, --v; I j=*v; j=b?-j:j; sprintf(s,FMTI04,j); s+=XBASEN;);
- R z;           
-}
-
-static A jtthq1(J jt,Q y){A c,d,z;B b;C*zv;I m,n=-1;
- RZ(c=thx1(y.n)); m=AN(c);
- d=y.d;
- if(b=1<AN(d)||1!=AV(d)[0]){RZ(d=thx1(y.d)); n=AN(d);}
- GATV0(z,LIT,m+n+1,1); zv=CAV(z);
- MC(zv,AV(c),m); if(b){zv[m]='r'; MC(&zv[m+1],AV(d),n);}
+static F1(jtthx1){
+ C*s=SgetX(w); // base 10 representation
+ if('-'==s[0])s[0]='_'; // use J's convention for negative
+ I l= strlen(s); // maybe better to use AN(UNvoidAV1(s))-1 ??
+ A z; GA10(z, LIT, l); MC(CAV1(z), s, l+1);
  R z;
 }
 
-static A jtthdx1(J jt,DX y){A x,z;B b;C*s,s1[2+XBASEN],s2[20];I e,n,p,p1,p2,*v;
- e=y.e-1; x=y.x; p=y.p;
- n=AN(x); v=AV(x)+n-1; b=0>*v; 
- if(p==DXINF)R cstr("_"); else if(p==DXMINF)R cstr("__");
- sprintf(s1,FMTI,b?-*v:*v); p1=strlen(s1);
- if(e&&*v){s=s2; *s++='e'; if(0>e)*s++=CSIGN; sprintf(s,FMTI,0<e?e:-e); p2=strlen(s2);}else p2=0; 
- GATV0(z,LIT,b+p1+(I )(1<p1)+XBASEN*(n-1)+p2,1); s=CAV(z);
- if(b)*s++=CSIGN; *s++=*s1; if(1<p1){*s++='.'; MC(s,1+s1,p1-1); s+=p1-1;}
- DQ(n-1, --v; I j=*v; j=b?-j:j; sprintf(s,FMTI04,j); s+=XBASEN;);
- MC(s,s2,p2);
+/* static */ A jtthq1(J jt,Q y){
+ if(ISQinf(y)) {
+   if(0<QSGN(y)) R cstr("_");
+   else if (0>QSGN(y)) R cstr("__");
+   else R cstr("_.");
+ }
+ C*s= SgetQ(y);
+ if('-'==s[0]) s[0]='_';
+ C*r= strchr(s, '/'); if (r) *r= 'r';
+ A z=cstr(s);
  R z;
 }
 
-static F1(jtthxqe){A d,t,*tv,*v,y,z;C*zv;I c,*dv,m,n,p,r,*s,*wv;
- n=AN(w); r=AR(w); s=AS(w); wv=AV(w);
-  SHAPEN(w,r-1,c); m=n/c;
- GATV0(t,BOX,n,1); tv=AAV(t);
- RZ(d=apvwr(c,1L,0L)); dv=AV(d); v=tv;
- switch(CTTZ(AT(w))){
-  case XNUMX: {X*u =(X*) wv; DO(m, DO(c, RZ(*v++=y=thx1(*u++));  dv[i]=MAX(dv[i],AN(y));));} break;
-  case RATX:  {Q*u =(Q*) wv; DO(m, DO(c, RZ(*v++=y=thq1(*u++));  dv[i]=MAX(dv[i],AN(y));));} break;
-#ifdef UNDER_CE
-  default: 
-   if (AT(w)&XD){DX*u=(DX*)wv; DO(m, DO(c, RZ(*v++=y=thdx1(*u++)); dv[i]=MAX(dv[i],AN(y));));}
-   else          {ZX*u=(ZX*)wv; ASSERT(0,EVNONCE);}
-   break;
-#else
-  case XDX:   {DX*u=(DX*)wv; DO(m, DO(c, RZ(*v++=y=thdx1(*u++)); dv[i]=MAX(dv[i],AN(y));));} break;
-  case XZX:   {ZX*u=(ZX*)wv; ASSERT(0,EVNONCE);} break;
-#endif
+static F1(jtthxqe){
+ I n=AN(w), r=AR(w), *s=AS(w), *wv=AV(w), c;
+ SHAPEN(w,r-1,c); I m=n/c; // m: # rows, c: # columns
+ A t; GATV0(t,BOX,n,1); A*tv=AAV(t);
+ A d; RZ(d=apvwr(c,1L,0L)); I*dv=AV(d); A*v=tv;
+ switch(CTTZ(AT(w))){A y;
+  case XNUMX:{X*u=(X*)wv; DO(m, DO(c, RZ(*v++=y=thx1(*u++)); dv[i]=MAX(dv[i],AN(y));));} break;
+  case RATX: {Q*u=(Q*)wv; DO(m, DO(c, RZ(*v++=y=thq1(*u++)); dv[i]=MAX(dv[i],AN(y));));} break;
+  default: {ASSERT(0,EVNONCE);}
  }
  --dv[c-1];
- p=0; DO(c, p+=++dv[i];);
- GATV(z,LIT,m*p,r+!r,s); AS(z)[AR(z)-1]=p; zv=CAV(z); mvc(AN(z),zv,1,iotavec-IOTAVECBEGIN+' ');
- v=tv; DO(m, DO(c, zv+=dv[i]; y=*v++; p=AN(y); MC(zv-p-(I )(c>1+i),AV(y),p);));
+ I p=0; DO(c, p+=++dv[i];);
+ A z;GATV(z,LIT,m*p,r+!r,s); AS(z)[AR(z)-1]=p; C*zv=CAV(z); mvc(AN(z),zv,1,iotavec-IOTAVECBEGIN+' ');
+ v=tv; DO(m, DO(c, zv+=dv[i]; A y=*v++; p=AN(y); MC(zv-p-(I )(c>1+i),AV(y),p);));
  R z;
 }
 
@@ -317,7 +390,7 @@ static B jtrc(J jt,A w,A*px,A*py, I *t){A*v,x,y;I j=0,k=0,maxt=0,r,*s,xn,*xv,yn,
  // yn = #rows in 2-cell of joined table, y=vector of (yn+1) 0s, v->data for vector
   SHAPEN(w,r-1,yn); RZ(*py=y=apvwr(yn,0L,0L)); yv=AV(y);
  // for each atom of w, include height/width in the appropriate row/column cells, and take maximum of types
- DQ(AN(w), maxt=MAX(maxt,AT(*v)); s=AS(*v++); xv[j]=MAX(xv[j],s[0]); yv[k]=MAX(yv[k],s[1]); if(++k==yn){k=0; if(++j==xn)j=0;});
+ DQ(AN(w), A cv; cv=C(*v); maxt=MAX(maxt,AT(cv)); s=AS(cv); xv[j]=MAX(xv[j],s[0]); yv[k]=MAX(yv[k],s[1]); ++v; if(++k==yn){k=0; if(++j==xn)j=0;});
  // Add 1 to each max width/height to account for the boxing character before that position
  // We have not yet accounted for the boxing character at the end.
  DO(xn, ASSERT(xv[i]<IMAX,EVLIMIT); ++xv[i];); 
@@ -331,7 +404,7 @@ static B jtrc(J jt,A w,A*px,A*py, I *t){A*v,x,y;I j=0,k=0,maxt=0,r,*s,xn,*xv,yn,
 // 9 is vertical bar, 10 is horizontal bar
 
 // Install one row of boxing characters
-// cw is 1 if the data is LIT, 2 if C2T
+// cw is 1 if the data is LIT, 2 if C2T, 4 if C4T
 // k is index of boxing character to install at leftmost divider
 // n is #boxed values per row
 // x[i] is width of column i, including the boxing character
@@ -345,15 +418,7 @@ static void jtfram(J jt,I k,I n,I*x,C*v,I cw){C a,b=9==k,d,l,r;
  l=JT(jt,bx)[k]; a=b?' ':JT(jt,bx)[10]; d=b?l:JT(jt,bx)[1+k]; r=b?l:JT(jt,bx)[2+k];
  // Install first character; then, for each field, {(width-1) copies of a; then d overwriting last a}
  // then install r over the last d
- // Different version for each character size
- switch (cw){
- case 1:   // version for LIT output array
-  {*v++=l; DO(n,  mvc(x[i]-1,v,1,iotavec-IOTAVECBEGIN+a); v+=x[i]-1;*v++=d;);*--v=r;}break;
- case 2: // version for C2T output array
-  {US *u=(US*)v;I j; *u++=l; DO(n, for(j=x[i]-1;j>0;--j)*u++=a; *u++=d;); *--u=r;} break;
- case 4: // version for C4T output array
-  {C4 *u=(C4*)v;I j; *u++=l; DO(n, for(j=x[i]-1;j>0;--j)*u++=a; *u++=d;); *--u=r;} break;
- }
+ *v++=l; DO(cw-1, *v++=0;) DO(n,  mvc(x[i]*cw,v,cw,iotavec-IOTAVECBEGIN+a); v+=x[i]*cw; v[-cw]=d;); v[-cw]=r;
 }
 
 // Install boxing character in all result 2-cells
@@ -399,7 +464,7 @@ static void jtfmfill(J jt,I p,I q,I wd,A w,A x,A y,C*zv,I cw){A e,*wv;
  // n=#boxes in w, wv->&first box
  n=AN(w); wv=AAV(w);
  // Get centering info for x and y, 012 for MinCenterMax
- xp=((I)jtinplace&JTTHORNX)>>JTTHORNXX; yp=((I)jtinplace&JTTHORNY)>>JTTHORNYX;
+ xp=((I)jtinplace>>JTTHORNXX)&(JTTHORNX>>JTTHORNXX); yp=((I)jtinplace>>JTTHORNYX)&(JTTHORNY>>JTTHORNYX);
  // get xn=# rows, xv->height; & similarly for y
  xn=AN(x); xv=AV(x); yn=AN(y); yv=AV(y);
  // Loop through each box, installing it in the proper position
@@ -412,7 +477,7 @@ static void jtfmfill(J jt,I p,I q,I wd,A w,A x,A y,C*zv,I cw){A e,*wv;
   for(j=0;j<xn;++j){
    for(k=0;k<yn;++k){
     // get info for contents of next box: (r,c) = height,width
-    e=wv[i]; s=AS(e); r=s[0]; c=s[1];
+    e=CNOERR(wv[i]); s=AS(e); r=s[0]; c=s[1];  // wv has already been resolved & cannot fail
     // get offset to store the value at.  First, the vertical calculation.
     // If centering=0, use starting position.  If 2, add (fieldheight-1)-(data height)
     // if 1, add half of that height
@@ -546,15 +611,16 @@ static A jtthorn1main(J jt,A w,A prxthornuni){PROLOG(0001);A z;
  if(!AN(w))GATV(z,LIT,0,AR(w),AS(w))
  else if(ISSPARSE(AT(w)))z=ths(w);
  else switch(CTTZ(AT(w))){
-  case INTX:  case FLX: case CMPXX:
+  case INT2X: case INT4X: case INTX:  case FLX: case CMPXX:  case QPX:
              z=thn(w);                    break;
 #ifdef UNDER_CE
-  default:   if(AT(w)&XD+XZ)z=thxqe(w); else R 0; break;
+  default:
+   R 0; break;
   case XNUMX: case RATX:
              z=thxqe(w);                  break;
 #else
   default:   R 0;
-  case XNUMX: case RATX: case XDX: case XZX:
+  case XNUMX: case RATX:
              z=thxqe(w);                  break;
 #endif
   case B01X:  z=thb(w);                    break;
@@ -587,7 +653,7 @@ static A jtthorn1main(J jt,A w,A prxthornuni){PROLOG(0001);A z;
    z=rank2ex(w,prxthornuni,DUMMYSELF,MIN(AR(w),1L),0,MIN(AR(w),1L),0,BAV(prxthornuni)[0]&1?RoutineC:jttoutf8a);
    break;
   case BOXX:  z=thbox(w,prxthornuni);                  break;
-  case SBTX:  z=thsb(w,prxthornuni);                   break;
+  case SBTX:  READLOCK(JT(jt,sblock)) z=thsb(w,prxthornuni); READUNLOCK(JT(jt,sblock))                  break;
   case NAMEX: z=sfn(0,w);                  break;
   case ASGNX: z=spellout(CAV(w)[0]);         break;
   case VERBX: case ADVX:  case CONJX:
@@ -771,9 +837,10 @@ static A jtjprx(J jt,I ieol,I maxlen,I lb,I la,A w){A y,z;B ch;C e,eov[2],*v,x,*
    // Loop for each character of the line.  Convert CR, LF, or CRLF to EOL; discard NUL bytes
    switch(t){
    case 1:
-    // Here for LIT characters.  Move em, handling EOL and box-drawing; discard NUL
+    // Here for LIT characters.  Move em, handling EOL and box-drawing; convert VT to LF; discard NUL
     for(j=k=x=0;j<c;++j){  // k counts # chars output since last EOL
      e=x; x=*v++;  // prev char, next char
+     if(x==0xb)x=CLF;  // convert VT back to LF for display
      if     (x==CCR){          EOLC(zv); k=0;}  // if CR, turn into EOL
      else if(x==CLF){if(e!=CCR)EOLC(zv); k=0;}  // if LF not after CR, turn into EOL
      else if(x)     {if(k<c1){BDC(zv,x);} else if(k==c1)DDD(zv); ++k;}  // Otherwise copy the character if not NUL; if it's a boxing character,
@@ -786,6 +853,7 @@ static A jtjprx(J jt,I ieol,I maxlen,I lb,I la,A w){A y,z;B ch;C e,eov[2],*v,x,*
     // Discard NUL characters (including ones added after CJK chars)
     for(j=k=0;j<c;++j){
      e=x; x=*u++;
+     if(x==0xb)x=CLF;  // convert VT back to LF for display
      if     (x==CCR){          EOLC(zv); k=0;}
      else if(x==CLF){if(e!=CCR)EOLC(zv); k=0;} 
      else if(x)     {if(k<c1){UUC(zv,x);} else if(k==c1)DDD(zv); ++k;}
@@ -797,6 +865,7 @@ static A jtjprx(J jt,I ieol,I maxlen,I lb,I la,A w){A y,z;B ch;C e,eov[2],*v,x,*
     // Here for C4T input.  Like C2T
     for(j=k=0;j<c;++j){
      e=x; x=*u++;
+     if(x==0xb)x=CLF;  // convert VT back to LF for display
      if     (x==CCR){          EOLC(zv); k=0;}
      else if(x==CLF){if(e!=CCR)EOLC(zv); k=0;} 
      else if(x)     {if(k<c1){UUC4(zv,x);} else if(k==c1)DDD(zv); ++k;}
@@ -845,7 +914,7 @@ static A jtjprx(J jt,I ieol,I maxlen,I lb,I la,A w){A y,z;B ch;C e,eov[2],*v,x,*
  R z;
 }    /* output string from array w */
 
-// 5!:30, to debug formatted display
+// 5!:_1, to debug formatted display
 // a is the output control, (outeol, outmaxlen, outmaxbefore, outmaxafter)
 // w is any noun
 // Result is the UTF-8 byte string that would be displayed
@@ -863,12 +932,12 @@ F2(jtoutstr){I*v;
  R jprx(v[0],v[1],v[2],v[3],w);
 }
 
-// w is a noun.  Convert it to a UTF-8 string and write it to the console
+// w is a character noun.  Convert it to a UTF-8 string and write it to the console
 static F1(jtjpr1){F1PREFJT;PROLOG(0002);A z;
  // extract the output type buried in jt
  I mtyo=(I)jtinplace&JTPRTYO;
  // convert the character array to a null-terminated UTF-8 string
- RZ(z=jprx(JT(jt,outeol),JT(jt,outmaxlen),JT(jt,outmaxbefore),JT(jt,outmaxafter),w));
+ RZ(z=jprx(JT(jt,outeol),FLOAT16TOI(JT(jt,outmaxlen)),FLOAT16TOI(JT(jt,outmaxbefore)),FLOAT16TOI(JT(jt,outmaxafter)),w));
  // write string to stdout, calling it a 'formatted array' unless otherwise overridden
  if(AN(z)){
 #ifdef ANDROID
@@ -882,7 +951,7 @@ static F1(jtjpr1){F1PREFJT;PROLOG(0002);A z;
 }
 
 // w is anything; convert it to character and write it to the display
-// flag bits in jt indicate output class and print-enable
+// flag bits in jt indicate output class, print-enable, and screen destination
 // Result is 0 if error, otherwise a harmless constant
 F1(jtjpr){F1PREFJT;A y;I i,n,t; UC *v;
  ARGCHK1(w);
@@ -890,8 +959,8 @@ F1(jtjpr){F1PREFJT;A y;I i,n,t; UC *v;
   // if w is a noun, format it and output it
  if(t&NOUN&&!((I)jtinplace&JTPRNOSTDOUT))RZ(jpr1(w))
  else if(t&VERB+ADV+CONJ){
-  // function result.  If it is the evocation of a name, evaluate the name (unless it is locked - then
-  // just use the name)
+  // result is ACV, including undefnames.  If it is the evocation of a name, evaluate the name (unless it is locked - then
+  // just use the name).  If the name is undefined, this will give error; the failing sentence has been popped, but we will ignore it because the init stack has 0 words
   RZ(y=evoke(w)?symbrdlock(FAV(w)->fgh[0]):w);
   if(!((I)jtinplace&JTPRNOSTDOUT)){
    // for each representation selected by the user, create the representation and type it
@@ -900,7 +969,7 @@ F1(jtjpr){F1PREFJT;A y;I i,n,t; UC *v;
     case 1: RZ(jpr1(arep(y))); break;
     case 2: RZ(jpr1(drep(y))); break;
     case 4: RZ(jpr1(trep(y))); break;
-    case 5: RZ(jpr1(lrep(y))); break;
+    case 5: RZ(jpr1(jtlrep((J)((I)jtinplace&~JTEXPVALENCEOFF),y))); break;  // set parm bits, leaving FORSCREEN
     case 6: RZ(jpr1(prep(y))); break;
  }}}
  R mtm;

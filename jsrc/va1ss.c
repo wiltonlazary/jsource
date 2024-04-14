@@ -1,4 +1,4 @@
-/* Copyright 1990-2016, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 // Verbs: Atomic (Scalar) Monadic when arguments have one atom
@@ -15,17 +15,26 @@
 
 #define SSINGENC(type) ((type)>>INTX)
 #define SSINGCASE(id,subtype) (3*(id)+(subtype))   // encode case/args into one branch value
+
 A jtssingleton1(J jt, A w,I caseno){A z;void *zv;
  F2PREFIP;
  I ar=AR(w);
  // Calculate inplaceability
- // Inplaceable if: count=1 and zombieval, or count<0, PROVIDED the arg is inplaceable and the block is not UNINCORPABLE.  No inplace if on NVR stack (AM is NVR and count>0)
- I wipok = ((((AC(w)-1)|((I)w^(I)jt->asginfo.zombieval))==0)|(SGNTO0(AC(w)))) & ((UI)jtinplace>>JTINPLACEWX) & !(AFLAG(w)&AFUNINCORPABLE+AFRO) & ((AM(w)&SGNTO0(AM(w)-AMNVRCT))^1);
+ // Inplaceable if: count=2 and zombieval, or count<0, PROVIDED the arg is inplaceable and the block is not UNINCORPABLE.  No inplace if on NVR stack (AM is NVR and count>0)
+ I wipok = ((w==jt->zombieval)|(SGNTO0(AC(w)))) & ((UI)jtinplace>>JTINPLACEWX) & !(AFLAG(w)&AFUNINCORPABLE+AFRO);
 // Allocate the result area
  if(wipok){ z=w; zv=voidAV(w); } else if(likely(ar==0)){GAT0(z,FL,1,0); zv=voidAV0(z);} else{GATV1(z,FL,1,ar); zv=voidAVn(z,ar);}
 
  // Start loading everything we will need as values before the pipeline break.  Tempting to convert int-to-float as well, but perhaps it will predict right?
- I wiv=IAV(w)[0],ziv; D wdv=DAV(w)[0],zdv;
+ I wiv=IAV(w)[0],ziv;
+#if defined(__aarch32__)||defined(__arm__)||defined(_M_ARM)
+ D wdv;
+ memcpy(&wdv,DAV(w),4);
+ memcpy(4+(char*)&wdv,4+(char*)DAV(w),4);   // avoid bus error
+#else
+ D wdv=DAV(w)[0];
+#endif
+ D zdv;
  // Huge switch statement to handle every case.
  switch(caseno){
 
@@ -63,9 +72,9 @@ A jtssingleton1(J jt, A w,I caseno){A z;void *zv;
 
  case SSINGCASE(VA1CEXP-VA1ORIGIN,SSINGENC(B01)): SSSTORENV((B)wiv?2.71828182845904523536:1.0,z,FL,D) R z;
  case SSINGCASE(VA1CEXP-VA1ORIGIN,SSINGENC(INT)):
-    SSSTORE(wiv<EMIN?0.0:EMAX<wiv?inf:exp((D)wiv),z,FL,D) R z;
+    SSSTORE(unlikely(wiv<EMIN)?0.0:unlikely(EMAX<wiv)?inf:exp((D)wiv),z,FL,D) R z;
  case SSINGCASE(VA1CEXP-VA1ORIGIN,SSINGENC(FL)):
-    SSSTORENVFL(wdv<EMIN?0.0:EMAX<wdv?inf:exp(wdv),z,FL,D) R z;
+    SSSTORENVFL(unlikely(wdv<EMIN)?0.0:unlikely(EMAX<wdv)?inf:exp(wdv),z,FL,D) R z;
 
 
  case SSINGCASE(VA1CLOG-VA1ORIGIN,SSINGENC(B01)): SSSTORENV((B)wiv?0.0:infm,z,FL,D) R z;
@@ -79,7 +88,7 @@ A jtssingleton1(J jt, A w,I caseno){A z;void *zv;
 
  case SSINGCASE(VA1CSTILE-VA1ORIGIN,SSINGENC(B01)): SSSTORENV((B)wiv,z,B01,B) R z;
  case SSINGCASE(VA1CSTILE-VA1ORIGIN,SSINGENC(INT)):
-    wiv=(I)((UI)(wiv^REPSGN(wiv))-(UI)REPSGN(wiv)); if(likely(wiv>=0)){SSSTORENV(wiv,z,INT,I)}else SSSTORE(-(D)IMIN,z,FL,D) R z;
+    {I nwiv=(I)((0U-(UI)wiv)); wiv=nwiv>0?nwiv:wiv;}  if(likely(wiv>=0)){SSSTORENV(wiv,z,INT,I)}else SSSTORE(-(D)IMIN,z,FL,D) R z;
  case SSINGCASE(VA1CSTILE-VA1ORIGIN,SSINGENC(FL)):
     wdv=ABS(wdv); SSSTORENVFL(wdv,z,FL,D) R z;
 

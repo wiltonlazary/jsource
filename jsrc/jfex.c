@@ -1,5 +1,10 @@
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
+/* Licensed use only. Any other use is in violation of copyright.          */
+/*                                                                         */
+/* J Front End Example                                                     */
+
 // J Front End Example
-// define _WIN32 for Windows, __MACH__ for MAC, J64 for 64-bit
+// define _WIN32 for Windows, __APPLE__ for MAC, J64 for 64-bit
 // JE is loaded from current working directory
 
 #ifdef _WIN32
@@ -10,9 +15,11 @@
  #define JDLLNAME "\\j.dll"
 #else
  #define _stdcall
+ #if !defined(__wasm__) && !defined(TARGET_IOS)
  #include <dlfcn.h>
  #define GETPROCADDRESS(h,p)	dlsym(h,p)
- #ifdef __MACH__ 
+ #endif
+ #ifdef __APPLE__
   #define JDLLNAME "/libj.dylib"
  #else
   #define JDLLNAME "/libj.so"
@@ -26,6 +33,7 @@
 #include "jlib.h"
 
 static JDoType jdo;
+static JInterruptType jinterrupt;
 static JFreeType jfree;
 static JgaType jga;
 static JGetLocaleType jgetlocale;
@@ -33,8 +41,7 @@ static JGetLocaleType jgetlocale;
 static J jt;
 static void* hjdll;
 
-static char **adadbreak;
-static void sigint(int k){**adadbreak+=1;signal(SIGINT,sigint);}
+static void sigint(int k){jinterrupt(jt);}
 static char input[1000];
 
 // J calls for input (debug suspension and 1!:1[1) and we call for input
@@ -44,7 +51,7 @@ char* _stdcall Jinput(J jt,char* prompt)
 	if(!fgets(input, sizeof(input), stdin))
 	{
 		fputs("\n",stdout);
-		**adadbreak+=1;
+		jinterrupt(jt);
 	}
 	return input;
 }
@@ -144,10 +151,10 @@ int main(int argc, char* argv[])
 	if(!jt) return 1; // JE init failed
 	((JSMType)GETPROCADDRESS(hjdll,"JSM"))(jt,callbacks);
 	jdo=(JDoType)GETPROCADDRESS(hjdll,"JDo");
+	jinterrupt=(JInterruptType)GETPROCADDRESS(hjdll,"JInterrupt");
 	jfree=(JFreeType)GETPROCADDRESS(hjdll,"JFree");
 	jga=(JgaType)GETPROCADDRESS(hjdll,"Jga");
 	jgetlocale=(JGetLocaleType)GETPROCADDRESS(hjdll,"JGetLocale");
-	adadbreak=(char**)jt; // first address in jt is address of breakdata
 	signal(SIGINT,sigint);
 	while(1){jdo(jt,Jinput(jt,"   "));}
 	jfree(jt);

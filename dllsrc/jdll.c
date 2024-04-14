@@ -1,5 +1,5 @@
-/* Copyright 1990-2001, Jsoftware Inc.  All rights reserved. */
-/* Licensed use only. Any other use is in violation of copyright. */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
+/* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* J Windows dll and com interface (old jcom.c, jdll.c, jwin32.c)          */
 
@@ -25,14 +25,9 @@
 #include "../jsrc/jlib.h"
 #undef JT
 #define JT(p,n) p->n  // used for references in JS, which most references in this module are
-#define IJT(p,n) JT(JJTOJ(p),n)    // used in function that interface to internal functions and thus take a JJ
-// given a pointer which might be a JST* or JTT*, set pointers to use for the shared and thread regions.
-// If we were given JST*, keep it as shared & use master thread; if JTT*, keep it as thread & use shared region
-#define SETJTJM(in,jstout,jttout) \
- JJ jttout; \
- if((I)in&(JTALIGNBDY-1)){jttout=(JJ)in; jstout=JJTOJ(in);   /* if jt is a thread pointer, use it and set jt to the shared */ \
- }else{jttout=MTHREAD(in);}  /* if jt is a shared pointer, use the master thread */
+#define IJT(p,n) JT(JJTOJ(p),n)    // used in functions that interface to internal functions and thus take a JJ
 
+extern JS _Initializer(void*);
 extern void wtom(US* src, I srcn, UC* snk);
 extern void utow(C4* src, I srcn, US* snk);
 extern I utowsize(C4* src, I srcn);
@@ -233,7 +228,7 @@ static int a2v (JJ jt, A a, VARIANT *v, int dobstrs)  // jt is a thread pointer,
 			 ++ap, ++v)
 		{
 			PROLOG(0118);
-			er=a2v (jt, *ap, v, dobstrs);
+			er=a2v (jt, C(*ap), v, dobstrs);
 			tpop(_ttop);
 			if (er!=0)
 			{
@@ -282,13 +277,13 @@ static int jget(JJ jt, C* name, VARIANT* v, int dobstr)  // jt is a thread point
 
 CDPROC int _stdcall JGet(JS jt, C* name, VARIANT* v)
 {
- SETJTJM(jt,jt,jm)
+ SETJTJM(jt,jm)
 	return jget(jm, name, v, 0); // no bstrs; run in master thread
 }
 
 CDPROC int _stdcall JGetB(JS jt, C* name, VARIANT* v)
 {
- SETJTJM(jt,jt,jm)
+ SETJTJM(jt,jm)
 	return jget(jm, name, v, 1); // do bstrs; run in master thread
 }
 
@@ -604,28 +599,28 @@ static int jsetx(JJ jt, C* name, VARIANT* v, int dobstrs)   // jt is a thread po
 	if(strlen(name) >= sizeof(gn)) return EVILNAME;
 	if(valid(name, gn)) return EVILNAME; 
 
-	er=jt->jerr=0;
+	RESETERR;
 	jset(gn, v2a(jt, v,dobstrs));	// no bstrs, run in thread we were called in
-	er=jt->jerr; jt->jerr=0;
+	er=jt->jerr; RESETERR;
 	tpop(old);
 	return er;
 }
 
 CDPROC int _stdcall JSet(JS jt, C* name, VARIANT* v)
 {
- SETJTJM(jt,jt,jm)
+ SETJTJM(jt,jm)
 	return jsetx(jm, name, v, 0);	// no bstrs, use master thread
 }
 
 CDPROC int _stdcall JSetB(JS jt, C* name, VARIANT* v)
 {
- SETJTJM(jt,jt,jm)
+ SETJTJM(jt,jm)
 	return jsetx(jm, name, v, 1);	// do bstrs
 }
 
 CDPROC int _stdcall JErrorText(JS jt, long ec, VARIANT* v)
 {
- SETJTJM(jt,jt,jm)
+    jt=JorJJTOJ(jt);  // point jt to shared block if we were pointing to a LTT
 	C* p;
 	SAFEARRAY FAR* psa; 
 	SAFEARRAYBOUND rgsabound;
@@ -647,7 +642,7 @@ CDPROC int _stdcall JClear(JS jt){ return 0;};
 
 CDPROC int _stdcall JInt64R(JS jt, long b)
 {
- SETJTJM(jt,jt,jm)
+    jt=JorJJTOJ(jt);  // point jt to shared block if we were pointing to a LTT
 #if SY_64
 	JT(jt,int64rflag) = b;
 #endif
@@ -656,14 +651,14 @@ CDPROC int _stdcall JInt64R(JS jt, long b)
 
 CDPROC int _stdcall JTranspose(JS jt, long b)
 {
- SETJTJM(jt,jt,jm)
+    jt=JorJJTOJ(jt);  // point jt to shared block if we were pointing to a LTT
 	JT(jt,transposeflag) = b;
 	return 0;
 }
 
 CDPROC int _stdcall JErrorTextB(JS jt, long ec, VARIANT* v)
 {
- SETJTJM(jt,jt,jm)
+    jt=JorJJTOJ(jt);  // point jt to shared block if we were pointing to a LTT
 	C* p;
 	BSTR bstr;
 
@@ -677,7 +672,7 @@ CDPROC int _stdcall JErrorTextB(JS jt, long ec, VARIANT* v)
 
 CDPROC int _stdcall JDoR(JS jt, C* p, VARIANT* v)
 {
- SETJTJM(jt,jt,jm)
+    jt=JorJJTOJ(jt);  // point jt to shared block if we were pointing to a LTT
 	int e;
 	
 	JT(jt,oleop)=1;	// capture output
@@ -693,17 +688,18 @@ CDPROC int _stdcall JDoR(JS jt, C* p, VARIANT* v)
 #endif
 
 // previously in separate file when jdll.c and jcom.c both exisited
-char modulepath[_MAX_PATH];
-char dllpath[_MAX_PATH];
+extern char modulepath[];
+extern char sopath[];
 void dllquit(JJ);
 void oleoutput(JS,I n,char* s);
 HINSTANCE g_hinst;
-JS g_jt;
+JS g_jt=0;
 
 extern C* getlocale(JS);
 extern void  FreeGL(HANDLE hglrc);
 
 
+#if 0
 #if SY_WINCE
 void getpath(HINSTANCE hi, C* path)
 {
@@ -728,33 +724,38 @@ void getpath(HINSTANCE hi, C* path)
 }
 #endif
 
-// create a memory heap of the given size, allocate a JST in it, and store the address
-// of the heap into jt->heap so that the JE can do memory allocations from it
-JS heapinit(int size)
+// create a skeletal JS--just good enough to do basic initialisation
+JS heapinit()
 {
-	HANDLE h;
-	JS jt;
-
-	h = HeapCreate(0, size, 0);
-	if(!h) return 0;
-	jt = HeapAlloc(h, 0, sizeof(JST)+JTALIGNBDY-1);
-	if(!jt)
-	{
-		HeapDestroy(h);
-		return 0;
-	}
- jt = (JS)(((I)jt+JTALIGNBDY-1)&-JTALIGNBDY);  // force to SDRAM page boundary
-	mvc(sizeof(JST),jt,1,MEMSET00);
-	JT(jt,heap) = h;
-	return jt;
+	JS jt=jvmreservea(sizeof(JST),__builtin_ctz(JTALIGNBDY));
+	if(!jt)R 0; //no address space
+	I sz=(I)&jt->threaddata[1]-(I)jt; // #relevant bytes: just JS and the first JT
+	if(!jvmcommit(jt,sz)){jvmrelease(jt,sizeof(JST));R 0;} //no memory
+ jvmwire(jt,sz); //try to wire JS.  Don't bother with error checking; failure is non-catastrophic
+	R jt;
 }
+#endif
+
+#ifdef JAMALGAM
+// DllMain not called, so jconsole must call this
+int attach_process()
+{
+	if(!(g_jt=(JS)_Initializer(0))) return 0;
+	return TRUE;
+}
+int detach_process()
+{
+	if(g_jt){jvmrelease(g_jt,sizeof(JST));g_jt=0;}
+	return TRUE;
+}
+#endif
 
 int WINAPI DllMain (HINSTANCE hDLL, DWORD dwReason, LPVOID lpReserved)
 {
 	switch (dwReason)
 	{
-    case DLL_PROCESS_ATTACH:
-        // Handle the first activation of J
+	case DLL_PROCESS_ATTACH:
+	// Handle the first activation of J
 		g_hinst = hDLL;
 /*
 		{
@@ -767,17 +768,19 @@ int WINAPI DllMain (HINSTANCE hDLL, DWORD dwReason, LPVOID lpReserved)
 			}
 		}
 */
+#if 0
         // Initialize J globals.  This is done only once.  Many of the globals are in static memory, initialized
         // by the compiler; some must be initialized a run-time in static memory; some must be allocated into A blocks
         // pointed to by static names.  Because of the A blocks, we have to perform a skeletal initialization of jt,
         // just enough to do GA().  The rest of jt is never used
 		getpath(0, modulepath);
-		getpath(hDLL, dllpath);
-		g_jt=heapinit(10000);  // just enough for a few allocations
-		if(!g_jt) R 0;   // abort if no memory
-		if(!jtglobinit(g_jt)) {HeapDestroy(g_jt->heap); g_jt=0; R 0;};  // free & abort if initialization error
-        // The g_jt heap MUST NOT be freed, because it holds the blocks pointed to by initialized globals.
-        // g_jt itself, a JST struct, is not used.  Perhaps it could be freed, as long as the rest of the heap remains.
+		getpath(hDLL, sopath);
+		g_jt=heapinit();
+		if(!g_jt) return 0;   // abort if no memory
+		if(!jtglobinit(g_jt)) {jvmrelease(g_jt,sizeof(JST)); g_jt=0; return 0;};  // free & abort if initialization error
+#else
+		if(!(g_jt=(JS)_Initializer((void*)hDLL))) return 0;
+#endif
 		break;
 
     case DLL_THREAD_ATTACH:
@@ -787,46 +790,67 @@ int WINAPI DllMain (HINSTANCE hDLL, DWORD dwReason, LPVOID lpReserved)
       break;
 
     case DLL_PROCESS_DETACH:
-		if(g_jt) HeapDestroy(g_jt->heap);
+		if(g_jt){jvmrelease(g_jt,sizeof(JST));g_jt=0;}
 		break;
   }
 return TRUE;
 }
 
+#if 0
 CDPROC JS _stdcall JInit()
 {
 	JST* jt;
 
-    // Init for a new J instance.  Globals have already been initialized.
-    // Create a new jt, which will be the one we use for the entirety of the instance.
-	jt=heapinit(1000000);
+	// Init for a new J instance.  Globals have already been initialized.
+	// Create a new jt, which will be the one we use for the entirety of the instance.
+	jt=heapinit();
 	if(!jt) R 0;  // if no memory, fail
-    // Initialize all the info for the shared region and the master thread
+	// Initialize all the info for the shared region and the master thread
 	if(!jtjinit2(jt,0,0))
 	{
-		HeapDestroy(JT(jt,heap));  // if error during init, fail
+		jvmrelease(jt,sizeof(JST));  // if error during init, fail
 		R 0;
 	};
+	jgmpinit(sopath); // mp support for 1x and 2r3
 	return jt;  // return (JS)MTHREAD(jt);
+}
+
+CDPROC JS _stdcall JInit2(C *libpath)
+{
+	JST* jt;
+
+	// Init for a new J instance.  Globals have already been initialized.
+	// Create a new jt, which will be the one we use for the entirety of the instance.
+	jt=heapinit();
+	if(!jt) R 0;  // if no memory, fail
+	// Initialize all the info for the shared region and the master thread
+	if(!jtjinit2(jt,0,0))
+	{
+		jvmrelease(jt,sizeof(JST));  // if error during init, fail
+		R 0;
+	};
+	if(libpath){strcpy(sopath,libpath);if(strlen(sopath)&&('\\'==sopath[strlen(sopath)-1]))sopath[strlen(sopath)-1]=0;}
+	jgmpinit(sopath); // mp support for 1x and 2r3
+	return jt;  // return shared block
 }
 
 // clean up at the end of a J instance
 CDPROC int _stdcall JFree(JS jt)
 {
 	if(!jt) return 0;
- SETJTJM(jt,jt,jm)
-	if(JT(jt,xep)&&AN(JT(jt,xep))){jtimmex(jm,JT(jt,xep));}  // If there is an exit sentence, run it & force typeout.  No need to tidy up since the heap is going away
+	SETJTJM(jt,jm)
 #if !SY_WINCE
 	dllquit(jm);  // clean up call dll
 #endif
-	HeapDestroy(JT(jt,heap));
+	jvmrelease(jt,sizeof(JST));
 	return 0;
 }
+#endif
 
 // previously in jwin32.c
 
 #ifndef _JDLL
-char dllpath[] = "";				    /* dll path is empty */
+extern char sopath[];				    /* dll path is empty */
 #endif
 
 #ifdef _MAC

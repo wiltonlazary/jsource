@@ -1,11 +1,9 @@
-/* Copyright 1990-2007, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Xenos: Macros and Defined Constants for !:                              */
 
 
-#define XCC             127
-#define XC(m,n)         (n+XCC*m)
 
 /* adding suffix _O to avoid possible name conflict with fcntl.h */
 #define FAPPEND_O         "ab"

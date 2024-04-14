@@ -36,6 +36,7 @@ boot 'main/stdlib.ijs'
 load sys,'util/scripts.ijs'
 load 'regex'
 load 'task'
+load ::0: '~addons/dev/eformat/eformat.ijs'
 load sys,'util/configure.ijs'
 load^:IFQT '~addons/ide/qt/qt.ijs'
 load^:IFJA '~addons/ide/ja/ja.ijs'
@@ -49,15 +50,18 @@ NB. JVERSION_z_ (used in about box)
 v=. 9!:14''
 if. 6>+/v='/' do.
   r=. 'Engine: ',v
-  f=. 'www.jsoftware.com'
+  contact=. 'www.jsoftware.com'
 else.
-  'a b c d e f g'=. 7 {. <;._1 '/',v
-  r=. 'Engine: ', a,'/',b,'/',c
-  r=. r,LF,(toupper {.d),(}.d),': ',e,'/',g
+NB. vno;vst;architecture;OS;license;builder;date;compiler;<[otheroptions]
+  'a b c d e f g h i'=. revinfo_j_''
+  contact=. f
+  r=. 'Engine: ', b,'/',c,'/',d
+  r=. r,LF,'Build: ',e,'/',g,'/',h,'/',i
 end.
 r=. r,LF,'Library: ',JLIB
 if. IFQT do.
   r=. r,LF,'Qt IDE: ',wd'version'
+  r=. r,LF,'OS Ver: ',wd'qosver'
 elseif. IFJA do.
   r=. r,LF,'J Android: ',wd'version'
 end.
@@ -74,7 +78,7 @@ else.
 end.
 r=. r,LF,'Installer: ',LF -.~ 1!:1 :: ('unknown'"_) <jpath'~bin/installer.txt'
 r=. r,LF,'InstallPath: ',jpath '~install'
-r=. r,LF,'Contact: ',f
+r=. r,LF,'Contact: ',contact
 JVERSION=: toJ r
 
 NB. ---------------------------------------------------------

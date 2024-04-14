@@ -1,16 +1,19 @@
-//   Copyright Naoki Shibata and contributors 2010 - 2020.
+//   Copyright Naoki Shibata and contributors 2010 - 2021.
 // Distributed under the Boost Software License, Version 1.0.
 //    (See accompanying file LICENSE.txt or copy at
 //          http://www.boost.org/LICENSE_1_0.txt)
 
 #include <stdio.h>
+#ifndef __USE_XOPEN2K
+#define __USE_XOPEN2K  // for posix_memalign
+#endif
 #include <stdlib.h>
 #include <stdint.h>
 #include <assert.h>
 
 #include "misc.h"
 
-#if defined(__MINGW32__) || defined(__MINGW64__) || defined(_WIN32)
+#if defined(_WIN32)
 #include <sys/timeb.h>
 
 EXPORT void *Sleef_malloc(size_t z) { return _aligned_malloc(z, 256); }
@@ -23,8 +26,9 @@ EXPORT uint64_t Sleef_currentTimeMicros() {
 }
 #elif defined(__APPLE__)
 #include <sys/time.h>
+#include <errno.h>
 
-EXPORT void *Sleef_malloc(size_t z) { void *ptr = NULL; int rc = posix_memalign(&ptr, 256, z); return ptr; }
+EXPORT void *Sleef_malloc(size_t z) { int err; void *ptr = NULL; if(!(err=posix_memalign(&ptr, 256, z))) return ptr; else {errno = err; return NULL; }}
 EXPORT void Sleef_free(void *ptr) { free(ptr); }
 
 EXPORT uint64_t Sleef_currentTimeMicros() {
@@ -32,19 +36,20 @@ EXPORT uint64_t Sleef_currentTimeMicros() {
   gettimeofday(&time, NULL);
   return (uint64_t)((time.tv_sec * INT64_C(1000000)) + time.tv_usec);
 }
-#else // #if defined(__MINGW32__) || defined(__MINGW64__) || defined(_WIN32)
+#else // #if defined(_WIN32)
 #include <time.h>
 #include <unistd.h>
+#include <errno.h>
 #if defined(__FreeBSD__) || defined(__OpenBSD__)
 #include <stdlib.h>
 #else
 #include <malloc.h>
 #endif
 
-#if !defined(ANDROID)
-EXPORT void *Sleef_malloc(size_t z) { void *ptr = NULL; int rc = posix_memalign(&ptr, 4096, z); return ptr; }
+#if !defined(ANDROID) || (__ANDROID_API__ >= 16)
+EXPORT void *Sleef_malloc(size_t z) { int err; void *ptr = NULL; if(!(err=posix_memalign(&ptr, 4096, z))) return ptr; else {errno = err; return NULL; }}
 #else
-EXPORT void *Sleef_malloc(size_t z) { return malloc(z); }
+EXPORT void *Sleef_malloc(size_t z) { int err; void *ptr = NULL; if(ptr=malloc(z)) return ptr; else {errno = err; return NULL; }}
 #endif
 EXPORT void Sleef_free(void *ptr) { free(ptr); }
 
@@ -53,9 +58,9 @@ EXPORT uint64_t Sleef_currentTimeMicros() {
   clock_gettime(CLOCK_MONOTONIC, &tp);
   return (uint64_t)tp.tv_sec * INT64_C(1000000) + ((uint64_t)tp.tv_nsec/1000);
 }
-#endif // #if defined(__MINGW32__) || defined(__MINGW64__) || defined(MMSC_VER)
+#endif // #if defined(_WIN32)
 
-#ifdef MMSC_VER
+#ifdef _MSC_VER
 #include <intrin.h>
 EXPORT void Sleef_x86CpuID(int32_t out[4], uint32_t eax, uint32_t ecx) {
   __cpuidex(out, eax, ecx);
@@ -70,7 +75,7 @@ EXPORT void Sleef_x86CpuID(int32_t out[4], uint32_t eax, uint32_t ecx) {
 #endif
 #endif
 
-#if defined(__i386__) || defined(__x86_64__) || defined(MMSC_VER)
+#if defined(__i386__) || defined(__x86_64__) || defined(_MSC_VER)
 static char x86BrandString[256];
 
 EXPORT char *Sleef_getCpuIdString() {

@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g121.ijs'
+prolog './g121.ijs'
 NB. -.y -----------------------------------------------------------------
 
 randuni''
@@ -228,6 +228,9 @@ f=: 4 : 0
  1
 )
 
+f=:4 :('xx=: x';'yy=: y';'assert. (x-.y) -: -.&y x';'1')
+
+
 s=: 1 0 1 1 0; 3 1 4 5 0; 3 1 4 5 0 0.2; 3 1 4 5 0j2; 3 4 5 5 0x; '3145'
 t=: 0 ; 'abc'; 0 3 4; 0 3.4; 0 3j4; 0 3 4x; <0 3;4
 s f&>/ t
@@ -453,4 +456,7 @@ yy =: 1e6 $ 1.0
 
 4!:55 ;:'adot1 adot2 sdot0 dr f intersect less not rank res s t x xx yy'
 randfini''
+
+
+epilog''
 

@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './gsp420.ijs'
+prolog './gsp420.ijs'
 NB. / -------------------------------------------------------------------
 
 (=/x  ) Nearmt =/$.x=: ?1000$2
@@ -261,7 +261,12 @@ NB. obsolete 'domain error' -: f etx 1 2
 2 2 1 -: $ ($. 2 2 $ 2-2) +"0 1 (,5)  NB. check rank on empty long arg
 2 2 1 -: $ (,5) +"1 0 ($. 2 2 $ 2-2)  NB. check rank on empty long arg
 
+100000 100000 -: $  +./ . *.~ 1$.1e5 1e5;0 1;0   NB. formerly crashed not detecting sparse
+
 4!:55 ;:'b c d e f g r s t x'
 4!:55 ;:'a1 a2 ' 
 
+
+
+epilog''
 

@@ -1,6 +1,8 @@
-/* Copyright 1990-2011, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
+/* Input/Output                                                            */
+
 /*
 Input/Output
 
@@ -33,6 +35,8 @@ jfe routines (jconsole.c):
 je routines (io.c):
  jdo(line)
 
+ jinterrupt() - signal interrupt in all threads.  Safe to call from signal handlers, and even from non-j threads, but shouldn't be called concurrently
+
  jsto(type,string) - JT(jt,smoutput)() to give jfe output
              
  jgets() - JT(jt,sminput)() callback to get jfe kb input
@@ -56,7 +60,7 @@ and continue through various inputs to see the flow
    input()   (optional) <-------- if DD seen, get more lines if needed by calling JT(jt,sminput)
                                   jdo() calls immex(inpl(sentence))
                                    ... 
-   output(s)           <--------  jsto(type,s) - JT(jt,sm)outout(type,s)
+   output(s)           <--------  jsto(type,s) - JT(jt,smoutput(type,s)
    output returns      ---------> ...
  ...                   <--------- jdo returns with error code
  loop
@@ -65,7 +69,7 @@ and continue through various inputs to see the flow
  ...
                                   1:2[2 calls jtwri()
                                   jsto(type,string)
-   output(s)           <--------- JT(jt,sm)outout(type,s)
+   output(s)           <--------- JT(jt,smoutput(type,s)
    output returns      ---------> ...
 
 *** repl with read from keyboard (1!:1[1)
@@ -101,14 +105,14 @@ similar to debug suspension except output/input
  processed by gui sm
 
 *** JHS nfe (native front end)
-JT(jt,nfe) flag - JE does not use JT(jt,sm)outout() and JT(jt,sminput)()
+JT(jt,nfe) flag - JE does not use JT(jt,smoutput() and JT(jt,sminput)()
 instead it calls J code that provides equivalent services
 JHS routines are J socket code to talk with javascript browser page
 
-DD NOTE: DD is not supported on special sentences: iep, xep, dbssexec, dbtrap.  This is mostly because I don't understand how these work.
+DD NOTE: DD is not supported on special sentences: iep, dbssexec, dbtrap.  This is mostly because I don't understand how these work.
 
 DD is supported on ". y, but only if the DD is fully contained in the string
-A recursive JDo may use a DD, but only if it is fully contained in the string
+A reentrant JDo may use a DD, but only if it is fully contained in the string
 
 */
 
@@ -119,15 +123,16 @@ user doc at: https://code.jsoftware.com/wiki/Guides/Interrupt
 
 JE uses JATTN and JBREAK0 to stop execution of sentences with an error
 
-JATTN signals an attention at the start of a line
-JBREAK0 signals an interrupt in a long compute, 6!:3, socket select, ...
+JATTN signals an attention at the start of a line.  The system can resume execution after JATTN
+JBREAK0 signals an interrupt in a long compute, 6!:3, socket select, ... Since the lowest sentence was interrupted resumption is not guaranteed
 
 JATTN and JBREAK0 poll a breakbyte
  the value can be 0 continue, 1 signal in JATTN, or >1 signal in JBREAK0
 
-NOTE: some JEs define a multi-byte breakarea.  ONLY THE FIRST BYTE can be changed by break processing
+NOTE: some JEs define a multi-byte breakarea.  ONLY THE FIRST BYTE can be changed by break processing.
+Later bytes are used for internal break processing
 
-the first word in jt (jt->adbreak) is a pointer to the breakbyte
+the first word in jt (jt->adbreak) is a pointer to the breakbyte.  
 
 a separate task or thread increments the breakbyte to request a break
  JE resets to 0 on new user input or on processing an error (including the one caused by ATTN/BREAK0)
@@ -159,22 +164,43 @@ JHS has the additional complication of critical sections of J code
 
  this is done by having TWO pointers to the breakbyte: one for requesting a break (jt->adbreak)
  and another for testing (jt->adbreakr).  Normally these are the same, but to disable break adbreakr is
- set to a pointer to a fixed 0 byte; it at the end of the critical section adbreakr is set back to equal adbreak.
+ set to a pointer to a fixed 0 byte; at the end of the critical section adbreakr is set back to equal adbreak.
 
+*/
+
+/*
+Internally, on avx2/avx512 builds, JE always uses avx instructions, never sse instructions.
+Hence, we keep the cpu in avx mode all the time, instructing the compiler to avoid emitting spurious vzeroupper instructions between internal function boundaries with -mno-vzeroupper.
+However, a frontend might call into je and then try to execute some sse instructions while the cpu is still in avx mode, and thereby enter dirty high half mode, slowing down for no reason; that would be bad.
+Therefore, every function in this file MUST execute vzeroupper before returning, to put the cpu back into sse mode for the caller.
+Similarly, calls to external libraries MUST be preceded by a vzeroupper, to put the cpu into sse mode for the callee.
 */
 
 #ifdef _WIN32
 #include <windows.h>
 #include <winbase.h>
+#define filesep '\\'
 #else
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE
+#endif
 #include <stdlib.h>
 #include <stdio.h>
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
+#if !defined(__wasm__) && !defined(TARGET_IOS)
+#include <dlfcn.h>
+#endif
+#ifdef __MACH__
+#include <mach-o/dyld.h>
+#else // Linux
+#include <link.h>
+#endif
 #include <ctype.h>
 #include <unistd.h>
 #include <sys/mman.h>
+#define filesep '/'
 #define _stdcall
 #endif
 #include <stdint.h>
@@ -183,16 +209,9 @@ JHS has the additional complication of critical sections of J code
 #include "d.h"
 #undef JT
 #define JT(p,n) p->n  // used for references in JS, which most references in this module are
-#define IJT(p,n) JT(JJTOJ(p),n)    // used in function that interface to internal functions and thus take a JJ
-// given a pointer which might be a JST* or JTT*, set pointers to use for the shared and thread regions.
-// If we were given JST*, keep it as shared & use master thread; if JTT*, keep it as thread & use shared region
-#define SETJTJM(in,jstout,jttout) \
- JJ jttout; \
- if((I)in&(JTALIGNBDY-1)){jttout=(JJ)in; jstout=JJTOJ(in);   /* if jt is a thread pointer, use it and set jt to the shared */ \
- }else{jttout=MTHREAD(in);}  /* if jt is a shared pointer, use the master thread */
+#define IJT(p,n) JT(JJTOJ(p),n)    // used in function that interfaces to internal functions and thus take a JJ
 
-
-
+JS _Initializer(void*);
 extern void dllquit(JJ);
 
 // flags in jt indicate whether display is suppressed.  p is the prompt, s is the text.  suppression of s happens when it is created;
@@ -208,7 +227,7 @@ void jtwri(JS jt,I type,C*p,I m,C*s){FPREFIP(JS);C buf[1024],*t=OUTSEQ,*v=buf;I 
   MC(v,t,e); v+=e;   // join prompt/body/EOL
   *v=0;   // NUL termination
 #ifdef ANDROID
-  A z=jttocesu8(MTHREAD(jt),jtstr(MTHREAD(jt),strlen(buf),buf));  // calling internal jt... functions
+  A z=jttocesu8(MDTHREAD(jt),jtstr(MDTHREAD(jt),strlen(buf),buf));  // calling internal jt... functions
   CAV(z)[AN(z)]=0;
   jsto(jt,type,CAV(z));
 #else
@@ -235,9 +254,9 @@ static A jtinpl(JJ jt,B b,I n,C*s){C c;I k=0;
 #if _WIN32
  if(n&&(c=s[n-1],CCR==c))--n;
 #endif
- ASSERT(!*IJT(jt,adbreakr),EVINPRUPT);
+ ASSERT(!__atomic_load_n(IJT(jt,adbreakr),__ATOMIC_ACQUIRE),EVINPRUPT);
  if(!b){ /* 1==b means literal input */
-  if(n&&COFF==s[n-1])joff(num(0));
+  if(n&&COFF==s[n-1])joff(num(0));  // exit J on XOFF
   c=IJT(jt,bx)[9]; if((UC)c>127)DO(n, if(' '!=s[i]&&c!=s[i]){k=i; break;});  // discard stuff that looks like error typeout
  }
  R str(n-k,s+k);
@@ -257,45 +276,53 @@ void breakclose(JS jt);
 #define WITHATTNDISABLED(s) {DISABLEATTN s ENABLEATTN}
 
 static C* nfeinput(JS jt,C* s){A y;
- WITHATTNDISABLED(y=jtexec1(MTHREAD(jt),jtcstr(MTHREAD(jt),s));)  // exec the sentence with break interrupts disabled
+ WITHATTNDISABLED(y=jtexec1(MDTHREAD(jt),jtcstr(MDTHREAD(jt),s),ds(CEXEC));)  // exec the sentence with break interrupts disabled
  if(!y){breakclose(jt);exit(2);} /* J input verb failed */
  jtwri(jt,MTYOLOG,"",strlen(CAV(y)),CAV(y));  // call to nfeinput() comes from a prompt or from jdo.  In either case we want to display the result.  Thus jt
  return CAV(y); /* don't combine with previous line! CAV runs (x) 2 times! */
+ // the value y is still on the tpop stack
 }
 
 // type NUL-terminated prompt string p, read 1 line, & return
 // if *p is (C)1 (which comes from m : 0), the request is for unprocessed 'literal input'
 // otherwise processed in inpl
 // Lines may come from a script, in which case return 0 on EOF, but EVINPRUPT is still possible as an error
+// scaf should rewrite this interface to keep the control info in locals in 0!:x
 A jtjgets(JJ jt,C*p){A y;B b;C*v;I j,k,m,n;UC*s;
- *IJT(jt,adbreak)=0;  // turn off any pending break
+ __atomic_store_n(&IJT(jt,adbreak)[0],0,__ATOMIC_RELEASE);  // this is CLRATTN but for the definition of JT here
  if(b=1==*p)p=""; /* 1 means literal input; remember & clear prompt */
  DC d; for(d=jt->sitop; d&&d->dctype!=DCSCRIPT; d=d->dclnk);  // d-> last SCRIPT type, if any
  if(d&&d->dcss){   // enabled DCSCRIPT debug type - means we are reading from file (or string)  for 0!:x
-  ++d->dcn; j=d->dcix; // increment line# and fetch current start index
-  y=d->dcy; n=AN(y); s=UAV(y);
-  if(!(j<n))R 0;  // return 0 for EOF
-  d->dcj=k=j;  // k=start index
-  d->dcix=j=advl(j,n,s);  // j=end+1 index
+  // read next line from script
+  while(1){
+   ++d->dcn; j=d->dcix; // increment line# and fetch current start index
+   y=d->dcy; n=AN(y); s=UAV(y);
+   if(!(j<n)){jt->scriptskipbyte=0; R 0;}  // return 0 for EOF
+   d->dcj=k=j;  // k=start index
+   d->dcix=j=advl(j,n,s);  // j=end+1 index
+   if(unlikely(jt->scriptskipbyte!=0)){if(j-k>=4&&s[k]=='N'&&s[k+1]=='B'&&s[k+2]=='.'&&s[k+3]==jt->scriptskipbyte)jt->scriptskipbyte=0; else continue;}  // if skipping in script, skip if not end marker
+   break;
+  }
   m=j-k; if(m&&32>s[k+m-1])--m; if(m&&32>s[k+m-1])--m;  // m is length; discard trailing control characters (usually CRLF, but not necessarily) ?not needed: done in inpl
   jtwri((JS)((I)JJTOJ(jt)+d->dcpflags),MTYOLOG,p,m,k+s);  // log the input, but only if we wanted to echo the input
   R inpl(b,m,k+s);  // process & return the line
  }
+ // read from keyboard
  /* J calls for input in 3 cases:
     debug suspension for normal input
-    n : 0 input lines up to terminating )
+    n : 0 input lines up to terminating ), or {{ reading for trailing }}
     1!:1[1 read from keyboard */
- // if we are already prompting, a second prompt would be unrecoverable & we fail this request
- ASSERT(jt->recurstate<RECSTATEPROMPT,EVCTRL)
- showerr();  // if there is an error at this point, display it (shouldn't happen)   use jt to force typeout
+ ASSERT(IJT(jt,promptthread)==THREADID(jt),EVINPRUPT)  // only one thread is allowed to read from m : 0 or stdin - make sure we are it
+ ASSERT(jt->recurstate<RECSTATEPROMPT,EVCTRL)   // if we are already prompting, a second prompt would be unrecoverable & we fail this request
+ ASSERT(IJT(jt,nfe)||IJT(jt,sminput),EVBREAK);  // make sure there is a routine to read with
+ showerr();  // there may be error text that has not been emitted.  jt->jerr will be clear.
  // read from the front end. This is either through the nfe path or via the callback to the FE
+ // make sure only one thread prompts at a time.  Prompting is rare & we just kludge up a spinlock for this
+ jt->recurstate=RECSTATEPROMPT;  // advance to PROMPT state
  if(IJT(jt,nfe)){
   // Native Front End
-  jt->recurstate=RECSTATEPROMPT;  // advance to PROMPT state
   v=nfeinput(JJTOJ(jt),*p?"input_jfe_'      '":"input_jfe_''");   // use jt so always emit prompt
  }else{
-  ASSERT(IJT(jt,sminput),EVBREAK); 
-  jt->recurstate=RECSTATEPROMPT;  // advance to PROMPT state
   v=((inputtype)(IJT(jt,sminput)))(JJTOJ(jt),p);
  }
  jt->recurstate=RECSTATEBUSY;  // prompt complete, go back to normal running state
@@ -307,10 +334,10 @@ A jtjgets(JJ jt,C*p){A y;B b;C*v;I j,k,m,n;UC*s;
 void breakclose(JS jt)
 {
  if(JT(jt,adbreak)==(C*)&JT(jt,breakbytes)) return;  // if no mapped file has been created, exit fast
- *&JT(jt,breakbytes)=*(US*)(JT(jt,adbreak));  // copy over any pending break request, plus other breakdata
- munmap(JT(jt,adbreak),1);
- if(JT(jt,adbreakr)==JT(jt,adbreak))JT(jt,adbreakr)=(C*)&JT(jt,breakbytes);  // move to look at the new data - but not if attn disabled
- JT(jt,adbreak)=(C*)&JT(jt,breakbytes);  // move request pointer in any case
+ __atomic_store_n(&JT(jt,breakbytes),*(US*)(JT(jt,adbreak)),__ATOMIC_RELEASE);  // copy over any pending break request, plus other breakdata
+ if(JT(jt,adbreakr)==JT(jt,adbreak))__atomic_store_n(&JT(jt,adbreakr),(C*)&JT(jt,breakbytes),__ATOMIC_RELEASE);  // move to look at the new data - but not if attn disabled
+ C *oldbreak=JT(jt,adbreak); __atomic_store_n(&JT(jt,adbreak),(C*)&JT(jt,breakbytes),__ATOMIC_RELEASE);  // move request pointer in any case
+ munmap(oldbreak,1);  // don't unmap the old area until pointers have been moved
  close((intptr_t)JT(jt,breakfh));
  JT(jt,breakfh)=0;
  unlink(JT(jt,breakfn));
@@ -320,10 +347,10 @@ void breakclose(JS jt)
 void breakclose(JS jt)
 {
  if(JT(jt,adbreak)==(C*)&JT(jt,breakbytes)) return;  // if no mapped file has been created, exit fast
- *&JT(jt,breakbytes)=*(US*)(JT(jt,adbreak));  // copy over any pending break request, plus other breakdata
- UnmapViewOfFile(JT(jt,adbreak));
- if(JT(jt,adbreakr)==JT(jt,adbreak))JT(jt,adbreakr)=(C*)&JT(jt,breakbytes);  // move to look at the new data - but not if attn disabled
- JT(jt,adbreak)=(C*)&JT(jt,breakbytes);  // move attn-request pointer in any case
+ __atomic_store_n(&JT(jt,breakbytes),*(US*)(JT(jt,adbreak)),__ATOMIC_RELEASE);  // copy over any pending break request, plus other breakdata
+ if(JT(jt,adbreakr)==JT(jt,adbreak))__atomic_store_n(&JT(jt,adbreakr),(C*)&JT(jt,breakbytes),__ATOMIC_RELEASE);  // move to look at the new data - but not if attn disabled
+ C *oldbreak=JT(jt,adbreak); __atomic_store_n(&JT(jt,adbreak),(C*)&JT(jt,breakbytes),__ATOMIC_RELEASE);  // move request pointer in any case
+ UnmapViewOfFile(oldbreak); // don't unmap the old area until pointers have been moved
  CloseHandle(JT(jt,breakmh));
  JT(jt,breakmh)=0;
  CloseHandle(JT(jt,breakfh));
@@ -339,18 +366,62 @@ void breakclose(JS jt)
 }
 #endif
 
+// 2!:55 retcode
 F1(jtjoff){I x;
  ARGCHK1(w);
  x=i0(w);
- jt->jerr=0; jt->etxn=0; /* clear old errors */
+ jt->jerr=EVEXIT; jt->etxn=0; // clear old errors, replacing with the higher-priority EVEXIT
  if(IJT(jt,sesm))jsto(JJTOJ(jt), MTYOEXIT,(C*)x); else JFree(JJTOJ(jt));
-// let front-end to handle exit
+ // let front-end handle exit.
 // exit((int)x);
  R 0;
 }
 
-static I jdo(JS jt, C* lp){I e;A x;JJ jm=MTHREAD(jt);  // get address of thread struct we are using (the master thread)
+// wrapper to raise the execct of the starting locale while an immex is running
+// If the global locale changes during execution, we must have called cocurrent or 18!:4 directly.  If cocurrent, there will be a
+// POPFIRST on the stack (which is otherwise empty).  If there is a POPFIRST we need to decrement the current global locale.
+// in this routine jt is a thread pointer and jjt is the shared pointer
+static void jtimmexexecct(JJ jt, A x){
+ I4 savcallstack = jt->callstacknext;   // starting callstack
+ A startloc=jt->global;  // point to current global locale
+ if(likely(startloc!=0))INCREXECCT(startloc);  // raise usecount of current locale to protect it while running
+ jtimmex(jt,x);   // run the sentence
+ if(likely(startloc!=0))DECREXECCT(startloc);  // remove protection from executed locale.  This may result in its deletion
+ jtstackepilog(jt, savcallstack); // handle any remnant on the call stack
+}
+
+
+// if there is an immex sentence, fetch it, protect it from deletion, run it, and undo the protection
+// in this routine jt is a thread pointer and jjt is the shared pointer
+static void runiep(JS jjt,JJ jt,A *old,I4 savcallstack){
+ while(1){
+ // if there is an immex phrase, protect it during its execution
+  A iep=0; if(jt->iepdo&1){READLOCK(jjt->felock) if((iep=jjt->iep)!=0)ra(iep); READUNLOCK(jjt->felock)}
+  if(iep==0)break;
+  // run the IEP and clean up after.  We leave iepdo set to 'running' during the exec to suppress postmortem debugging while IEPs are about
+  jt->iepdo=2; jtimmexexecct(jt,iep); fa(iep) jt->iepdo&=~2; if(savcallstack==0)CALLSTACKRESET(jt) MODESRESET(jt) RESETERR jttpop(jt,old,jt->tnextpushp);
+ }
+}
+
+static I jdo(JS jt, C* lp){I e;A x;JJ jm=MDTHREAD(jt);  // get address of thread struct we are executing in (the master/debug thread)
  jm->jerr=0; jm->etxn=0; /* clear old errors */
+ // if the previous console sentence ended with error, and the user replies with ENTER (i. e. empty string), treat that as a request to debug.
+ // on any other reply, free up the values and allocations made by the failing sentence
+ if(unlikely(jm->pmstacktop!=0&&jm->recurstate<RECSTATEPROMPT)){  // last sentence failed, and ran to completion to get a full error stack
+  C *lp2; for(lp2=lp;*lp2;++lp2)if(*lp2!=' '&&*lp2!='\t'&&*lp2!='\n')break;   // stop on non-whitespace or end-of-string
+  if(*lp2){  // nonnull string
+   // user responded to error with a new sentence.  Clear the error stack
+   DC s=jm->pmstacktop; while(s){jtsymfreeha(jm,s->dcloc); __atomic_store_n(&AR(s->dcloc),ARLOCALTABLE,__ATOMIC_RELEASE); s=s->dclnk;} jm->pmstacktop=0;  // purge symbols & clear stack
+   jttpop(jm,jm->pmttop,jm->tnextpushp);  // free all memory allocated in the previous sentence
+   jm->pmttop=0;  // clear to avoid another reset
+  }else{
+   // user wants to debug the error.  Transfer the pmstack to the debug stack in reverse order.  ra() the self for each block - necessary in case they are reassigned while on the stack
+   DC s=jm->pmstacktop, sp=0; while(s){DC sn=s->dclnk; s->dclnk=sp; if(s->dctype==DCCALL&&s->dcpflags==1)ra(s->dcf) sp=s; s=sn;} jm->sitop=sp; jm->pmstacktop=0;  // reverse pmstack, move it to debug stack
+   if(sp)sp->dcsusp=1;   // debug discards lines before the suspension, so we have to mark the stack-top as starting suspension
+   lp="'Use y___1 to look inside top stack frame; see code.jsoftware.com/wiki/Debug/Stack#irefs' [ dbg_z_ 513";  // change the sentence to one that starts the debug window with no TRACEDBSUSCLEAR flag
+  }
+ }
+
  // The named-execution stack contains information on resetting the current locale.  If the first named execution deletes the locale it is running in,
  // that deletion is deferred until the locale is no longer running, which is never detected because there is no earlier named execution to clean up.
  // To prevent the stack from growing indefinitely, we reset it here.  We reset the callstack only if it was 0, so that a recursive immex will have its deletes handled by
@@ -358,26 +429,45 @@ static I jdo(JS jt, C* lp){I e;A x;JJ jm=MTHREAD(jt);  // get address of thread 
  I4 savcallstack = jm->callstacknext;
  if(JT(jt,capture))JT(jt,capture)[0]=0; // clear capture buffer
  A *old=jm->tnextpushp;
- *JT(jt,adbreak)=0;  // remove pending ATTN before executing the sentence
+ __atomic_store_n(&JT(jt,adbreak)[0],0,__ATOMIC_RELEASE);  // this is CLRATTN but for the definition of JT here
  x=jtinpl(jm,0,(I)strlen(lp),lp);
- // All these immexes run with result-display enabled (jt flags=0)
- // Run any enabled immex sentences both before & after the line being executed.  I don't understand why we do it before, but it can't hurt since there won't be any.
- // BUT: don't do it if the call is recursive.  The user might have set the iep before a prompt, and won't expect it to be executed asynchronously
- if(likely(jm->recurstate<RECSTATEPROMPT))while(jm->iepdo&&JT(jt,iep)){jm->iepdo=0; jtimmex(jm,JT(jt,iep)); if(savcallstack==0)CALLSTACKRESET MODESRESET jm->jerr=0; jttpop(jm,old);}
+ I wasidle=jtsettaskrunning(jm);  // We must mark the master thread as 'running' so that a system lock started in another task will include the master thread in the sync.
+      // but if the master task is already running, this is a recursion, and just stay in running state
+// obsolete  // Run any enabled immex sentences both before & after the line being executed.  I don't understand why we do it before, but it can't hurt since there won't be any.
+// obsolete  if(likely(jm->recurstate<RECSTATEPROMPT))runiep(jt,jm,old,savcallstack);
  // Check for DDs in the input sentence.  If there is one, call jgets() to finish it.  Result is enqueue()d sentence.  If recursive, don't allow call to jgets()
- x=jtddtokens(jm,x,(((jm->recurstate&RECSTATEPROMPT)<<(2-1)))+1+(AN(jm->locsyms)>1)); if(!jm->jerr)jtimmex(jm,x);  // allow reads from jgets() if not recursive; return enqueue() result
- e=jm->jerr;
- if(savcallstack==0)CALLSTACKRESET MODESRESET jm->jerr=0;
- if(likely(jm->recurstate<RECSTATEPROMPT))while(jm->iepdo&&JT(jt,iep)){jm->iepdo=0; jtimmex(jm,JT(jt,iep)); if(savcallstack==0)CALLSTACKRESET MODESRESET jm->jerr=0; jttpop(jm,old);}
- jtshowerr(jm);   // jt flags=0 to force typeout
- jtspfree(jm);
- jttpop(jm,old);
+ x=jtddtokens(jm,x,(((jm->recurstate&RECSTATEPROMPT)<<(2-1)))+1+(AN(jm->locsyms)>SYMLINFOSIZE));  // allow reads from jgets() if not recursive; return enqueue() result
+ if(!jm->jerr)jtimmexexecct(jm,x);  //  ****** here is where we execute the user's sentence ******
+ // if the result is an exit from suspension (which must be from dbr because we aren't now actually in a suspension), and there is a stack, purge symbols from the private symbs and free memory back to the error
+ if(unlikely(JT(jt,dbuser)&TRACEDBSUSCLEAR)){  // if user executed dbr...
+  if(jm->pmttop&&jm->sitop&&jm->sitop->dctype==DCCALL&&jm->sitop->dcpflags==1){   // if there is a pm debug session going, and top-of-stack is from pm, end the session
+   // go through the stack, which must all have come from post-mortem.  Free the symbols and the block itself (to match the ra when we moved the pm stack to the debug stack)
+   {JJ jt=jm; DC s=jm->sitop; while(s){if(s->dctype==DCCALL&&s->dcpflags==1){if(s->dcc!=0){jtsymfreeha(jm,s->dcloc); __atomic_store_n(&AR(s->dcloc),ARLOCALTABLE,__ATOMIC_RELEASE);} fa(s->dcf);} s=s->dclnk;} jm->sitop=0;}
+   old=jm->pmttop; jm->pmttop=0;  // back up the tpop pointer to the pm error and remove request for it
+  }
+  JT(jt,dbuser)&=~(TRACEDBSUSCLEAR);  // always turn off flag
+ }
+ e=jm->jerr; if(savcallstack==0)CALLSTACKRESET(jm) MODESRESET(jm)  // save error on sentence to be our return code
+ jtshowerr(jm);   // jt flags=0 to force typeout of iep errors
+ RESETERRT(jm)
+ // if there is an immex latent expression (9!:27), execute it before prompting
+ // All these immexes run with result-display enabled (jt flags=0)
+ // BUT: don't do it if the call is recursive.  The user might have set the iep before a prompt, and won't expect it to be executed asynchronously
+ if(likely(jm->recurstate<RECSTATEPROMPT))runiep(jt,jm,old,savcallstack);  // IEP does not display its errors
+ if(likely(wasidle)){  // returning to immex in the FE
+  jtclrtaskrunning(jm);  //  clear running state in case other tasks are running and need system lock - but not if recursion
+  // since we are returning to user-prompt level, we might as well take user think time to trim up memory
+  jtrepatrecv(jm);  // receive any repatriated sentences
+  jtspfree(jm);  // check for garbage collection
+ }
+ // free any memory left at the end of the sentence.  BUT if the sentence failed and created a pm stack, defer the free and offer pm debugging
+ if(likely(((I)jm->pmstacktop|(I)jm->pmttop)==0))jttpop(jm,old,jm->tnextpushp); else{if(jm->pmttop==0)jsto(jt,MTYOER,"Press ENTER to inspect\n"); jm->pmttop=old;}  // free if not new or continuing pm session; message first time through
  R e;
 }
 
 #define SZINT             ((I)sizeof(int))
 
-C* getlocale(JS jt){JJ jm=MTHREAD(jt); A y=jtlocname(jm,mtv); y=AAV(y)[0]; R CAV(jtstr0(jm,y));}   // return current locale of master thread
+C* getlocale(JS jt){JJ jm=MDTHREAD(jt); A y=jtlocname(jm,mtv); y=AAV(y)[0]; R CAV(jtstr0(jm,y));}   // return current locale of executing thread
 
 // Front-ends can call any functions exposed by JE, but the callback function for 11!:0 only calls jga to allocate a new literal array for returning result.
 // A front-end knows nothing how J memory pool works and it won't try to free or pop memory itself. This was just a design decision. eg,
@@ -435,9 +525,9 @@ DF1(jtwd){A z=0;C*p=0;D*pd;I e,*pi,t;V*sv;
   jt->recurstate|=RECSTATEBUSY;  // wd complete, go back to normal running state, BUSY normally or RECUR if a prompt is pending
   if(!e) R mtm;   // e==0 is MTM
   ASSERT(e<=0,e); // e>=0 is EVDOMAIN etc
-  if(e==-1){      // e==-1 is lit
   if(SMOPTPOLL&IJT(jt,smoption)){jt->recurstate=RECSTATEPROMPT; z=(A)((polltype)(IJT(jt,smpoll)))(JJTOJ(jt), (int)t, (int)e); jt->recurstate=RECSTATEBUSY; RZ(z);} // alternate way to get result aftercallback, but not yet used in any front-end
   if(SMOPTNOJGA&IJT(jt,smoption)) z=ca(z);  // front-end promised not to use Jga to allocate memory, but not yet used in any front-end
+  if(e==-1){      // e==-1 is lit or int
   RETF(z);
   } else if(e==-2){      // e==-2 is lit pairs
 // callback result z is a rank-1 literal array 
@@ -445,7 +535,7 @@ DF1(jtwd){A z=0;C*p=0;D*pd;I e,*pi,t;V*sv;
 // and then reshape into rank-2  ((n%2),2)$
     A x=z; RZ(df1(z,x,cut(ds(CBOX),num(-2))));
     RETF(reshape(v2(AN(z)>>1,2L),z));
-  } else {RETF(z);}
+  } else {RETF(z);}      // no need to fix anything
 }
 
 static char breaknone=0;
@@ -454,34 +544,39 @@ static char breaknone=0;
 B jtsesminit(JS jjt, I nthreads){R 1;}
 
 // Main entry point to run the sentence in *lp in the master thread, or in the thread given if jt is not a JS pointer
-int _stdcall JDo(JS jt, C* lp){int r; UI savcstackmin, savcstackinit, savqtstackinit;
- SETJTJM(jt,jt,jm)
+CDPROC int _stdcall JDo(JS jt, C* lp){int r; UI savcstackmin, savcstackinit, savqtstackinit;
+ SETJTJM(jt,jm)
+  // Normal output.  Call the output routine
  if(unlikely(jm->recurstate>RECSTATEIDLE)){
   // recursive call.  If we are busy or already recurring, this would be an uncontrolled recursion.  Fail that
   savcstackmin=jm->cstackmin, savcstackinit=jm->cstackinit, savqtstackinit=JT(jt,qtstackinit);  // save stack pointers over recursion, in case the host resets them
   ASSERTTHREAD(!(jm->recurstate&(RECSTATEBUSY&RECSTATERECUR)),EVCTRL)  // fail if BUSY or RECUR
   // we know that in PROMPT state there is no volatile C state about, such as zombie status
  }
-#if USECSTACK
  if(JT(jt,cstacktype)==2){
+  // multithreaded FE.  Reinit the stack limit on every call, as long as cstackmin is nonzero
   JT(jt,qtstackinit) = (uintptr_t)&jt;
   if(jm->cstackmin)jm->cstackmin=(jm->cstackinit=JT(jt,qtstackinit))-(CSTACKSIZE-CSTACKRESERVE);
  }
-#endif
  ++jm->recurstate;  // advance, to BUSY or RECUR state
  r=(int)jdo(jt,lp);
  if(unlikely(--jm->recurstate>RECSTATEIDLE)){  // return to IDLE or PROMPT state
   // return from recursive call.  Restore stackpointers
   jm->cstackmin=savcstackmin, jm->cstackinit=savcstackinit, JT(jt,qtstackinit)=savqtstackinit;  // restore stack pointers after recursion
  }
+ A *old=jm->tnextpushp;  // For JHS we call nfeinput, which comes back with a string address, perhaps after considerable processing.  We need to clean up the stack
+  // after nfeinput, but we dare not until the sentence has been executed, lest we deallocate the unexecuted sentence.  Also we have to suppress the pops while there is a
+  // pm debug stack.  We take advantage of the fact that the popto point doesn't change, save that here, and suppress the pop during pm
  while(JT(jt,nfe)){  // nfe normally loops here forever
-  A *old=jm->tnextpushp; r=(int)jdo(jt,nfeinput(jt,"input_jfe_'   '")); jttpop(jm,old);  // use jt to force output in nfeinput
+  r=(int)jdo(jt,nfeinput(jt,"input_jfe_'   '"));  // use jt to force output in nfeinput
+  // If there is a postmortem stack active, jdo has frozen tpops and we have to honor that here, to keep the stack data allocated.
+  if(likely(jm->pmttop==0))jttpop(jm,old,jm->tnextpushp);  // when the stack has been tpopped it is safe for us to resume
  }
  R r;
 } 
 
-C* _stdcall JGetR(JS jt){
- SETJTJM(jt,jt,jm)
+CDPROC C* _stdcall JGetR(JS jt){
+ jt=JorJJTOJ(jt);  // point to shared block
  R JT(jt,capture)?JT(jt,capture):(C*)"";
 }
 
@@ -491,8 +586,8 @@ C* _stdcall JGetR(JS jt){
 // so the user must save it before re-calling.  This is a kludge - the user should pass in the address/length of the block to use - but
 // it preserves the interface
 // If the pointer to the name is NULL we just free the block
-A _stdcall JGetA(JS jt, I n, C* name){A x,z=0;
- SETJTJM(jt,jt,jm)
+CDPROC A _stdcall JGetA(JS jt, I n, C* name){A x,z=0;
+ SETJTJM(jt,jm)
  if(name==0){if(JT(jt,iomalloc)){FREE(JT(jt,iomalloc)); jm->malloctotal -= JT(jt,iomalloclen); JT(jt,iomalloc)=0; JT(jt,iomalloclen)=0;} R 0;}
  jm->jerr=0;
  A *old=jm->tnextpushp;
@@ -512,18 +607,18 @@ A _stdcall JGetA(JS jt, I n, C* name){A x,z=0;
   }
  }
  // z has the result, which is in MALLOC memory if it exists.  Free any J memory we used
- jttpop(jm,old);
+ jttpop(jm,old,jm->tnextpushp);
  R z;   // return the allocated (or reused) area
 }
 
 /* socket protocol CMDSET */
-I _stdcall JSetA(JS jt,I n,C* name,I dlen,C* d){
- SETJTJM(jt,jt,jm)
+CDPROC I _stdcall JSetA(JS jt,I n,C* name,I dlen,C* d){
+ SETJTJM(jt,jm)
  jm->jerr=0;
  if(!jtvnm(jm,n,name)){jtjsignal(jm,EVILNAME); R EVILNAME;}
  A *old=jm->tnextpushp;
  jtsymbisdel(jm,jtnfs(jm,n,name),jtunbin(jm,jtstr(jm,dlen,d)),jm->global);
- jttpop(jm,old);
+ jttpop(jm,old,jm->tnextpushp);
  R jm->jerr;
 }
 
@@ -537,9 +632,9 @@ typedef C* (_stdcall * inputtype) (J,C*);
 typedef C* (_stdcall * polltype) (J,int,int);
 */
 
-void _stdcall JSM(JS jt, void* callbacks[])
+CDPROC void _stdcall JSM(JS jt, void* callbacks[])
 {
- SETJTJM(jt,jt,jm)
+ SETJTJM(jt,jm)
  JT(jt,smoutput) = (outputtype)callbacks[0];  // callback function for output to J session
 // output type
 // #define MTYOFM  1 /* formatted result array output */
@@ -550,8 +645,8 @@ void _stdcall JSM(JS jt, void* callbacks[])
 // #define MTYOFILE 6 /* output 1!:2[2 */
  JT(jt,smdowd) = callbacks[1];                // callback function for 11!:x
  JT(jt,sminput) = (inputtype)callbacks[2];    // callback function for input from J session keyboard
- JT(jt,smpoll) = (polltype)callbacks[3];      // callback function for unused
- JT(jt,sm) = 0xff & (I)callbacks[4];          // lowest byte, sm : sessioin manager type
+ JT(jt,smpoll) = (polltype)callbacks[3];      // for Qt, the (optional) end-of-stack pointer; otherwise the smpoll flag
+ JT(jt,sm) = 0xff & (I)callbacks[4];          // lowest byte, sm : session manager type
 // smoptions
 // #define SMWIN    0  /* j.exe    Jwdw (Windows) front end */
 // #define SMJAVA   2  /* j.jar    Jwdp (Java) front end */
@@ -564,11 +659,15 @@ void _stdcall JSM(JS jt, void* callbacks[])
 // #define SMOPTPOLL   4  /* use smpoll to get last result */
 // #define SMOPTMTH    8  /* multithreaded */
  if(JT(jt,sm)==SMJAVA) JT(jt,smoption) |= SMOPTMTH;  /* assume java is multithreaded */
+ // set the stack discipline to be used for this session.  This persists until changed by another call
  if(SMOPTMTH&JT(jt,smoption)){
+  // Session in a multithreaded FE.  EVERY call to JDo() will set a new stackmin for JE to use (unless stack checking is disabled).  The stack is assumed to grow down, with
+  // jt allocated within the same stack.  There must be CSTACKSIZE-CSTACKRESERVE bytes in the stack before jt
   JT(jt,cstacktype) = 2;
-  JT(jt,qtstackinit) = (uintptr_t)&jt;
+  JT(jt,qtstackinit) = (uintptr_t)&jt;  // jt itself is used as an end-of-stack pointer
   if(jm->cstackmin)jm->cstackmin=(jm->cstackinit=JT(jt,qtstackinit))-(CSTACKSIZE-CSTACKRESERVE);
  }else if(SMQT==JT(jt,sm)){
+  // Qt session.  End-of-stack should be given in callbacks[3].  There must be CSTACKSIZE-CSTACKRESERVE bytes in the stack
   JT(jt,cstacktype) = 1;
   JT(jt,qtstackinit) = (uintptr_t)callbacks[3];
   JT(jt,smpoll) = 0;
@@ -578,20 +677,22 @@ void _stdcall JSM(JS jt, void* callbacks[])
   // if cstackmin is 0, the user has turned off stack checking and we honor that decision
   if(JT(jt,qtstackinit)&&jm->cstackmin)jm->cstackmin=(jm->cstackinit=JT(jt,qtstackinit))-(CSTACKSIZE-CSTACKRESERVE);
  }
+ // default: cstacktype=0, cstackmin set at initialization from the C stackpointer at that time
 }
 
 /* set jclient callbacks from values - easier for nodejs */
-void _stdcall JSMX(JS jt, void* out, void* wd, void* in, void* poll, I opts)
+CDPROC void _stdcall JSMX(JS jt, void* out, void* wd, void* in, void* poll, I opts)
 {
- SETJTJM(jt,jt,jm)
+ SETJTJM(jt,jm)
  JT(jt,smoutput) = (outputtype)out;
  JT(jt,smdowd) = wd;
  JT(jt,sminput) = (inputtype)in;
  JT(jt,smpoll) = (polltype)poll;
  JT(jt,sm) = 0xff & opts;
- JT(jt,qtstackinit) = (SMQT==JT(jt,sm)) ? (uintptr_t)poll : 0;
+ JT(jt,qtstackinit) = (SMQT==JT(jt,sm)) ? (uintptr_t)poll : 0;  // poll arg means 'end-of-stack pointer' for Qt
  JT(jt,smoption) = ((~0xff) & (UI)opts) >> 8;
  if(JT(jt,sm)==SMJAVA) JT(jt,smoption) |= SMOPTMTH;  /* assume java is multithreaded */
+ // stack discipline, see above
  if(SMOPTMTH&JT(jt,smoption)){
   JT(jt,cstacktype) = 2;
   JT(jt,qtstackinit) = (uintptr_t)&jt;
@@ -606,21 +707,31 @@ void _stdcall JSMX(JS jt, void* out, void* wd, void* in, void* poll, I opts)
 }
 
 // return pointer to string name of current locale, or 0 if error
-C* _stdcall JGetLocale(JS jt){
- SETJTJM(jt,jt,jm)
+CDPROC C* _stdcall JGetLocale(JS jt){
+ SETJTJM(jt,jm)
  A *old=jm->tnextpushp;  // set free-back-to point
  if(JT(jt,iomalloc)){FREE(JT(jt,iomalloc)); jm->malloctotal -= JT(jt,iomalloclen); JT(jt,iomalloc)=0; JT(jt,iomalloclen)=0;}  // free old block if any
  C* z=getlocale(jt);  // get address of string to return
  if(JT(jt,iomalloc)=MALLOC(1+strlen(z))){jm->malloctotal += 1+strlen(z); JT(jt,iomalloclen) = 1+strlen(z); strcpy(JT(jt,iomalloc),z); }  // allocate & copy, and account for its space
- jttpop(jm,old);  // free allocated blocks
+ jttpop(jm,old,jm->tnextpushp);  // free allocated blocks
  R JT(jt,iomalloc);  // return pointer to string
 }
 
-A _stdcall Jga(JS jjt, I t, I n, I r, I*s){A z;
- SETJTJM(jjt,jjt,jt)  // the name 'jt' is used by ga() for the shared pointer
+CDPROC A _stdcall Jga(JS jjt, I t, I n, I r, I*s){A z;
+ SETJTJM(jjt,jt)  // the name 'jt' is used by ga() for the shared pointer
  GA(z,t,n,r,s);
  ACINIT(z,ACUC1)  // set nonrecursive usecount so that parser won't free the block prematurely.  This gives the usecount as if the block were 'assigned' by this call
  return z;
+}
+
+CDPROC void _stdcall JInterrupt(JS jt){
+ jt=JorJJTOJ(jt);
+ // increment adbreak by 1, capping at 2
+ C old=lda(&jt->adbreak[0]);
+ while(1){
+  if(old>=2)break;
+  if(casa(&jt->adbreak[0],&old,1+old))break;}
+ // There is no need to wakeup waiting threads (good thing, because jbreak.bat can't do that, and anyway the master/debug thread may already be running).  All wait loops time out to recheck break status.
 }
 
 void oleoutput(JS jt, I n, char* s); /* SY_WIN32 only */
@@ -631,7 +742,8 @@ void oleoutput(JS jt, I n, char* s); /* SY_WIN32 only */
 // type is mtyo of string, s->null-terminated string
 void jsto(JS jt,I type,C*s){C e;I ex;
  if(JT(jt,nfe))
- {JJ jm=MTHREAD(jt);  // get address of thread struct we are using
+ {JJ jm=MTHREAD(jt);  // get address of thread struct we are using.  For the nonce we always use the master in case there is stored state there, since we aren't executing sentences
+ if(MTYOEXIT==type) { JFree(JJTOJ(jt)); exit((int)(intptr_t)s); }
   // here for Native Front End state, toggled by 15!:16
   // we execute the sentence:  type output_jfe_ s    in the master thread
   fauxblockINT(fauxtok,3,1); A tok; fauxBOXNR(tok,fauxtok,3,1);  // allocate 3-word sentence on stack, rank 1
@@ -658,53 +770,122 @@ void jsto(JS jt,I type,C*s){C e;I ex;
  R;
 }
 
-#if SYS&SYS_UNIX
-
 C dll_initialized= 0; // dll init sets to 1
 
-// dll init on load - eqivalent to windows DLLMAIN DLL_ATTACH_PROOCESS
-__attribute__((constructor)) static void Initializer(int argc, char** argv, char** envp)
+#ifdef _WIN32
+char modulepath[_MAX_PATH]="";
+char sopath[_MAX_PATH]="";
+
+void getsopath(HINSTANCE hi, char* path)
 {
+ WCHAR wpath[_MAX_PATH];char* p;
+
+ GetModuleFileNameW(hi, wpath, _MAX_PATH);
+ WideCharToMultiByte(CP_UTF8,0,wpath,1+(int)wcslen(wpath),path,_MAX_PATH,0,0);
+ p = strrchr(path, filesep);
+ if(!p) p = strrchr(path, ':');
+ p[1] = 0;
+}
+
+#else
+// SYS&SYS_UNIX
+char sopath[PATH_MAX]="";
+
+void getsopath(char* path){
+const char *sym_name = "JGetLocale";
+#if defined(__wasm__)
+//  *path=0;  /* missing dladdr function */
+ strcpy(sopath,"/");
+#else
+ void *sym_ptr = dlsym(RTLD_DEFAULT,sym_name);
+// fprintf(stdout,"SYMBOL %s ADDRESS %p\n", sym_name, sym_ptr);
+ if (sym_ptr){
+  Dl_info info;
+  if (dladdr(sym_ptr,&info)){ // non-zero is success
+   strcpy(path,info.dli_fname);
+   char *p1;
+   if((p1=strrchr(info.dli_fname,filesep))){path[p1-(char*)info.dli_fname]=0;}
+  } else *path=0;
+ } else *path=0;
+#endif
+// fprintf(stdout,"sopath: %s\n", path);
+}
+
+// dll init on load - eqivalent to windows DLLMAIN DLL_ATTACH_PROOCESS
+__attribute__((constructor)) static void Initializer(){
+ _Initializer(0);
+}
+#endif
+
+// dll init on load - eqivalent to windows DLLMAIN DLL_ATTACH_PROOCESS
+JS _Initializer(void* hDLL){
  // Initialize J globals.  This is done only once.  Many of the globals are in static memory, initialized
  // by the compiler; some must be initialized a run-time in static memory; some must be allocated into A blocks
  // pointed to by static names.  Because of the A blocks, we have to perform a skeletal initialization of jt,
  // just enough to do ga().  The rest of jt is never used
- JS jtnobdy=malloc(sizeof(JST)+JTALIGNBDY-1);
- if(!jtnobdy) R;
- JS jt = (JS)(((I)jtnobdy+JTALIGNBDY-1)&-JTALIGNBDY);  // force to SDRAM page boundary
- mvc(sizeof(JST),jt,1,MEMSET00);
- if(!jtglobinit(jt)){free(jtnobdy); R;}
- dll_initialized= 1; JT(jt,heap)=(void *)jtnobdy;  // save allo address for later free
- // The g_jt heap MUST NOT be freed, because it holds the blocks pointed to by initialized globals.
- // g_jt itself, a JST struct, is not used.  Perhaps it could be freed, as long as the rest of the heap remains.
+#ifdef _WIN32
+ getsopath(0,modulepath);
+ getsopath(hDLL,sopath);
+#else
+ getsopath(sopath);
+#endif
+ JS jt=jvmreservea(sizeof(JST),__builtin_ctz(JTALIGNBDY));
+ if(!jt)R 0;
+ I sz=offsetof(JST,threaddata[1]); // #relevant bytes: just JS and the first JT.  This makes MDTHREAD() valid
+ if(!jvmcommit(jt,sz)){jvmrelease(jt,sizeof(JST));R 0;}
+ if(!jtglobinit(jt)){jvmrelease(jt,sizeof(JST)); R 0;}
+ dll_initialized=1;
+ jvmrelease(jt,sizeof(JST)); //the jt block itself can be released; we effectively orphan any blocks pointed to thereby, because they are used by the globals we've just initialised
+ R jt;
 }
 
  // Init for a new J instance.  Globals have already been initialized.
  // Create a new jt, which will be the one we use for the entirety of the instance.
-JS _stdcall JInit(void){
- if(!dll_initialized) R 0; // constructor failed
- JS jtnobdy;
- RZ(jtnobdy=malloc(sizeof(JST)+JTALIGNBDY-1));
- JS jt = (JS)(((I)jtnobdy+JTALIGNBDY-1)&-JTALIGNBDY);  // force to SDRAM page boundary
- mvc(sizeof(JST),jt,1,MEMSET00);
+CDPROC JS _stdcall JInit(void){
+ if(!dll_initialized)R 0; // constructor failed
+ JS jt=jvmreservea(sizeof(JST),__builtin_ctz(JTALIGNBDY));
+ if(!jt)R 0;
+ if(!jvmcommit(jt,offsetof(JST,threaddata[1]))){jvmrelease(jt,sizeof(JST));R 0;}
+ jvmwire(jt,offsetof(JST,threaddata[1])); //JS should probably not ever be swapped out.  But failure is non-catastrophic
+ mvc(offsetof(JST,threaddata[1]),jt,1,MEMSET00);
  // Initialize all the info for the shared region and the master thread
- if(!jtjinit2(jt,0,0)){free(jtnobdy); R 0;};
- JT(jt,heap)=(void *)jtnobdy;  // save allo address for later free
- R jt;  // R (JS)MTHREAD(jt);
+ if(!jtjinit2(jt,0,0)){jvmrelease(jt,sizeof(JST)); R 0;}
+ jgmpinit(sopath); // mp support for 1x and 2r3
+ ZEROUPPER;
+ R jt;  // return JST
+}
+
+ // Init for a new J instance.  Globals have already been initialized.
+ // Create a new jt, which will be the one we use for the entirety of the instance.
+CDPROC JS _stdcall JInit2(C*libpath){
+ if(!dll_initialized)R 0; // constructor failed
+ JS jt=jvmreservea(sizeof(JST),__builtin_ctz(JTALIGNBDY));
+ if(!jt)R 0;
+ if(!jvmcommit(jt,offsetof(JST,threaddata[1]))){jvmrelease(jt,sizeof(JST));R 0;}
+ jvmwire(jt,offsetof(JST,threaddata[1])); //JS should probably not ever be swapped out.  But failure is non-catastrophic
+ mvc(offsetof(JST,threaddata[1]),jt,1,MEMSET00);
+ // Initialize all the info for the shared region and the master thread
+ if(!jtjinit2(jt,0,0)){jvmrelease(jt,sizeof(JST)); R 0;}
+ if(libpath){strcpy(sopath,libpath);if(strlen(sopath)&&(filesep==sopath[strlen(sopath)-1]))sopath[strlen(sopath)-1]=0;}
+ jgmpinit(sopath); // mp support for 1x and 2r3
+ ZEROUPPER;
+ R jt;  // return JST
 }
 
 // clean up at the end of a J instance
-int _stdcall JFree(JS jt){
+CDPROC int _stdcall JFree(JS jt){
   if(!jt) R 0;
-  SETJTJM(jt,jt,jm)
+  SETJTJM(jt,jm)
   breakclose(jt);
   jm->jerr=0; jm->etxn=0; /* clear old errors */
-  if(JT(jt,xep)&&AN(JT(jt,xep))){jtimmex(jm,JT(jt,xep));}  // If there is an exit sentence, run it & force typeout.  No need to tidy up since the heap is going away
   dllquit(jm);  // clean up call dll
-  free(JT(jt,heap));  // free the initial allocation
+#if PYXES
+  aligned_free(JT(jt,jobqueue));
+#endif
+  jvmrelease(jt,sizeof(JST)); // free the initial allocation
+  ZEROUPPER;
   R 0;
 }
-#endif
 
 F1(jtbreakfnq){
  ASSERTMTV(w);
@@ -736,9 +917,10 @@ F1(jtbreakfns){A z;I *fh,*mh=0; void* ad;
  strcpy(IJT(jt,breakfn),CAV(w));
  IJT(jt,breakfh)=fh;
  IJT(jt,breakmh)=mh;
- *(US*)ad==*(US*)IJT(jt,adbreak);  // copy breakstatus from current setting
+ __atomic_store_n((US*)ad,*(US*)IJT(jt,adbreak),__ATOMIC_RELEASE);  // copy breakstatus from current setting
  if(IJT(jt,adbreakr)==IJT(jt,adbreak))IJT(jt,adbreakr)=ad;  // move attn-read pointer, unless interrupts disabled
  IJT(jt,adbreak)=ad;  // start using the mapped area
+ ZEROUPPER;
  R mtm;
 }
 
@@ -750,12 +932,13 @@ int valid(C* psrc, C* psnk)
  NOUNROLL while(*psrc == ' ') ++psrc;
  if(*psrc) return EVILNAME;
  *psnk = 0;
+ ZEROUPPER;
  return 0;  
 }
 
-int _stdcall JGetM(JS jt, C* name, I* jtype, I* jrank, I* jshape, I* jdata)
+CDPROC int _stdcall JGetM(JS jt, C* name, I* jtype, I* jrank, I* jshape, I* jdata)
 {
- SETJTJM(jt,jt,jm)
+ SETJTJM(jt,jm)
  A a; char gn[256]; int z;
  A *old=jm->tnextpushp;
  if(strlen(name) >= sizeof(gn)){jtjsignal(jm,z=EVILNAME);
@@ -769,12 +952,13 @@ int _stdcall JGetM(JS jt, C* name, I* jtype, I* jrank, I* jshape, I* jdata)
   *jdata = (I)AV(a);
   z=0;  // good return
  }
- jttpop(jm,old);
+ jttpop(jm,old,jm->tnextpushp);
+ ZEROUPPER;
  return z;
 }
 
 static int setterm(JS jtt, C* name, I* jtype, I* jrank, I* jshape, I* jdata)
-{JJ jt=MTHREAD(jtt);   // use master thread
+{JJ jt=MTHREAD(jtt);   // use master thread always since there is no execution
  A a;
  I k=1,i,n;
  char gn[256];
@@ -786,11 +970,11 @@ static int setterm(JS jtt, C* name, I* jtype, I* jrank, I* jshape, I* jdata)
   n = sizeof(char);
   break;
 
- case C2TX:
+ case C2TX: case INT2X:
   n = sizeof(unsigned short);
   break;
 
- case C4TX:
+ case C4TX: case INT4X:
   n = sizeof(unsigned int);
   break;
 
@@ -803,7 +987,7 @@ static int setterm(JS jtt, C* name, I* jtype, I* jrank, I* jshape, I* jdata)
   n = sizeof(double);
   break;
   
- case CMPXX:
+ case CMPXX: case QPX:
   n = 2 * sizeof(double);
   break;
   
@@ -816,20 +1000,21 @@ static int setterm(JS jtt, C* name, I* jtype, I* jrank, I* jshape, I* jdata)
  if(valid(name, gn)) return EVILNAME; 
  for(i=0; i<*jrank; ++i) k *= ((I*)(*jshape))[i];
  GAE(a,*jtype, k, *jrank, (I*)*jshape,R EVWSFULL);
-// obsolete  if(!a) return EVWSFULL;
  MC(AV(a), (void*)*jdata, n*k);
  jtjset(jt,gn, a);
+ ZEROUPPER;
  return jt->jerr;
 }
 
-int _stdcall JSetM(JS jt, C* name, I* jtype, I* jrank, I* jshape, I* jdata)
+CDPROC int _stdcall JSetM(JS jt, C* name, I* jtype, I* jrank, I* jshape, I* jdata)
 {
- SETJTJM(jt,jt,jm)
+ SETJTJM(jt,jm)
  int er;
 
  A *old=jm->tnextpushp;
  er = setterm(jt, name, jtype, jrank, jshape, jdata);
- jttpop(jm,old);
+ jttpop(jm,old,jm->tnextpushp);
+ ZEROUPPER;
  return er;
 }
 
@@ -845,14 +1030,15 @@ C* esub(JS jt, I ec)
  return CAV(AAV(JT(jt,evm))[ec]);
 }
 
-int _stdcall JErrorTextM(JS jt, I ec, I* p)
+CDPROC int _stdcall JErrorTextM(JS jt, I ec, I* p)
 {
- SETJTJM(jt,jt,jm)
+ jt=JorJJTOJ(jt);
  *p = (I)esub(jt, ec);
+ ZEROUPPER;
  return 0;
 }
 
-#if 0
+#if 0  // for debugging
 int enabledebug=0;
 F1(jttest1){
  ARGCHK1(w);

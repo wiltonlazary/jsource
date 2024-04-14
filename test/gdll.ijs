@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './gdll.ijs'
+prolog './gdll.ijs'
 NB. DLL call ------------------------------------------------------------
 
 load'dll'
@@ -9,9 +9,9 @@ dcd=: 4 : '(lib,x) cd y'
 
 NB. Verify 15!:0 turns off pristinity of w
 a =: ]&.> (+:,2);(+:2);(+:3 4)
-0 ~: 16b1000000 (17 b.) 1 { 13!:83 a
+0 ~: 16b1000000 (17 b.) 1 { 13!:_4 a
 1: 'ibasic i *i i *i' dcd a
-0 = 16b1000000 (17 b.) 1 { 13!:83 a
+0 = 16b1000000 (17 b.) 1 { 13!:_4 a
 
 NB. test integer types
 a=: 4 u: +/401 402 403
@@ -40,6 +40,9 @@ a-:,2 NB. automatic memu protected a
 a-:,2 NB. automatic memu protected a
 (9;(,9);2;3 4)=          'ibasic i &i i *i' dcd a      ;2;3 4
 a-:,9 NB. & avoided the protection
+(9;(,9);2;3 4)=          'ibasic i *i i *i' dcd a      ;2.0;3 4  NB. converts float
+(9;(,9);2;3 4)=          'ibasic i *i i *i' dcd a      ;2;3. 4  NB. converts float
+(9;(,9);2;3 4)=        'ibasic i *i i *i' dcd (, 1 >. _1 + 3 * 5);2;3. 4  NB. converts float
 
 NB. byte and *b results and *b arg - convert in place
 (6;3;1 2 3;,6)= 'bipbpb b i *b *b' dcd 3;1 2 3;,_1
@@ -70,6 +73,8 @@ NB. declaration (left argument) and parameter (right argument) checking
 
 (6 0 -: cder '') *. 'domain error' -: 'ibasic i *i i *i' dcd etx ('abc');2  ;3 4
 (6 1 -: cder '') *. 'domain error' -: 'ibasic i *i i *i' dcd etx (,2)   ;4.5;3 4
+(11;(,11);4;3 4) = 'ibasic i *i i *i' dcd etx (,2)   ;4.;3 4
+(11;(,11);4;3 4) = 'ibasic i *i i *i' dcd etx (,2)   ;4j0;3 4
 (6 2 -: cder '') *. 'domain error' -: 'ibasic i *i i *i' dcd etx (,2)   ;2  ;3j4 5
 
 NB. 'rank error' -: 'ibasic i *i i *i' dcd etx ,:(,2);2;3 4
@@ -80,6 +85,15 @@ add=: mema 2*IF64{4 8
 3 4 memw add,0,2,JINT
 (9;(,9);2;<<add)=         'xbasic x *x x *x' dcd (,2);2;<<add
 0=memf add
+
+NB. Verify zero padding for write
+add=: mema 5
+(4{.'abcde') memw add,0 5 2
+('abcd' , {.a.) -: memr add,0 5 2
+0=memf add
+
+NB. Unload libraries
+1 ] 15!:5''
 
 NB. memr/memw boolean
 add=: mema n=: 127+1e4*(IF64<IFRASPI){1024 256
@@ -158,10 +172,13 @@ NB. test utf8 in proc name - windows FIXWINUFT8
 NB. ugh - windows ignores trailing blanks in file names
 f=: 3 : 0
 if. UNAME-:'Android' do. 2 0 return. end.
+echo 'LIBTSDLL:',LIBTSDLL
 i=. LIBTSDLL i:'.'
-t=. dltb jpath '~temp',(}.~ i:&'/') jpathsep (i{.LIBTSDLL),(":2!:6''),(8 u: 16b1f601),'ê',i}.LIBTSDLL
+,(":2!:6''),'_',":3&T.''
+t=. dltb jpath '~temp',(}.~ i:&'/') jpathsep (i{.LIBTSDLL),(":2!:6''),'_',(":3&T.''),(8 u: 16b1f601),'ê',i}.LIBTSDLL
 if. -.fexist t do. (fread dltb LIBTSDLL)fwrite t end. NB. no write if exists - could be in use
 try. ((dquote t),' fubar x')cd '' catch. end.
+1!:55 ::1: <t
 cder''
 )
 
@@ -178,8 +195,19 @@ assert. (,{.a.) -: memr p,11,1,2
 1
 )
 
+f=: 3 : 0
+t=. LIBFILE
+assert. 0~: h=. 15!:20 t
+assert. 0~: p=. h 15!:21 'JInit'
+assert. 0= 15!:22 h
+1
+)
+
 f''
 
 4!:55 ;:'a a1 add address b b1 cdrc dcd f i lib n obj_add pc s s0 s1 td td1a td3 td4 tf tf3'
 4!:55 ;:'v0 v1 v2 v3 v4 v5 x xbasic_add xx yy z'
+
+
+epilog''
 

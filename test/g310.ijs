@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g310.ijs'
+prolog './g310.ijs'
 NB. : -------------------------------------------------------------------
 
 p =: ?4 10$500
@@ -253,15 +253,16 @@ if. 0: y -: 6 do.
   r =. r + 1
 end.
 )
-'|noun result was required: f|       y+undefname' -: efx 'f 4'
+'|noun result was required in f|the sentence did not produce a noun result, usually because of a misspelled word or missing argument|   y+undefname' -:&(10&{. , i:&' ' }. ]) efx 'f 4'
 
-'|domain error|   a:    +(3 :''+'') ::0:0' -: efx 'a: + (3 : ''+'') :: 0: 0'   NB. pee inside obverse
+'|domain error in efx, executing +"0 0|   a:    +(3 :''+'') ::0:0' -:&(10&{. , i:&' ' }. ]) efx 'a: + (3 : ''+'') :: 0: 0'   NB. pee inside adverse
+'domain error' -: ". eftxs 'a: + (3 : ''+'') :: 0: 0'   NB. pee inside adverse
 
 7 -: 2 %: 2 : 'x + y' *: 5
-'domain error' -: 2 (1) : 'x + y' etx 5
+'valence error' -: 2 (1) : 'x + y' etx 5
 7 -: 2 *: (1) : 'x + y' 5
-'domain error' -: *: (1) : 'x + y' etx 5
-'domain error' -: 2 %: ((2) : 'y') *: etx 5
+'valence error' -: *: (1) : 'x + y' etx 5
+'valence error' -: 2 %: ((2) : 'y') *: etx 5
 5 -: %: (2) : 'y' *: 5
 5 -: *: (1) : 'y' 5
 
@@ -270,48 +271,48 @@ NB. : empty defn --------------------------------------------------------
 
 f=: 3 : ''
 
-'domain error' -:   f etx 4
-'domain error' -: 3 f etx 4
+'valence error' -:   f etx 4
+'valence error' -: 3 f etx 4
 
 f=: 3 : (i.0)
 
-'domain error' -:   f etx 4
-'domain error' -: 3 f etx 4
+'valence error' -:   f etx 4
+'valence error' -: 3 f etx 4
 
 f=: 4 : ''
 
-'domain error' -:   f etx 4
-'domain error' -: 3 f etx 4
+'valence error' -:   f etx 4
+'valence error' -: 3 f etx 4
 
 f=: 4 : (i.0)
 
-'domain error' -:   f etx 4
-'domain error' -: 3 f etx 4
+'valence error' -:   f etx 4
+'valence error' -: 3 f etx 4
 
 f =: (3 : '') : +
 
-'domain error' -: f\       etx 0 1 0     
-'domain error' -: f;._1    etx 0 1 0
-'domain error' -: f/.      etx i.3 5    
-'domain error' -: 0 1 ,&f  etx 1 0  
-'domain error' -: 0 1 f@*  etx 1 0  
-'domain error' -: (2: * f) etx 1 0 
-'domain error' -: (+ f)    etx 5      
+'valence error' -: f\       etx 0 1 0     
+'valence error' -: f;._1    etx 0 1 0
+'valence error' -: f/.      etx i.3 5    
+'valence error' -: 0 1 ,&f  etx 1 0  
+'valence error' -: 0 1 f@*  etx 1 0  
+'valence error' -: (2: * f) etx 1 0 
+'valence error' -: (+ f)    etx 5      
 
 f1 =: 3 : 'y'
 f2 =: 3 : (':'; 'x+y')
 f3 =: 4 : 'x+y'
 
-'domain error' -: 3 f1 etx 4
-'domain error' -:   f2 etx 4
-'domain error' -:   f3 etx 4
+'valence error' -: 3 f1 etx 4
+'valence error' -:   f2 etx 4
+'valence error' -:   f3 etx 4
 
-'domain error' -: ~./      etx 0 1 0
-'domain error' -: 0 1 ~./  etx 1 0
-'domain error' -: 0 1 ~.&* etx 1 0
-'domain error' -: 0 1 *@~. etx 1 0
-'domain error' -: (+ ~. -) etx 1 0
-'domain error' -: (~. -)   etx 1 0
+'valence error' -: ~./      etx 0 1 0
+'valence error' -: 0 1 ~./  etx 1 0
+'valence error' -: 0 1 ~.&* etx 1 0
+'valence error' -: 0 1 *@~. etx 1 0
+'valence error' -: (+ ~. -) etx 1 0
+'valence error' -: (~. -)   etx 1 0
 
 NB. : detection of x y etc.
 
@@ -339,6 +340,9 @@ x f__u y
 f =: -
 2 -: 7 (<'base') c [: 5
 
+NB. Embedded VT converted to LF
+'domain error' -: ". etx '3 : >'
+
 NB. obsolete svxy =: 9!:48''
 NB. obsolete 9!:49 (1)
 NB. obsolete c =: 2 : 0
@@ -361,4 +365,7 @@ NB. obsolete 9!:49 svxy
 4!:55 ;:'f4a f5 f5a f6 f6a f6b f6c f7'
 4!:55 ;:'minors monad nln p q svxy Tv ws x'
 
+
+
+epilog''
 

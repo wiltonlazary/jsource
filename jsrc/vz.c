@@ -1,4 +1,4 @@
-/* Copyright 1990-2009, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Verbs: Complex-Valued Scalar Functions                                  */
@@ -12,8 +12,8 @@ static const Z z1={1,0};
 
 static D hypoth(D u,D v){D p,q,t; MMM(u,v); R INF(p)?inf:p?(t=q/p,p*sqrt(1+t*t)):0;}
 
-static ZF1(jtzjx){Z z; z.re=-v.im; z.im= v.re; R z;}
-static ZF1(jtzmj){Z z; z.re= v.im; z.im=-v.re; R z;}
+static ZF1(jtzjx){Z z; z.re=-v.im; z.im= v.re; R z;}  // v * 0j1
+static ZF1(jtzmj){Z z; z.re= v.im; z.im=-v.re; R z;}  // v * 0j_1 = v/0j1
 
 Z zrj0(D a){Z z; z.re=a; z.im=0.0; R z;}
 
@@ -46,9 +46,9 @@ ZF2(jtztymes){D a,b,c,d;Z z;
 ZF2(jtzdiv){ZF2DECL;D t;
  if(ZNZ(v)){
   if(ABS(c)<ABS(d)){t=a; a=-b; b=t;  t=c; c=-d; d=t;}
-  a/=c; b/=c; d/=c; t=1+d*d; zr=(a+TYMES(b,d))/t; zi=(b-TYMES(a,d))/t;
+  a/=c; b/=c; if(likely(ABS(d)!=inf))d/=c; else d=0.0;  t=1+d*d; zr=(a+TYMES(b,d))/t; zi=(b-TYMES(a,d))/t;
  }else if(ZNZ(u)){  // division by 0
-  if(ABS(a)>ABS(b))zr=a/0.0;else zi=b/0.0;  // set the larger axis to infibity
+  if(a!=0)zr=a/0.0; if(b!=0)zi=b/0.0;  // set any nonzero to infinity
  }
  ZEPILOG;
 }
@@ -205,11 +205,13 @@ static ZF1(jtzacosh){Z z;
  R z;
 }
 
-static ZF1(jtzatanh){R ztymes(zrj0((D)0.5),zlog(zdiv(zplus(z1,v),zminus(z1,v))));}
+// Here we follow Kahan, Branch Cuts for Complex Elementary Functions, Table 1 which has now-recommended branch cuts
+static ZF1(jtzatanh){R ztymes(zrj0((D)0.5),zminus(zlog(zplus(z1,v)),zlog(zminus(z1,v))));}
 
 static ZF1(jtzatan){ZF1DECL;
- if(!b&&(a<-1e13||1e13<a))R zrj0(0<a?PI/2.0:-PI/2.0);
- z=zmj(zatanh(zjx(v)));
+ if(unlikely(a*a+b*b>1e26))z=zrj0(PI/2.0);  // if either component very large, result is +-pi/2
+ else z=zmj(zatanh(zjx(v)));
+ z.re=copysign(z.re,a);  // The branch cut is on the imaginary axis, so we just transfer the sign of a to the real part
  if(!b)z.im=0;
  R z;
 }    /* 4.4.22 */
@@ -273,7 +275,7 @@ B jtztridiag(J jt,I n,A a,A x){I i,j,n1=n-1;Z*av,d,p,*xv;
 }
 
 DF1(jtexppi){A z;B b;D r,th,y;I k;Z*v,t;
- F1RANK(0,jtexppi,DUMMYSELF);
+ F1RANK(0,jtexppi,self);
  if(!(CMPX&AT(w)))R expn1(pix(w));   // if not complex, revert
  v=ZAV(w); r=exp(PI*v->re); y=v->im; if(b=0>y)y=-y;  // take exp of real part, set y=imaginary part
  th=y-2*(I)(y/2); k=(I)(2*th); if(k!=2*th)k=-1; else if(b&&k)k=4-k;

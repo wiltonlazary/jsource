@@ -1,4 +1,4 @@
-/* Copyright 1990-2008, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Xenos: 8!:x formatting stuff                                            */
@@ -135,7 +135,7 @@ static B jtwidthdp(J jt, A a, I *w, I *d){
 static F1(jtfmtparse){A x,z,*zv;B ml[2+NMODVALS],mod,t;C c,*cu="srqpnmdbijklc",*cu1="?kjibdmnpqrs",d,*s,*wv;
      I fb,i,j,mi,n,n1,p,q,vals[3]={-1,-1,0};
  ARGCHK1(w);
- w=AAV(w)[0]; n=AN(w);
+ w=C(AAV(w)[0]); n=AN(w);
  GAT0(z,BOX,1+NMODVALS,1); zv=AAV(z); 
  DO(NMODVALS, zv[1+i]=mtv;);
  if(n&&(C2T+C4T)&AT(w))RZ(w=uco2(num(5),w));
@@ -206,12 +206,12 @@ static D jtexprndID(J jt, I d, D y){I e,s;D f,q,c,x1,x2;DI8 f8,y8,c8;
  if(y8.i-f8.i >= c8.i-y8.i-1) R s*c; else R s*f;
 } /* afzrnd for numbers in exponential notation */
 
-static B jtsprintfI(J jt, C *x, I m, I dp, I iw, C *subs) {I r,g;
+static B jtsprintfI(J jt, C *x, I m, I dp, I iw, C *subs) {I /*r,*/ g;
  x+=m-1;
- DQ(dp, *x--='0';); if(dp) *x--=SUBd; r=dp+!!dp;
+ DQ(dp, *x--='0';); if(dp) *x--=SUBd; /*r = dp + !!dp;*/
  g=SGN(iw); UI uiw=ABS(iw);
- while(uiw){ *x--='0'+(C)(uiw%10); uiw/=10; r++; }
- if(g==0) { *x--='0'; r++; }
+ while(uiw){ *x--='0'+(C)(uiw%10); uiw/=10; /*r++;*/ }
+ if(g==0) { *x--='0'; /*r++; */ }
  R 1;
 }
 
@@ -269,8 +269,8 @@ static F2(jtfmtprecomp) {A*as,base,fb,len,strs,*u,z;B*bits,*bw;D dtmp,*dw;
  GATV(fb,  B01,n,wr,ws); mvc(n,BAV(fb),1,MEMSET00);
  GAT0(z,BOX,4,1); u=AAV(z); *u++=incorp(base); *u++=incorp(strs); *u++=incorp(len); *u++=incorp(fb); 
  ib=AV(base); as=AAV(strs); u=AAV(a);
- if(1==nf){MC(ib,AV(*u),SZI*3); mvc(SZI*nc,ib+3,1,MEMSET00); DO(NMODVALS, *as++=incorp(u[i+1]);)}
- else DQ(nf, MC(ib,AV(*u),SZI*3); ib[3]=0; ib+=4; DO(NMODVALS, *as++=incorp(u++[1]);) ++u; )
+ if(1==nf){MC(ib,AV(C(*u)),SZI*3); mvc(SZI*nc,ib+3,1,MEMSET00); DO(NMODVALS, *as++=incorp(C(u[i+1]));)}
+ else DQ(nf, MC(ib,AV(C(*u)),SZI*3); ib[3]=0; ib+=4; DO(NMODVALS, *as++=incorp(C(u[1])); ++u;) ++u; )
  bits=BAV(fb);
  switch(CTTZNOFLAG(wt)) {
   case B01X:
@@ -344,7 +344,7 @@ static F2(jtfmtprecomp) {A*as,base,fb,len,strs,*u,z;B*bits,*bw;D dtmp,*dw;
  for(i=0;i<n;i++) {  // go through the values figuring the length needed for each value
        ib+=4; u+=NMODVALS; --imod; ib=(imod==0)?AV(base):ib; u=(imod==0)?AAV(strs)-1:u; imod=(imod==0)?nf:imod;
        ++imodc; imodc=(imodc==nc)?0:imodc;  // imodc is i%nc
-       nB=AN(uB); nD=AN(uD); nMN=AN(uM)+AN(uN); nPQ=AN(uP)+AN(uQ); nI=AN(uI);
+       nB=AN(C(uB)); nD=AN(C(uD)); nMN=AN(C(uM))+AN(C(uN)); nPQ=AN(C(uP))+AN(C(uQ)); nI=AN(C(uI));
        d=ib[1]; mods=ib[2]; 
        if(*bits&BITSf) { if(mI&&*bits&BITS__)*iv=nI; else if(mD) *iv=nD; else *iv=2-!!(*bits&BITS_); }
        else if(*bits&BITSz) { 
@@ -399,8 +399,8 @@ static F2(jtfmtprecomp) {A*as,base,fb,len,strs,*u,z;B*bits,*bw;D dtmp,*dw;
 /* a is jtfmtprecomp result */
 /* w is argument to format, but with BO1, INT, or FL type. */
 static A jtfmtallcol(J jt, A a, A w, I mode) {A *a1v,base,fb,len,strs,*u,v,x;
-    B *bits,*bv;C*cB,*cD,*cM,*cN,*cP,*cQ,*cR,*cI,*cJ,*cK,*cv,**cvv,*cx,*subs;D dtmp,*dv;
-    I coll,d,g,h,i,*ib,imod,*iv,*il,j,k,l,m,mods,nB,nD,nM,nN,nP,nQ,nR,nI,nJ,nK,n,nc,nf,t,wr,*ws,y,zs[2];
+    B *bits,*bv;C*cB,*cD,*cM,*cN,*cP,*cQ,*cR,*cI,*cv,**cvv,*cx,*subs;D dtmp,*dv;
+    I coll,d,g,h,i,*ib,imod,*iv,*il,j,k,l,m,mods,nB,nD,nM,nN,nP,nQ,nR,nI,n,nc,nf,t,wr,*ws,y,zs[2];
  ARGCHK1(a); u=AAV(a); base=*u++; strs=*u++; len=*u++; fb=*u++; u=0; subs=0;  // extract components: len->lengths of the values
  ARGCHK1(w); n=AN(w); t=AT(w); wr=AR(w); ws=AS(w); SHAPEN(w,wr-1,nc); 
  ASSERT(ISDENSETYPE(t,B01+INT+FL), EVDOMAIN);
@@ -455,8 +455,8 @@ static A jtfmtallcol(J jt, A a, A w, I mode) {A *a1v,base,fb,len,strs,*u,v,x;
   }
   if(j==nc) j=0;
   k=l=ib[0]; d=ib[1]; mods=ib[2]; coll=ib[3+(I )(1==nf)*j];
-  nB= AN(uB); nD= AN(uD); nM= AN(uM); nN= AN(uN); nP= AN(uP); nQ= AN(uQ); nR= AN(uR); nI= AN(uI); nJ= AN(uJ); nK= AN(uK);
-  cB=CAV(uB); cD=CAV(uD); cM=CAV(uM); cN=CAV(uN); cP=CAV(uP); cQ=CAV(uQ); cR=CAV(uR); cI=CAV(uI); cJ=CAV(uJ); cK=CAV(uK);
+  nB= AN(uB); nD= AN(uD); nM= AN(uM); nN= AN(uN); nP= AN(uP); nQ= AN(uQ); nR= AN(uR); nI= AN(uI);
+  cB=CAV(uB); cD=CAV(uD); cM=CAV(uM); cN=CAV(uN); cP=CAV(uP); cQ=CAV(uQ); cR=CAV(uR); cI=CAV(uI);
   subs=AN(uS)?CAV(uS):(C*)"e,.-*";
   switch(mode) {
    case 0: v=*a1v; cv=CAV(v); break;
@@ -537,9 +537,9 @@ static A jtfmtxi(J jt, A a, A w, I mode, I *omode){I lvl;
  ASSERT(0==AR(a) || AN(a)==AS(w)[AR(w)-1], EVLENGTH);
  /* catch out-of-memory errors from dtoa.c */
  if(setjmp(((struct dtoa_info*)jt->dtoa)->_env))ASSERTSYS(jt->jerr, "dtoa");
- if(lvl=level(w)){A*wv=AAV(w),x; 
+ if(lvl=level(jt,w)){A*wv=AAV(w),x; 
   ASSERT(1>=lvl, EVDOMAIN);
-  DO(AN(w), x=wv[i]; ASSERT(1>=AR(x),EVRANK); if(AN(x)){ASSERT(AT(x)&JCHAR+NUMERIC,EVDOMAIN);
+  DO(AN(w), x=C(wv[i]); ASSERT(1>=AR(x),EVRANK); if(AN(x)){ASSERT(AT(x)&JCHAR+NUMERIC,EVDOMAIN);
       ASSERT(!(AR(x)&&AT(x)&NUMERIC),EVRANK);});
   A z; R df2(z,reitem(shape(w),a),w,amp(foreign(num(8),num(0)), ds(COPE)));
  } else {

@@ -1,76 +1,31 @@
-/* Copyright 1990-2006, Jsoftware Inc.  All rights reserved.               */
+/* Copyright (c) 1990-2024, Jsoftware Inc.  All rights reserved.           */
 /* Licensed use only. Any other use is in violation of copyright.          */
 /*                                                                         */
 /* Adverbs: Utilities                                                      */
 
 #include "j.h"
 
-
-static I jtfdepger(J jt,A w){A*wv;I d=0,k; 
- wv=AAV(w);  
- DO(AN(w), k=fdep(fx(wv[i])); d=MAX(d,k);); 
- R d;
+static I jtfdepger(J jt,A w){R 0;
 }
 
-#if !USECSTACK
-I jtfdep(J jt,A w){A f,g;I d=0,k;V*v;
- ARGCHK1(w);
- v=VAV(w);
- if(v->fdep)R v->fdep;  // for speed, use previous value if it has been calculated
- if(f=v->fgh[0]) d=VERB&AT(f)?fdep(f):NOUN&AT(f)&&VGERL&v->flag?fdepger(f):0;
- if(g=v->fgh[1]){k=VERB&AT(g)?fdep(g):NOUN&AT(g)&&VGERR&v->flag?fdepger(g):0; d=MAX(d,k);}
- if(CFORK==v->id){k=fdep(v->fgh[2]); d=MAX(d,k);}
- if(!jt->jerr)v->fdep=(UI4)(1+d);  //Save computed value for next time, but not if error; that would lose the error next time
- R 1+d;
-}    /* function depth:  1 + max depth of components */
 
-F1(jtfdepadv){ARGCHK1(w); ASSERT(VERB&AT(w),EVDOMAIN); R sc(fdep(w));}
-#endif
-
-
-DF1(jtdfs1){F1PREFIP;A s=jt->parserstackframe.sf,z; RZ(self); z=CALL1IP(FAV(self)->valencefns[0],  w,jt->parserstackframe.sf=self); jt->parserstackframe.sf=s; RETF(z);}
+DF1(jtdfs1){F1PREFIP;A s=jt->parserstackframe.sf,z; RZ(self); df1(z,w,jt->parserstackframe.sf=self); jt->parserstackframe.sf=s; RETF(z);}
 DF2(jtdfs2){F2PREFIP;
 A s=jt->parserstackframe.sf,z; 
 RZ(self); 
-z=CALL2IP(FAV(self)->valencefns[1],a,w,jt->parserstackframe.sf=self); jt->parserstackframe.sf=s; 
+df2(z,a,w,jt->parserstackframe.sf=self); jt->parserstackframe.sf=s; 
 RETF(z);}    
      /* for monads and dyads that can possibly involve $: */
 
 
 // $: itself
-F1(jtself1){A z; FDEPINC(d=fdep(jt->parserstackframe.sf)); STACKCHKOFL df1(z,  w,jt->parserstackframe.sf);  FDEPDEC(d); forcetomemory(w); RETF(z);}
-F2(jtself2){A z; FDEPINC(d=fdep(jt->parserstackframe.sf)); STACKCHKOFL df2(z,a,w,jt->parserstackframe.sf);  FDEPDEC(d); forcetomemory(w); RETF(z);}
+F1(jtself1){A z; FDEPINC(d=fdep(jt->parserstackframe.sf)); STACKCHKOFL df1(z,  w,jt->parserstackframe.sf);  FDEPDEC(d); RETF(z);}
+F2(jtself2){A z; FDEPINC(d=fdep(jt->parserstackframe.sf)); STACKCHKOFL df2(z,a,w,jt->parserstackframe.sf);  FDEPDEC(d); RETF(z);}
 
-A jtac1(J jt,AF f){R fdef(0,0,VERB, f,0L, 0L,0L,0L, VFLAGNONE, RMAX,RMAX,RMAX);}
-A jtac2(J jt,AF f){R fdef(0,0,VERB, 0L,f, 0L,0L,0L, VFLAGNONE, RMAX,RMAX,RMAX);}
+A jtac1(J jt,AF f){R fdef(0,0,VERB, f,jtvalenceerr, 0L,0L,0L, VFLAGNONE, RMAX,RMAX,RMAX);}
+A jtac2(J jt,AF f){R fdef(0,0,VERB, jtvalenceerr,f, 0L,0L,0L, VFLAGNONE, RMAX,RMAX,RMAX);}
 
-F1(jtdomainerr1){F1PREFIP; ASSERT(0,EVDOMAIN);}
-F2(jtdomainerr2){F2PREFIP; ASSERT(0,EVDOMAIN);}
-
-// create a block for a function (verb/adv/conj).  The meanings of all fields depend on the function executed in f1/f2
-// if there has been a previous error this function returns 0
-A jtfdef(J jt,I flag2,C id,I t,AF f1,AF f2,A fs,A gs,A hs,I flag,I m,I l,I r){A z;V*v;
- RE(0);
- GAT0(z,INT,(VERBSIZE+SZI-1)>>LGSZI,0); v=FAV(z);  // allocate as fixed size, and as INT to avoid clearing the area, which will be all filled in
- AT(z)=t;  // install actual type
- AN(z)=0xdeadbeef;  // AN field of function is used for actual rank
- if(fs)INCORP(fs); if(gs)INCORP(gs); if(hs)INCORP(hs);   // indicate fgh are about to be incorporated
- v->localuse.clr[0]=v->localuse.clr[1]=v->localuse.clr[2]=v->localuse.clr[3]=0;  // clear the private field
- v->valencefns[0]    =f1?f1:jtdomainerr1;  /* monad C function */
- v->valencefns[1]    =f2?f2:jtdomainerr2;  /* dyad  C function */
- v->fgh[0]     =fs;                  /* monad            */
- v->fgh[1]     =gs;                  /* dyad             */      
- v->fgh[2]     =hs;                  /* fork right tine or other auxiliary stuff */
- v->flag  =(UI4)flag;
-#if !USECSTACK
- v->fdep  =0;                   /* function depth   */
-#endif
- v->flag2 = (UI4)flag2;         // more flags
- v->mr    =(RANKT)m;                   /* monadic rank     */
- v->lrr=(RANK2T)((l<<RANKTX)+r);
- v->id    =(C)id;                  /* spelling         */
- R z;
-}
+F1(jtvalenceerr){F1PREFIP; ASSERT(0,EVVALENCE);}  // used for undefined valences, including [:
 
 // return 1 if w contains no names or explicit definitions
 B nameless(A w){A f,g,h;C id;V*v;
@@ -109,14 +64,3 @@ I boxat(A x, I m, I l, I r){C c;V*v;
  }
  R 0; 
 }    /* 1 iff w is <@:f or <@f where f has infinite rank */
-
-// w is a verb
-// Result has bit 0 set if the verb is [, 2 if ...@[, bit 1 set if ], 3 if ...@]   (or @:)
-// The set bit indicates that argument WILL NOT be examined when w is executed
-I atoplr(A w){
- if(!w)R 0;
- V *v=FAV(w);     // v->verb info, c=id of w
- C id = v->id,id2=id; if((id2&-2)==CATCO)id = FAV(v->fgh[1])->id;  // @ @:
- id = (id-(CLEFT-1)) & REPSGN((CLEFT-1)-(I)id) & REPSGN((I)id-(CRIGHT+1));  // LEFT->1, RIGHT->2 punning with JINPLACEW/A; but 0 if not LEFT or RIGHT
- R (id2&-2)==CATCO?id<<2:id;  // if @, shift
-}

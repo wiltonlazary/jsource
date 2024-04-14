@@ -1,4 +1,4 @@
-1:@:(dbr bind Debug)@:(9!:19)2^_44[(echo^:ECHOFILENAME) './g4x.ijs'
+prolog './g4x.ijs'
 NB. 4!:0 ----------------------------------------------------------------
 
 jnc   =: 4!:0
@@ -224,9 +224,19 @@ this1_:
 )
 20 -: ([ i."0@i.) {{ y_: }} 20
 a =: 5
-'|domain error|   a:    +a_:' -: ". eftx 'a: + a_:'
+'|domain error: ex02|   a:    +a_:' -:&(_11&{.) ". eftx 'a: + a_:'
 4!:55 <'a'
-'|value error|   a:+    a_:' -: ". eftx 'a: + a_:'
+'|value error: ex02|   a:+    a_:' -:&(_11&{.) ". eftx 'a: + a_:'
+'value error' -: ". eftxs 'a: + a_:'
+
+a=:b=:0
+4!:55 ;:'a undefname b'
+_1 = 4!:0 ;:'a undefname b'
+13!:0 (1)
+a=.b=.0
+4!:55 ;:'a undefname b'
+_1 = 4!:0 ;:'a undefname b'
+13!:0 (0)
 
 NB. 4!: -----------------------------------------------------------------
 
@@ -249,7 +259,7 @@ _2 -: jnc    <''
 'domain error'    -: jnc etx 'a';3j4
 'domain error'    -: jnc etx <<'ab'
 'domain error'    -: jnc etx i.3 4
-'domain error'    -: 'abc' jnc etx 3  
+'valence error'    -: 'abc' jnc etx 3  
 
 'rank error'      -: jnc etx <3 4$'a'
 
@@ -286,12 +296,15 @@ _2 -: jnc    <''
 
 'ill-formed name' -: scind etx <'+*abc'
 'ill-formed name' -: scind etx <'abc\def'
-'ill-formed name'    -: scind etx <''
+'rank error'    -: scind etx <2 0$''
+_1    -: scind etx <''
 
 'rank error'      -: scind etx <3 4$'xab'
 'rank error'      -: scind etx <,:'xab'
 
  0 < x =: 3 : '4!:4 <y' 'y'
+
+_1 = 4!:4 <'a__undefname'
 
 NB. locales -------------------------------------------------------------
 
@@ -406,4 +419,7 @@ end.
 4!:55 ;:'g gamma jnc jnc_z_ jnl jnl_z_ nm nounx plus scind si_g4x si_sn sn sum '
 4!:55 ;:'sum__ sum_z_ t ttt this1 this2 v verbx x y '
 
+
+
+epilog''
 

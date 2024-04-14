@@ -1,13 +1,10 @@
 vpath % ../../../../jsrc
 
-ifndef jplatform
-jplatform=linux
-endif
-ifndef j64x
-j64x=j64
+ifndef jplatform64
+jplatform64=linux/j64x
 endif
 
-ODIR=../../../../bin/$(jplatform)/$(j64x)
+ODIR=../../../../bin/$(jplatform64)
 
 .SUFFIXES: .o
 
@@ -18,10 +15,17 @@ OBJS=  \
 %.o: %.c
 	$(CC) -c -o $@ $< $(CFLAGS)
 
+ifdef TARGET
 $(ODIR)/$(TARGET) : $(OBJS)
 	$(CC) -o $@ $(OBJS) $(LDFLAGS)
+endif
 
-all: $(ODIR)/$(TARGET)
+ifdef TARGET_a
+$(ODIR)/$(TARGET_a) : $(OBJS)
+	$(AR) $(LDFLAGS_a) $@ $(OBJS) $(LDFLAGS_b)
+endif
+
+all: $(ODIR)/$(TARGET) $(ODIR)/$(TARGET_a)
 
 clean:
 	rm -f $(OBJS)
